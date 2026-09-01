@@ -381,11 +381,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="space-y-2 py-3 border-y border-slate-100 text-xs text-slate-600 font-medium">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Pukul 08:00 - 17:00 WITA</span>
+                <span>Pukul 06:00 - 12:00 WITA</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-rose-600 shrink-0" />
-                <span className="truncate">Kawasan Tepian Teratai & Gedung UMKM Berau</span>
+                <span className="truncate">Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau</span>
               </div>
               <div className="flex items-center gap-2">
                 <Store className="w-4 h-4 text-purple-600 shrink-0" />
