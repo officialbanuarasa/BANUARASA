@@ -1,0 +1,391 @@
+import React, { useState, useEffect } from 'react';
+import { UserRole, Member, EventItem, EventRegistration, Product, Payment, AuthUser } from './types';
+import { storage } from './services/storage';
+import { BANUARASA_ASSETS, BARA_ASSETS } from './assets/baraAssets';
+import { Navbar } from './components/Navbar';
+import { LandingPage } from './components/LandingPage';
+import { MemberDashboard } from './components/MemberDashboard';
+import { AdminDashboard } from './components/AdminDashboard';
+import { StandMapModal } from './components/StandMapModal';
+import { PaymentModal } from './components/PaymentModal';
+import { DigitalMemberCardModal } from './components/DigitalMemberCardModal';
+import { QRScannerModal } from './components/QRScannerModal';
+import { PaymentProofViewerModal } from './components/PaymentProofViewerModal';
+import { ProductDetailModal } from './components/ProductDetailModal';
+import { RegisterMemberModal } from './components/RegisterMemberModal';
+import { AuthModal } from './components/AuthModal';
+import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { BaraMascotWidget } from './components/BaraMascotWidget';
+import { SplashIntroModal } from './components/SplashIntroModal';
+
+export const App: React.FC = () => {
+  // Current logged in user session
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => storage.getCurrentUser());
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const u = storage.getCurrentUser();
+    return u ? u.role : 'PUBLIC';
+  });
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const u = storage.getCurrentUser();
+    if (!u) return 'landing';
+    return u.role === 'SUPER_ADMIN' ? 'admin-dashboard' : 'member-dashboard';
+  });
+
+  const [currentMember, setCurrentMember] = useState<Member | null>(() => {
+    const u = storage.getCurrentUser();
+    if (u?.member_id) {
+      return storage.getMemberById(u.member_id) || storage.getMembers()[0] || null;
+    }
+    return storage.getMembers()[0] || null;
+  });
+
+  // Modals state
+  const [isSplashIntroOpen, setIsSplashIntroOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER'>('MEMBER_LOGIN');
+  const [isGoogleWorkspaceModalOpen, setIsGoogleWorkspaceModalOpen] = useState(false);
+
+  const [isStandMapOpen, setIsStandMapOpen] = useState(false);
+  const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
+
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentModalParams, setPaymentModalParams] = useState<{
+    registration?: EventRegistration;
+    paymentType?: any;
+    defaultAmount?: number;
+  }>({});
+
+  const [isDigitalCardOpen, setIsDigitalCardOpen] = useState(false);
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [inspectingPayment, setInspectingPayment] = useState<Payment | null>(null);
+  const [inspectingProduct, setInspectingProduct] = useState<Product | null>(null);
+  const [isRegisterMemberOpen, setIsRegisterMemberOpen] = useState(false);
+
+  // Sync state when storage changes
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      const u = storage.getCurrentUser();
+      setCurrentUser(u);
+      if (u) {
+        setCurrentRole(u.role);
+        if (u.member_id) {
+          const m = storage.getMemberById(u.member_id);
+          setCurrentMember(m || null);
+        }
+      } else {
+        const firstM = storage.getMembers()[0] || null;
+        setCurrentMember(firstM);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    setCurrentRole(user.role);
+    if (user.role === 'SUPER_ADMIN') {
+      setActiveTab('admin-dashboard');
+    } else {
+      if (user.member_id) {
+        const m = storage.getMemberById(user.member_id);
+        if (m) setCurrentMember(m);
+      }
+      setActiveTab('member-dashboard');
+    }
+  };
+
+  const handleRegisterSuccess = (member: Member, user: AuthUser) => {
+    setCurrentMember(member);
+    setCurrentUser(user);
+    setCurrentRole('MEMBER');
+    setActiveTab('member-dashboard');
+  };
+
+  const handleLogout = () => {
+    storage.logout();
+    setCurrentUser(null);
+    setCurrentRole('PUBLIC');
+    setActiveTab('landing');
+  };
+
+  const handleOpenStandMap = (event: EventItem) => {
+    setSelectedEventForMap(event);
+    setIsStandMapOpen(true);
+  };
+
+  const handleOpenPaymentModal = (params: {
+    registration?: EventRegistration;
+    paymentType?: any;
+    defaultAmount?: number;
+  }) => {
+    setPaymentModalParams(params);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleBookingSuccess = (reg: EventRegistration) => {
+    setActiveTab('member-dashboard');
+    handleOpenPaymentModal({
+      registration: reg,
+      paymentType: 'EVENT_PARTICIPATION',
+      defaultAmount: reg.stand_price,
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F1F5F9] text-slate-800 font-sans flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+      {/* Bento Grid Top Navbar */}
+      <Navbar
+        currentUser={currentUser}
+        currentRole={currentRole}
+        onRoleChange={(r) => {
+          setCurrentRole(r);
+          if (r === 'PUBLIC') {
+            handleLogout();
+          }
+        }}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        currentMember={currentMember}
+        onOpenMemberCard={() => setIsDigitalCardOpen(true)}
+        onOpenQRScanner={() => setIsQRScannerOpen(true)}
+        onOpenAuthModal={(mode) => {
+          setAuthModalMode(mode || 'MEMBER_LOGIN');
+          setIsAuthModalOpen(true);
+        }}
+        onOpenGoogleModal={() => setIsGoogleWorkspaceModalOpen(true)}
+        onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
+        onLogout={handleLogout}
+      />
+
+      {/* Main Responsive Canvas */}
+      <main className="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {/* HOMEPAGE / LANDING: Public Landing Page of Koperasi & Weekend Market */}
+        {activeTab === 'landing' && (
+          <LandingPage
+            onOpenAuthModal={(mode) => {
+              setAuthModalMode(mode);
+              setIsAuthModalOpen(true);
+            }}
+            onOpenGoogleModal={() => setIsGoogleWorkspaceModalOpen(true)}
+            onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
+            onSelectProduct={(p) => setInspectingProduct(p)}
+          />
+        )}
+
+        {/* MEMBER AREA (Role Protected) */}
+        {(activeTab === 'member-dashboard' ||
+          activeTab === 'member-events' ||
+          activeTab === 'member-savings') && (
+          <>
+            {currentMember ? (
+              <MemberDashboard
+                member={currentMember}
+                onOpenStandMap={handleOpenStandMap}
+                onOpenPaymentModal={handleOpenPaymentModal}
+                onOpenDigitalCard={() => setIsDigitalCardOpen(true)}
+              />
+            ) : (
+              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
+                <p className="text-sm font-bold text-slate-700">
+                  Data anggota tidak ditemukan atau Anda belum masuk.
+                </p>
+                <button
+                  onClick={() => setActiveTab('landing')}
+                  className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Kembali ke Portal Masuk
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ADMIN DASHBOARD (Role Protected) */}
+        {activeTab === 'admin-dashboard' && (
+          <>
+            {currentUser?.role === 'SUPER_ADMIN' ||
+            currentUser?.role === 'ADMIN_KOPERASI' ||
+            currentUser?.role === 'ADMIN_EVENT' ||
+            currentRole === 'SUPER_ADMIN' ? (
+              <AdminDashboard
+                adminId={currentUser?.id || 'ADM-SUPER'}
+                onOpenPaymentInspector={(p) => setInspectingPayment(p)}
+                onOpenQRScanner={() => setIsQRScannerOpen(true)}
+                onOpenStandMap={handleOpenStandMap}
+                onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
+              />
+            ) : (
+              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
+                <p className="text-sm font-bold text-rose-700">
+                  Akses Ditolak: Halaman ini memerlukan hak akses Pengurus / Super Admin.
+                </p>
+                <button
+                  onClick={() => setActiveTab('landing')}
+                  className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Masuk sebagai Super Admin
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-slate-200 py-6 px-4 sm:px-8 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl overflow-hidden bg-slate-950 border border-amber-400 p-0.5 shrink-0 flex items-center justify-center">
+              <img
+                src={BANUARASA_ASSETS.logo}
+                alt="Logo Banua Rasa"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="text-left">
+              <span className="font-extrabold text-slate-800">BANUARASA WEEKEND MARKET</span>
+              <span className="mx-1.5 text-slate-400">•</span>
+              <span className="text-emerald-700 font-bold">Koperasi Berau Melangkah Bersama</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400 font-mono">
+            Ecosystem Koperasi + UMKM + Google Workspace Architecture • 64 Stand
+          </p>
+        </div>
+      </footer>
+
+      {/* Modals */}
+      <SplashIntroModal
+        isOpen={isSplashIntroOpen}
+        onClose={() => setIsSplashIntroOpen(false)}
+        onOpenRegister={() => {
+          setIsSplashIntroOpen(false);
+          setAuthModalMode('REGISTER');
+          setIsAuthModalOpen(true);
+        }}
+        onOpenLogin={() => {
+          setIsSplashIntroOpen(false);
+          setAuthModalMode('MEMBER_LOGIN');
+          setIsAuthModalOpen(true);
+        }}
+      />
+
+      {isStandMapOpen && selectedEventForMap && (
+        <StandMapModal
+          isOpen={isStandMapOpen}
+          onClose={() => setIsStandMapOpen(false)}
+          event={selectedEventForMap}
+          currentMember={currentMember}
+          onBookingSuccess={handleBookingSuccess}
+        />
+      )}
+
+      {isPaymentModalOpen && currentMember && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => setIsPaymentModalOpen(false)}
+          currentMember={currentMember}
+          registration={paymentModalParams.registration}
+          paymentType={paymentModalParams.paymentType || 'EVENT_PARTICIPATION'}
+          defaultAmount={paymentModalParams.defaultAmount || 50000}
+          onSuccess={() => {
+            // Updated via storage subscribe
+          }}
+        />
+      )}
+
+      {isDigitalCardOpen && currentMember && (
+        <DigitalMemberCardModal
+          isOpen={isDigitalCardOpen}
+          onClose={() => setIsDigitalCardOpen(false)}
+          member={currentMember}
+        />
+      )}
+
+      {isQRScannerOpen && (
+        <QRScannerModal
+          isOpen={isQRScannerOpen}
+          onClose={() => setIsQRScannerOpen(false)}
+          adminId={currentUser?.id || 'ADM-EVENT'}
+        />
+      )}
+
+      {inspectingPayment && (
+        <PaymentProofViewerModal
+          isOpen={!!inspectingPayment}
+          onClose={() => setInspectingPayment(null)}
+          payment={inspectingPayment}
+          adminId={currentUser?.id || 'ADM-SUPER'}
+          onProcessed={() => setInspectingPayment(null)}
+        />
+      )}
+
+      {inspectingProduct && (
+        <ProductDetailModal
+          isOpen={!!inspectingProduct}
+          onClose={() => setInspectingProduct(null)}
+          product={inspectingProduct}
+        />
+      )}
+
+      {isAuthModalOpen && (
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          initialMode={authModalMode}
+          onClose={() => setIsAuthModalOpen(false)}
+          onLoginSuccess={(user) => {
+            setIsAuthModalOpen(false);
+            handleLoginSuccess(user);
+          }}
+          onRegisterSuccess={(member, user) => {
+            setIsAuthModalOpen(false);
+            handleRegisterSuccess(member, user);
+          }}
+        />
+      )}
+
+      {isGoogleWorkspaceModalOpen && (
+        <GoogleWorkspaceModal
+          isOpen={isGoogleWorkspaceModalOpen}
+          onClose={() => setIsGoogleWorkspaceModalOpen(false)}
+        />
+      )}
+
+      {isRegisterMemberOpen && (
+        <RegisterMemberModal
+          isOpen={isRegisterMemberOpen}
+          onClose={() => setIsRegisterMemberOpen(false)}
+          onSuccess={(newM) => {
+            setCurrentMember(newM);
+            const authUser: AuthUser = {
+              id: newM.member_id,
+              username: newM.email,
+              name: newM.nama_lengkap,
+              role: 'MEMBER',
+              member_id: newM.member_id,
+              email: newM.email,
+              foto_profil_url: newM.foto_profil_url,
+              nomor_anggota: newM.nomor_anggota,
+              nama_usaha: newM.nama_usaha,
+            };
+            storage.setCurrentUser(authUser);
+            setCurrentUser(authUser);
+            setCurrentRole('MEMBER');
+            setActiveTab('member-dashboard');
+          }}
+        />
+      )}
+
+      {/* Floating Interactive Bara Mascot Guide */}
+      <BaraMascotWidget
+        onOpenAuthModal={(mode) => {
+          setAuthModalMode(mode || 'MEMBER_LOGIN');
+          setIsAuthModalOpen(true);
+        }}
+        onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
+      />
+    </div>
+  );
+};
+
+export default App;

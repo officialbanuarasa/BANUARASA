@@ -1,0 +1,6 @@
+{
+  "name": "Koperasi Berau Melangkah Bersama",
+  "description": "Ekosistem Digital Koperasi, UMKM & Banuarasa Weekend Market — Rasa Lokal, Cerita Global",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
