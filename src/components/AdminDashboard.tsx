@@ -53,6 +53,7 @@ import {
   Cloud,
   FileSpreadsheet,
   Image as ImageIcon,
+  KeyRound,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -61,6 +62,7 @@ interface AdminDashboardProps {
   onOpenQRScanner: () => void;
   onOpenStandMap: (event: EventItem) => void;
   onOpenGoogleWorkspaceModal?: () => void;
+  onOpenChangePassword?: (targetMember?: Member | null, isSuperAdminReset?: boolean) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -69,6 +71,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenQRScanner,
   onOpenStandMap,
   onOpenGoogleWorkspaceModal,
+  onOpenChangePassword,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
     'OVERVIEW' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING'
@@ -267,6 +270,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Cloud className="w-4 h-4 text-emerald-600" />
                 <span>Google Workspace Hub</span>
+              </button>
+            )}
+            {onOpenChangePassword && (
+              <button
+                id="btn-admin-change-password"
+                onClick={() => onOpenChangePassword(null, false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                title="Ganti Kata Sandi Master Super Admin"
+              >
+                <KeyRound className="w-4 h-4 text-emerald-600" />
+                <span>Rubah Sandi Admin</span>
               </button>
             )}
             <button
@@ -833,6 +847,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           >
                             WA
                           </a>
+
+                          {onOpenChangePassword && (
+                            <button
+                              onClick={() => onOpenChangePassword(m, true)}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-200/60"
+                              title="Reset / Ganti Kata Sandi Anggota"
+                            >
+                              <KeyRound className="w-3 h-3 text-amber-600" />
+                              <span>Sandi</span>
+                            </button>
+                          )}
 
                           <button
                             onClick={() => {

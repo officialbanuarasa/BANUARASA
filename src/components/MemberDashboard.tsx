@@ -20,6 +20,7 @@ import {
   CreditCard,
   Building,
   Info,
+  KeyRound,
 } from 'lucide-react';
 
 interface MemberDashboardProps {
@@ -27,6 +28,7 @@ interface MemberDashboardProps {
   onOpenStandMap: (event: EventItem) => void;
   onOpenPaymentModal: (params: { registration?: EventRegistration; paymentType?: any; defaultAmount?: number }) => void;
   onOpenDigitalCard: () => void;
+  onOpenChangePassword?: () => void;
 }
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
@@ -34,6 +36,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onOpenStandMap,
   onOpenPaymentModal,
   onOpenDigitalCard,
+  onOpenChangePassword,
 }) => {
   const [, setVersion] = useState(0);
 
@@ -199,7 +202,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <span>64 Stand Tersedia untuk Anggota Koperasi Berau</span>
               </p>
               <p className="text-[11px] text-slate-500">
-                Kategori 1 (A-J) Rp50k • Kategori 2 (1-43) Rp50k • Kategori 3 (44-54) Rp35k
+                Kategori 1 (A sampai J) Rp50.000 / Event • Kategori 2 (1 sampai 43) Rp50.000 / Event • Kategori 3 (44 sampai 54) Rp35.000 / Event
               </p>
             </div>
 
@@ -254,15 +257,29 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             <p className="text-xs font-semibold text-slate-300">{member.nama_usaha}</p>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between">
+          <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between gap-2">
             <span className="text-[10px] text-slate-400 font-mono">ID: {member.member_id}</span>
-            <button
-              onClick={onOpenDigitalCard}
-              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
-            >
-              <span>Buka Kartu</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {onOpenChangePassword && (
+                <button
+                  type="button"
+                  onClick={onOpenChangePassword}
+                  className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-emerald-400 hover:text-emerald-300 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 cursor-pointer border border-emerald-500/20"
+                  title="Rubah Kata Sandi Akun"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Sandi</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onOpenDigitalCard}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black rounded-xl transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+              >
+                <span>Buka Kartu</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

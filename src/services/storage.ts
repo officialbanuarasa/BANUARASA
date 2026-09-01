@@ -140,6 +140,9 @@ const STORAGE_KEYS = {
   NOTIFICATIONS: 'kbm_v3_notifications',
   CURRENT_USER: 'kbm_v3_current_user_session',
   BRANDING: 'kbm_v3_branding_assets',
+  SUPER_ADMIN_CUSTOM_PASSWORD: 'kbm_v3_super_admin_custom_pass',
+  SUPER_ADMIN_CUSTOM_HASH: 'kbm_v3_super_admin_custom_hash',
+  IS_DUMMY_PURGED: 'kbm_v3_is_dummy_purged',
 };
 
 class StorageService {
@@ -218,39 +221,51 @@ class StorageService {
     const hashedPass = sha256(trimmedPass).toLowerCase();
 
     // 1. Check Super Admin
-    if (
-      (trimmedId === SUPER_ADMIN_ACCOUNT.username.toLowerCase() ||
-        trimmedId === SUPER_ADMIN_ACCOUNT.email.toLowerCase() ||
-        trimmedId === 'admin@banuarasa.id' ||
-        trimmedId === 'admin@koperasiberau.id' ||
-        trimmedId === 'mbr-0000' ||
-        trimmedId === 'kbmb-2026-000' ||
-        trimmedId === 'superadmin' ||
-        trimmedId === 'admin') &&
-      (trimmedPass === SUPER_ADMIN_ACCOUNT.password ||
+    const isSuperAdminIdentifier =
+      trimmedId === SUPER_ADMIN_ACCOUNT.username.toLowerCase() ||
+      trimmedId === SUPER_ADMIN_ACCOUNT.email.toLowerCase() ||
+      trimmedId === 'admin@banuarasa.id' ||
+      trimmedId === 'admin@koperasiberau.id' ||
+      trimmedId === 'mbr-0000' ||
+      trimmedId === 'kbmb-2026-000' ||
+      trimmedId === 'superadmin' ||
+      trimmedId === 'admin';
+
+    if (isSuperAdminIdentifier) {
+      const customSuperPass = this.getItem<string | null>(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_PASSWORD, null);
+      const customSuperHash = this.getItem<string | null>(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_HASH, null);
+
+      const isSuperPassValid =
+        (customSuperPass && trimmedPass === customSuperPass) ||
+        (customSuperHash && hashedPass === customSuperHash) ||
+        trimmedPass === SUPER_ADMIN_ACCOUNT.password ||
         trimmedPass === 'admin123' ||
         trimmedPass === 'admin' ||
-        hashedPass === '3eb3fe66b31e3b4d10fa70b5cad49c7112294af6ae4e476a1c405155c')
-    ) {
-      const superAdminUser: AuthUser = {
-        id: SUPER_ADMIN_ACCOUNT.id,
-        username: SUPER_ADMIN_ACCOUNT.username,
-        name: SUPER_ADMIN_ACCOUNT.nama_lengkap,
-        role: 'SUPER_ADMIN',
-        email: SUPER_ADMIN_ACCOUNT.email,
-        foto_profil_url: SUPER_ADMIN_ACCOUNT.foto_profil_url,
-      };
-      this.setCurrentUser(superAdminUser);
-      this.logAudit({
-        user_id: SUPER_ADMIN_ACCOUNT.id,
-        user_role: 'SUPER_ADMIN',
-        action: 'USER_LOGIN',
-        module: 'AUTH',
-        reference_id: SUPER_ADMIN_ACCOUNT.id,
-        description: 'Super Admin login berhasil ke dashboard manajemen',
-        result: 'SUCCESS',
-      });
-      return { success: true, message: 'Selamat datang, Super Admin!', user: superAdminUser };
+        hashedPass === '3eb3fe66b31e3b4d10fa70b5cad49c7112294af6ae4e476a1c405155c';
+
+      if (isSuperPassValid) {
+        const superAdminUser: AuthUser = {
+          id: SUPER_ADMIN_ACCOUNT.id,
+          username: SUPER_ADMIN_ACCOUNT.username,
+          name: SUPER_ADMIN_ACCOUNT.nama_lengkap,
+          role: 'SUPER_ADMIN',
+          email: SUPER_ADMIN_ACCOUNT.email,
+          foto_profil_url: SUPER_ADMIN_ACCOUNT.foto_profil_url,
+        };
+        this.setCurrentUser(superAdminUser);
+        this.logAudit({
+          user_id: SUPER_ADMIN_ACCOUNT.id,
+          user_role: 'SUPER_ADMIN',
+          action: 'USER_LOGIN',
+          module: 'AUTH',
+          reference_id: SUPER_ADMIN_ACCOUNT.id,
+          description: 'Super Admin login berhasil ke dashboard manajemen',
+          result: 'SUCCESS',
+        });
+        return { success: true, message: 'Selamat datang, Super Admin!', user: superAdminUser };
+      } else {
+        return { success: false, message: 'Kata sandi Master Super Admin yang Anda masukkan salah.' };
+      }
     }
 
     // 2. Check Member Accounts
@@ -336,6 +351,150 @@ class StorageService {
       });
     }
     this.setCurrentUser(null);
+  }
+
+  // --- Password Management (Super Admin & Anggota) ---
+  changePassword(params: {
+    targetUserId: string;
+    targetRole?: UserRole;
+    oldPassword?: string;
+    newPassword: string;
+    isSuperAdminReset?: boolean;
+    operatorId?: string;
+  }): { success: boolean; message: string } {
+    const { targetUserId, targetRole, oldPassword, newPassword, isSuperAdminReset, operatorId } = params;
+    const trimmedNew = (newPassword || '').trim();
+    if (trimmedNew.length < 6) {
+      return { success: false, message: 'Kata sandi baru minimal harus 6 karakter.' };
+    }
+
+    const hashedNew = sha256(trimmedNew).toLowerCase();
+
+    // 1. Target is Super Admin
+    const isTargetSuperAdmin =
+      targetUserId === SUPER_ADMIN_ACCOUNT.id ||
+      targetRole === 'SUPER_ADMIN' ||
+      targetUserId.toLowerCase() === 'adm-super' ||
+      targetUserId.toLowerCase() === 'superadmin' ||
+      targetUserId.toLowerCase() === SUPER_ADMIN_ACCOUNT.email.toLowerCase();
+
+    if (isTargetSuperAdmin) {
+      if (!isSuperAdminReset) {
+        const trimmedOld = (oldPassword || '').trim();
+        const customSuperPass = this.getItem<string | null>(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_PASSWORD, null);
+        const customSuperHash = this.getItem<string | null>(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_HASH, null);
+        const hashedOld = sha256(trimmedOld).toLowerCase();
+
+        const isOldValid =
+          (customSuperPass && trimmedOld === customSuperPass) ||
+          (customSuperHash && hashedOld === customSuperHash) ||
+          (!customSuperPass &&
+            !customSuperHash &&
+            (trimmedOld === SUPER_ADMIN_ACCOUNT.password ||
+              trimmedOld === 'admin123' ||
+              trimmedOld === 'admin' ||
+              hashedOld === '3eb3fe66b31e3b4d10fa70b5cad49c7112294af6ae4e476a1c405155c'));
+
+        if (!isOldValid) {
+          return { success: false, message: 'Kata sandi lama Super Admin tidak sesuai.' };
+        }
+      }
+
+      this.setItem(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_PASSWORD, trimmedNew);
+      this.setItem(STORAGE_KEYS.SUPER_ADMIN_CUSTOM_HASH, hashedNew);
+
+      this.logAudit({
+        user_id: operatorId || SUPER_ADMIN_ACCOUNT.id,
+        user_role: 'SUPER_ADMIN',
+        action: 'CHANGE_PASSWORD',
+        module: 'AUTH',
+        reference_id: SUPER_ADMIN_ACCOUNT.id,
+        description: 'Kata sandi Master Super Admin berhasil diperbarui',
+        result: 'SUCCESS',
+      });
+
+      return { success: true, message: 'Kata sandi Super Admin berhasil diperbarui dengan aman!' };
+    }
+
+    // 2. Target is Member
+    const members = this.getMembers();
+    const memberIndex = members.findIndex(
+      (m) =>
+        m.member_id === targetUserId ||
+        m.email?.toLowerCase() === targetUserId.toLowerCase() ||
+        m.nomor_anggota?.toLowerCase() === targetUserId.toLowerCase()
+    );
+
+    if (memberIndex === -1) {
+      return { success: false, message: 'Data anggota tidak ditemukan.' };
+    }
+
+    const member = members[memberIndex];
+
+    if (!isSuperAdminReset) {
+      const trimmedOld = (oldPassword || '').trim();
+      const memberNik = String(member.nik || '');
+      const memberPhone = String(member.nomor_hp || member.whatsapp || '');
+      const memberPassHash = String(member.password_hash || '').toLowerCase();
+      const memberPlainPass = String(member.password || '');
+      const hashedOld = sha256(trimmedOld).toLowerCase();
+
+      const isOldValid =
+        (memberPassHash && hashedOld === memberPassHash) ||
+        (memberPlainPass && trimmedOld === memberPlainPass) ||
+        trimmedOld === MEMBER_DEFAULT_PASSWORD ||
+        trimmedOld === '123456' ||
+        (memberNik.length >= 6 && trimmedOld === memberNik.slice(-6)) ||
+        (memberPhone.length >= 6 && trimmedOld === memberPhone.slice(-6));
+
+      if (!isOldValid) {
+        return { success: false, message: 'Kata sandi / PIN lama Anda tidak sesuai.' };
+      }
+    }
+
+    // Update Member with new password & hash
+    const updatedMember: Member = {
+      ...member,
+      password: trimmedNew,
+      password_hash: hashedNew,
+      updated_at: new Date().toISOString(),
+    };
+
+    members[memberIndex] = updatedMember;
+    this.setItem(STORAGE_KEYS.MEMBERS, members);
+
+    // Sync to Google Spreadsheet
+    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_ANGGOTA_KOPERASI', member.member_id, {
+      member_id: member.member_id,
+      nomor_anggota: member.nomor_anggota,
+      nama_lengkap: member.nama_lengkap,
+      nik: member.nik,
+      nama_usaha: member.nama_usaha,
+      kategori_usaha: member.kategori_usaha,
+      whatsapp: member.whatsapp,
+      email: member.email,
+      status: member.status_keanggotaan,
+      tanggal_bergabung: member.tanggal_bergabung,
+    });
+
+    this.logAudit({
+      user_id: operatorId || member.member_id,
+      user_role: isSuperAdminReset ? 'SUPER_ADMIN' : 'MEMBER',
+      action: 'CHANGE_PASSWORD',
+      module: 'AUTH',
+      reference_id: member.member_id,
+      description: isSuperAdminReset
+        ? `Super Admin mereset kata sandi untuk anggota ${member.nama_lengkap} (${member.member_id})`
+        : `Anggota ${member.nama_lengkap} (${member.member_id}) berhasil memperbarui kata sandi pribadinya`,
+      result: 'SUCCESS',
+    });
+
+    return {
+      success: true,
+      message: isSuperAdminReset
+        ? `Kata sandi anggota ${member.nama_lengkap} (${member.member_id}) berhasil diperbarui oleh Super Admin!`
+        : 'Kata sandi Anda berhasil diperbarui dengan aman!',
+    };
   }
 
   // --- LockService Simulation ---

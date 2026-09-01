@@ -48,7 +48,7 @@ export function getStandCategory(standCode: string): StandCategory {
 export function generateAll64Stands(): Stand[] {
   const stands: Stand[] = [];
 
-  // Category 1: A to J
+  // Category 1: A to J (Rp50.000 / Event)
   const cat1 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
   cat1.forEach((code) => {
     stands.push({
@@ -57,11 +57,11 @@ export function generateAll64Stands(): Stand[] {
       stand_category: 'KATEGORI_1',
       participation_price: 50000,
       status: 'ACTIVE',
-      zone_name: 'Zona Utama (A–J)',
+      zone_name: 'Kategori 1 (A sampai J)',
     });
   });
 
-  // Category 2: 1 to 43
+  // Category 2: 1 to 43 (Rp50.000 / Event)
   for (let i = 1; i <= 43; i++) {
     const code = i.toString();
     stands.push({
@@ -70,11 +70,11 @@ export function generateAll64Stands(): Stand[] {
       stand_category: 'KATEGORI_2',
       participation_price: 50000,
       status: 'ACTIVE',
-      zone_name: 'Zona Sayap & Koridor (1–43)',
+      zone_name: 'Kategori 2 (1 sampai 43)',
     });
   }
 
-  // Category 3: 44 to 54
+  // Category 3: 44 to 54 (Rp35.000 / Event)
   for (let i = 44; i <= 54; i++) {
     const code = i.toString();
     stands.push({
@@ -83,7 +83,7 @@ export function generateAll64Stands(): Stand[] {
       stand_category: 'KATEGORI_3',
       participation_price: 35000,
       status: 'ACTIVE',
-      zone_name: 'Zona Kreatif & Rintisan (44–54)',
+      zone_name: 'Kategori 3 (44 sampai 54)',
     });
   }
 

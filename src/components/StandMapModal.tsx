@@ -138,9 +138,9 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
             <span className="text-slate-500 font-bold mr-1">Zona:</span>
             {[
               { id: 'ALL', label: 'Semua (64 Stand)' },
-              { id: 'A-J', label: 'A–J Utama (Rp50k)' },
-              { id: '1-43', label: '1–43 Sayap (Rp50k)' },
-              { id: '44-54', label: '44–54 Kreatif (Rp35k)' },
+              { id: 'A-J', label: 'Kategori 1 (A s/d J) • Rp50k' },
+              { id: '1-43', label: 'Kategori 2 (1 s/d 43) • Rp50k' },
+              { id: '44-54', label: 'Kategori 3 (44 s/d 54) • Rp35k' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -198,16 +198,13 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
                     Kategori 1
                   </span>
                   <h3 className="font-bold text-sm text-slate-800">
-                    Stand Utama Depan Panggung (A sampai J)
+                    Kategori 1 (A sampai J)
                   </h3>
                 </div>
                 <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                   Rp50.000 / Event
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mb-3">
-                Posisi paling strategis berhadapan langsung dengan panggung hiburan dan pintu masuk utama.
-              </p>
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-2.5">
                 {allStands
                   .filter((s) => s.stand_category === 'KATEGORI_1')
@@ -252,16 +249,13 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
                     Kategori 2
                   </span>
                   <h3 className="font-bold text-sm text-slate-800">
-                    Stand Sayap & Koridor Utama (1 sampai 43)
+                    Kategori 2 (1 sampai 43)
                   </h3>
                 </div>
                 <span className="text-xs font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
                   Rp50.000 / Event
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mb-3">
-                Area pedestrian ramai di sepanjang koridor UMKM kuliner dan kriya.
-              </p>
               <div className="grid grid-cols-6 sm:grid-cols-11 md:grid-cols-12 gap-2">
                 {allStands
                   .filter((s) => s.stand_category === 'KATEGORI_2')
@@ -305,16 +299,13 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
                     Kategori 3
                   </span>
                   <h3 className="font-bold text-sm text-slate-800">
-                    Stand Kreatif & Rintisan UMKM (44 sampai 54)
+                    Kategori 3 (44 sampai 54)
                   </h3>
                 </div>
                 <span className="text-xs font-black text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
                   Rp35.000 / Event
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mb-3">
-                Harga khusus program akselerasi bagi produk kriya, fashion, dan rintisan baru.
-              </p>
               <div className="grid grid-cols-6 sm:grid-cols-11 gap-2.5">
                 {allStands
                   .filter((s) => s.stand_category === 'KATEGORI_3')

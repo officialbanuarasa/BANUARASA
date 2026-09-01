@@ -20,6 +20,7 @@ import {
   Cloud,
   FileSpreadsheet,
   Smile,
+  KeyRound,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -34,6 +35,7 @@ interface NavbarProps {
   onOpenAuthModal?: (mode?: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
   onOpenGoogleModal?: () => void;
   onOpenSplashIntro?: () => void;
+  onOpenChangePassword?: () => void;
   onLogout: () => void;
 }
 
@@ -49,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuthModal,
   onOpenGoogleModal,
   onOpenSplashIntro,
+  onOpenChangePassword,
   onLogout,
 }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -475,14 +478,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100">
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                    <button
+                      id="btn-navbar-change-password"
+                      onClick={() => {
+                        setShowRoleDropdown(false);
+                        if (onOpenChangePassword) onOpenChangePassword();
+                      }}
+                      className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200/60"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Rubah Kata Sandi</span>
+                    </button>
                     <button
                       id="btn-navbar-logout"
                       onClick={() => {
                         setShowRoleDropdown(false);
                         onLogout();
                       }}
-                      className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                      className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Keluar (Logout)</span>

@@ -38,7 +38,7 @@ export const BARA_ASSETS = {
   ],
   funFacts: [
     'Tahukah kamu? Wisata gastronomi bukan cuma tentang makan, tapi mendalami cerita, filosofi, dan sejarah di balik bumbu kuliner Berau!',
-    'Banuarasa memiliki 64 stand resmi: Stand VIP A-J di area panggung utama, dan Stand 1-54 di lorong kuliner & kriya kreatif!',
+    'Banuarasa memiliki 64 stand resmi: Kategori 1 (A-J Rp50k), Kategori 2 (1-43 Rp50k), dan Kategori 3 (44-54 Rp35k)!',
     'Seluruh data stand dan pelaku usaha terhubung langsung ke Google Sheets & Google Drive Koperasi Berau Melangkah Bersama.',
     'Bara selalu siap menemani kamu menikmati aneka kuliner khas Berau setiap akhir pekan di Tepian Teratai!',
     'Di Banuarasa, kamu bisa bertransaksi non-tunai lewat QRIS resmi koperasi dan mendapatkan struk digital otomatis!',

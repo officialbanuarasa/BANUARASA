@@ -391,6 +391,12 @@ class GoogleWorkspaceSyncService {
     return false;
   }
 
+  clearDriveFiles(): void {
+    this.driveFiles = [];
+    this.sheetSyncLogs = [];
+    this.saveState();
+  }
+
   getSheetSyncLogs(): GoogleSheetRow[] {
     return this.sheetSyncLogs;
   }

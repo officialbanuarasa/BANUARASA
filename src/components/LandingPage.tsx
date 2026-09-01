@@ -657,46 +657,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => setActiveStandFilter('VIP')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
                 activeStandFilter === 'VIP'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
               }`}
             >
-              VIP A-J (Rp50k)
+              Kategori 1 (A-J) • Rp50k
             </button>
             <button
               onClick={() => setActiveStandFilter('KAT2')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
                 activeStandFilter === 'KAT2'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-900 hover:bg-blue-100'
               }`}
             >
-              Stand 1-43 (Rp35k)
+              Kategori 2 (1-43) • Rp50k
             </button>
             <button
               onClick={() => setActiveStandFilter('KAT3')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
                 activeStandFilter === 'KAT3'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-blue-50 text-blue-900 hover:bg-blue-100'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
               }`}
             >
-              Stand 44-54 (Rp35k)
+              Kategori 3 (44-54) • Rp35k
             </button>
           </div>
         </div>
 
         {/* Visual Map Grid */}
         <div className="space-y-6">
-          {/* VIP SECTION (Stand A - J) */}
+          {/* CATEGORY 1 SECTION (Stand A - J) */}
           {(activeStandFilter === 'ALL' || activeStandFilter === 'VIP') && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-amber-900 bg-amber-50/80 px-4 py-2 rounded-xl border border-amber-200">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-900 bg-emerald-50/80 px-4 py-2 rounded-xl border border-emerald-200">
                 <span className="flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-600 fill-amber-500" />
-                  <span>Zona Utama VIP (Stand A s/d J) — Rp50.000 / Hari</span>
+                  <Star className="w-4 h-4 text-emerald-600 fill-emerald-500" />
+                  <span>Kategori 1 (A sampai J) — Rp50.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-amber-800">Posisi Paling Strategis Depan Panggung Festival</span>
+                <span className="text-[11px] text-emerald-800">Posisi Paling Strategis Depan Panggung Festival</span>
               </div>
 
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
@@ -711,7 +711,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onMouseLeave={() => setHoveredStand(null)}
                       className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
                         isAvailable
-                          ? 'bg-white hover:bg-amber-50 border-amber-200 text-slate-800 hover:border-amber-400 hover:scale-105 shadow-xs'
+                          ? 'bg-white hover:bg-emerald-50 border-emerald-200 text-slate-800 hover:border-emerald-400 hover:scale-105 shadow-xs'
                           : 'bg-slate-100 border-slate-200 text-slate-400'
                       }`}
                     >
@@ -733,12 +733,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {/* KATEGORI 2 (Stand 1 - 43) */}
           {(activeStandFilter === 'ALL' || activeStandFilter === 'KAT2') && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-900 bg-emerald-50/80 px-4 py-2 rounded-xl border border-emerald-200">
+              <div className="flex items-center justify-between text-xs font-bold text-blue-900 bg-blue-50/80 px-4 py-2 rounded-xl border border-blue-200">
                 <span className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-600" />
-                  <span>Lorong Kuliner & Kriya (Stand 1 s/d 43) — Rp35.000 / Hari</span>
+                  <Store className="w-4 h-4 text-blue-600" />
+                  <span>Kategori 2 (1 sampai 43) — Rp50.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-emerald-800">Fasilitas Listrik 450W & Meja Display Gastronomi</span>
+                <span className="text-[11px] text-blue-800">Fasilitas Listrik 450W & Meja Display Gastronomi</span>
               </div>
 
               <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-14 gap-2">
@@ -751,7 +751,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
                       className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
                         isAvailable
-                          ? 'bg-white hover:bg-emerald-50 border-slate-200 text-slate-800 hover:border-emerald-500 hover:scale-105 shadow-xs'
+                          ? 'bg-white hover:bg-blue-50 border-slate-200 text-slate-800 hover:border-blue-500 hover:scale-105 shadow-xs'
                           : 'bg-slate-100 border-slate-200 text-slate-400'
                       }`}
                     >
@@ -773,12 +773,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {/* KATEGORI 3 (Stand 44 - 54) */}
           {(activeStandFilter === 'ALL' || activeStandFilter === 'KAT3') && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-blue-900 bg-blue-50/80 px-4 py-2 rounded-xl border border-blue-200">
+              <div className="flex items-center justify-between text-xs font-bold text-amber-900 bg-amber-50/80 px-4 py-2 rounded-xl border border-amber-200">
                 <span className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-blue-600" />
-                  <span>Zona Kreatif & Fashion (Stand 44 s/d 54) — Rp35.000 / Hari</span>
+                  <Store className="w-4 h-4 text-amber-600" />
+                  <span>Kategori 3 (44 sampai 54) — Rp35.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-blue-800">Dekat Pintu Masuk Timur & Pusat Pengunjung</span>
+                <span className="text-[11px] text-amber-800">Dekat Pintu Masuk Timur & Pusat Pengunjung</span>
               </div>
 
               <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">

@@ -15,6 +15,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { RegisterMemberModal } from './components/RegisterMemberModal';
 import { AuthModal } from './components/AuthModal';
 import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BaraMascotWidget } from './components/BaraMascotWidget';
 import { SplashIntroModal } from './components/SplashIntroModal';
 
@@ -44,6 +45,10 @@ export const App: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER'>('MEMBER_LOGIN');
   const [isGoogleWorkspaceModalOpen, setIsGoogleWorkspaceModalOpen] = useState(false);
+
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [changePasswordTargetMember, setChangePasswordTargetMember] = useState<Member | null>(null);
+  const [isSuperAdminResettingMember, setIsSuperAdminResettingMember] = useState(false);
 
   const [isStandMapOpen, setIsStandMapOpen] = useState(false);
   const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
@@ -131,6 +136,12 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleOpenChangePassword = (targetMember?: Member | null, isReset?: boolean) => {
+    setChangePasswordTargetMember(targetMember || null);
+    setIsSuperAdminResettingMember(!!isReset);
+    setIsChangePasswordOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-800 font-sans flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
       {/* Bento Grid Top Navbar */}
@@ -154,6 +165,7 @@ export const App: React.FC = () => {
         }}
         onOpenGoogleModal={() => setIsGoogleWorkspaceModalOpen(true)}
         onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
+        onOpenChangePassword={() => handleOpenChangePassword(null, false)}
         onLogout={handleLogout}
       />
 
@@ -183,6 +195,7 @@ export const App: React.FC = () => {
                 onOpenStandMap={handleOpenStandMap}
                 onOpenPaymentModal={handleOpenPaymentModal}
                 onOpenDigitalCard={() => setIsDigitalCardOpen(true)}
+                onOpenChangePassword={() => handleOpenChangePassword(null, false)}
               />
             ) : (
               <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
@@ -213,6 +226,7 @@ export const App: React.FC = () => {
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
+                onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
               />
             ) : (
               <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
@@ -348,6 +362,23 @@ export const App: React.FC = () => {
         <GoogleWorkspaceModal
           isOpen={isGoogleWorkspaceModalOpen}
           onClose={() => setIsGoogleWorkspaceModalOpen(false)}
+        />
+      )}
+
+      {isChangePasswordOpen && (
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => {
+            setIsChangePasswordOpen(false);
+            setChangePasswordTargetMember(null);
+            setIsSuperAdminResettingMember(false);
+          }}
+          currentUser={currentUser}
+          targetMember={changePasswordTargetMember}
+          isSuperAdminReset={isSuperAdminResettingMember}
+          onSuccess={() => {
+            // Storage triggers notify and updates state automatically
+          }}
         />
       )}
 
