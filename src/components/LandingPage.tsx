@@ -67,9 +67,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     event_id: 'BWM-2026-001',
     event_name: 'Banuarasa Weekend Market Edisi #24',
     event_date: '2026-09-05',
-    start_time: '08:00',
-    end_time: '17:00',
-    location: 'Kawasan Tepian Teratai & Gedung UMKM, Tanjung Redeb, Berau',
+    start_time: '06:00',
+    end_time: '12:00',
+    location: 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau',
     status: 'ACTIVE',
     total_stands: 64,
   };
