@@ -826,7 +826,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="p-3 text-right space-x-1.5">
                           <a
-                            href={`https://wa.me/${m.whatsapp.replace(/[^0-9]/g, '')}`}
+                            href={`https://wa.me/${String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '')}`}
                             target="_blank"
                             rel="noreferrer"
                             className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs transition-colors inline-block"

@@ -96,7 +96,7 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
                     <span>{member.nama_usaha}</span>
                   </p>
                   <p className="text-[9px] text-slate-400">
-                    Kategori: {member.kategori_usaha} • Sejak {member.tanggal_bergabung.slice(0, 4)}
+                    Kategori: {member.kategori_usaha} • Sejak {String(member.tanggal_bergabung || '2026').slice(0, 4)}
                   </p>
                 </div>
               </div>

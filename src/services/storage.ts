@@ -247,21 +247,28 @@ class StorageService {
     // 2. Check Member Accounts
     const members = this.getMembers();
     const cleanNumber = trimmedId.replace(/[^0-9]/g, '');
-    const member = members.find(
-      (m) =>
-        m.email.toLowerCase() === trimmedId ||
-        m.member_id.toLowerCase() === trimmedId ||
-        m.nomor_anggota.toLowerCase() === trimmedId ||
-        (cleanNumber.length > 5 && m.whatsapp.replace(/[^0-9]/g, '').includes(cleanNumber))
-    );
+    const member = members.find((m) => {
+      const mEmail = String(m.email || '').toLowerCase();
+      const mId = String(m.member_id || '').toLowerCase();
+      const mNomor = String(m.nomor_anggota || '').toLowerCase();
+      const mPhone = String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '');
+      return (
+        mEmail === trimmedId ||
+        mId === trimmedId ||
+        mNomor === trimmedId ||
+        (cleanNumber.length > 5 && mPhone.includes(cleanNumber))
+      );
+    });
 
     if (member) {
+      const memberNik = String(member.nik || '');
+      const memberPhone = String(member.nomor_hp || member.whatsapp || '');
       // For demo, allow MEMBER_DEFAULT_PASSWORD or last 4 digits of phone/nik or '123456'
       if (
         trimmedPass === MEMBER_DEFAULT_PASSWORD ||
         trimmedPass === '123456' ||
-        trimmedPass === member.nik.slice(-6) ||
-        trimmedPass === member.nomor_hp.slice(-6)
+        (memberNik.length >= 6 && trimmedPass === memberNik.slice(-6)) ||
+        (memberPhone.length >= 6 && trimmedPass === memberPhone.slice(-6))
       ) {
         const memberUser: AuthUser = {
           id: member.member_id,
@@ -368,7 +375,20 @@ class StorageService {
 
   // --- Members ---
   getMembers(): Member[] {
-    return this.getItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
+    const raw = this.getItem<Member[]>(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
+    return raw.map((m) => ({
+      ...m,
+      member_id: String(m.member_id || ''),
+      nomor_anggota: String(m.nomor_anggota || ''),
+      nama_lengkap: String(m.nama_lengkap || ''),
+      nama_usaha: String(m.nama_usaha || ''),
+      kategori_usaha: m.kategori_usaha || 'Kuliner',
+      whatsapp: String(m.whatsapp ?? m.nomor_hp ?? ''),
+      nomor_hp: String(m.nomor_hp ?? m.whatsapp ?? ''),
+      email: String(m.email || ''),
+      nik: String(m.nik || ''),
+      status_keanggotaan: m.status_keanggotaan || 'ACTIVE',
+    }));
   }
 
   getMemberById(id: string): Member | undefined {

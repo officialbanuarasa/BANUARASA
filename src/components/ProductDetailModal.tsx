@@ -80,7 +80,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           {/* WhatsApp Direct Order Button */}
           <div className="pt-2">
             <a
-              href={`https://wa.me/${member?.whatsapp.replace(/[^0-9]/g, '')}?text=Halo%20${encodeURIComponent(
+              href={`https://wa.me/${String(member?.whatsapp || member?.nomor_hp || '').replace(/[^0-9]/g, '')}?text=Halo%20${encodeURIComponent(
                 member?.nama_usaha || ''
               )},%20saya%20tertarik%20dengan%20produk%20${encodeURIComponent(
                 product.product_name
