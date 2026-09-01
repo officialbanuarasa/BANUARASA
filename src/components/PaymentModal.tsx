@@ -145,25 +145,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Bank Kaltimtara */}
+              {/* Bank Mandiri */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[10px] font-black bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                      KALTIMTARA
+                      MANDIRI
                     </span>
-                    <span className="text-xs font-bold text-slate-800">Bank Kaltimtara</span>
+                    <span className="text-xs font-bold text-slate-800">Bank Mandiri</span>
                   </div>
-                  <p className="text-sm font-mono font-bold text-slate-900">003-201-998877</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">1490-0303-02105</p>
                   <p className="text-[10px] text-slate-500">a.n. Koperasi Berau Melangkah Bersama</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('003201998877', 'kaltimtara')}
+                  onClick={() => handleCopy('1490-0303-02105', 'mandiri')}
                   className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors"
                   title="Salin Nomor Rekening"
                 >
-                  {copiedBank === 'kaltimtara' ? (
+                  {copiedBank === 'mandiri' ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   ) : (
                     <Copy className="w-4 h-4" />
@@ -171,25 +171,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </button>
               </div>
 
-              {/* Bank BRI */}
+              {/* Whatsapp */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
                       BRI
                     </span>
-                    <span className="text-xs font-bold text-slate-800">Bank BRI Cabang Berau</span>
+                    <span className="text-xs font-bold text-slate-800">Whatsapp</span>
                   </div>
-                  <p className="text-sm font-mono font-bold text-slate-900">0124-01-002345-50-8</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">+62812-5240-8734</p>
                   <p className="text-[10px] text-slate-500">a.n. Koperasi Berau Melangkah Bersama</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('012401002345508', 'bri')}
+                  onClick={() => handleCopy('+62812-5240-8734', 'Whatsapp')}
                   className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors"
-                  title="Salin Nomor Rekening"
+                  title="Salin Nomor Whatsapp"
                 >
-                  {copiedBank === 'bri' ? (
+                  {copiedBank === 'whatsapp' ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   ) : (
                     <Copy className="w-4 h-4" />
