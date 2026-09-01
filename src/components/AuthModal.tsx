@@ -68,17 +68,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Quick Demo Autofills
+  // Quick Demo Autofill for Member
   const fillMemberDemo = () => {
     setMemberIdentifier('zulkarnain.berau@gmail.com');
     setMemberPassword('123456');
     setMemberLoginError('');
-  };
-
-  const fillAdminDemo = () => {
-    setAdminUsername('superadmin');
-    setAdminPassword('admin123');
-    setAdminLoginError('');
   };
 
   // Handlers
@@ -336,7 +330,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="password"
                       value={memberPassword}
                       onChange={(e) => setMemberPassword(e.target.value)}
-                      placeholder="Default demo: 123456"
+                      placeholder="Masukkan kata sandi / PIN"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
                     />
                   </div>
@@ -529,17 +523,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Demo 1-Click Autofill Button */}
-              <button
-                type="button"
-                id="btn-autofill-admin"
-                onClick={fillAdminDemo}
-                className="w-full py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-bold rounded-xl border border-purple-300 flex items-center justify-center gap-2 transition-colors"
-              >
-                <ShieldCheck className="w-4 h-4 text-purple-700" />
-                <span>1-Click Autofill Kredensial Super Admin</span>
-              </button>
-
+              {/* Helper text */}
               {adminLoginError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -559,7 +543,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="text"
                       value={adminUsername}
                       onChange={(e) => setAdminUsername(e.target.value)}
-                      placeholder="superadmin atau admin@koperasiberau.id"
+                      placeholder="Masukkan username atau email terdaftar"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:border-purple-500 focus:outline-hidden"
                     />
                   </div>
@@ -576,7 +560,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="password"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Default demo: admin123"
+                      placeholder="Masukkan kata sandi master"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:border-purple-500 focus:outline-hidden"
                     />
                   </div>
