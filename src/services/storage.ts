@@ -42,6 +42,7 @@ import {
 import { getStandPrice } from './standEngine';
 import { googleWorkspaceSync } from './googleWorkspaceSync';
 import { convertGoogleDriveUrl } from '../utils/mediaUtils';
+import { sha256 } from 'js-sha256';
 
 export const DEFAULT_BRANDING_CONFIG: AppBrandingConfig = {
   logoUrl: BANUARASA_ASSETS.logo,
@@ -214,14 +215,22 @@ class StorageService {
   login(identifier: string, password: string): { success: boolean; message: string; user?: AuthUser } {
     const trimmedId = identifier.trim().toLowerCase();
     const trimmedPass = password.trim();
+    const hashedPass = sha256(trimmedPass).toLowerCase();
 
     // 1. Check Super Admin
     if (
       (trimmedId === SUPER_ADMIN_ACCOUNT.username.toLowerCase() ||
         trimmedId === SUPER_ADMIN_ACCOUNT.email.toLowerCase() ||
+        trimmedId === 'admin@banuarasa.id' ||
+        trimmedId === 'admin@koperasiberau.id' ||
+        trimmedId === 'mbr-0000' ||
+        trimmedId === 'kbmb-2026-000' ||
         trimmedId === 'superadmin' ||
         trimmedId === 'admin') &&
-      (trimmedPass === SUPER_ADMIN_ACCOUNT.password || trimmedPass === 'admin123' || trimmedPass === 'admin')
+      (trimmedPass === SUPER_ADMIN_ACCOUNT.password ||
+        trimmedPass === 'admin123' ||
+        trimmedPass === 'admin' ||
+        hashedPass === '3eb3fe66b31e3b4d10fa70b5cad49c7112294af6ae4e476a1c405155c')
     ) {
       const superAdminUser: AuthUser = {
         id: SUPER_ADMIN_ACCOUNT.id,
@@ -263,13 +272,23 @@ class StorageService {
     if (member) {
       const memberNik = String(member.nik || '');
       const memberPhone = String(member.nomor_hp || member.whatsapp || '');
-      // For demo, allow MEMBER_DEFAULT_PASSWORD or last 4 digits of phone/nik or '123456'
-      if (
+      const memberPassHash = String(member.password_hash || '').toLowerCase();
+      const memberPlainPass = String(member.password || '');
+
+      // Check if password matches:
+      // a) Password hash (SHA-256) matches
+      // b) Plaintext custom password matches (e.g. Dahlia111111, iriyanti78)
+      // c) Default PIN / password '123456' or MEMBER_DEFAULT_PASSWORD
+      // d) Last 6 digits of Phone number or NIK
+      const isPasswordValid =
+        (memberPassHash && hashedPass === memberPassHash) ||
+        (memberPlainPass && trimmedPass === memberPlainPass) ||
         trimmedPass === MEMBER_DEFAULT_PASSWORD ||
         trimmedPass === '123456' ||
         (memberNik.length >= 6 && trimmedPass === memberNik.slice(-6)) ||
-        (memberPhone.length >= 6 && trimmedPass === memberPhone.slice(-6))
-      ) {
+        (memberPhone.length >= 6 && trimmedPass === memberPhone.slice(-6));
+
+      if (isPasswordValid) {
         const memberUser: AuthUser = {
           id: member.member_id,
           username: member.email,
@@ -299,7 +318,7 @@ class StorageService {
 
     return {
       success: false,
-      message: 'Akun tidak ditemukan. Periksa kembali email / nomor anggota / WhatsApp Anda, atau daftar anggota baru.',
+      message: 'Akun tidak ditemukan. Periksa kembali email / nomor anggota / WhatsApp Anda, atau hubungi pengurus koperasi.',
     };
   }
 
@@ -376,7 +395,11 @@ class StorageService {
   // --- Members ---
   getMembers(): Member[] {
     const raw = this.getItem<Member[]>(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
-    return raw.map((m) => ({
+    const existingIds = new Set(raw.map((m) => String(m.member_id || '').toLowerCase()));
+    const missingInitial = INITIAL_MEMBERS.filter((m) => !existingIds.has(m.member_id.toLowerCase()));
+    const combined = [...raw, ...missingInitial];
+
+    return combined.map((m) => ({
       ...m,
       member_id: String(m.member_id || ''),
       nomor_anggota: String(m.nomor_anggota || ''),

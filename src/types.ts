@@ -3,8 +3,8 @@ export type UserRole = 'SUPER_ADMIN' | 'ADMIN_KOPERASI' | 'ADMIN_EVENT' | 'MEMBE
 export type MembershipStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
 export interface Member {
-  member_id: string; // BM-00001
-  nomor_anggota: string; // KBM/2026/08/001
+  member_id: string; // BM-00001 or MBR-0001
+  nomor_anggota: string; // KBMB-2026-001
   nama_lengkap: string;
   nik: string;
   tempat_lahir: string;
@@ -22,6 +22,9 @@ export interface Member {
   whatsapp: string;
   status_keanggotaan: MembershipStatus;
   tanggal_bergabung: string;
+  password_hash?: string;
+  password?: string;
+  role?: string;
   created_at: string;
   updated_at: string;
 }
