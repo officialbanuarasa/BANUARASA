@@ -256,9 +256,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <div className="w-4 h-4 rounded-full overflow-hidden shrink-0 border border-amber-500">
               <img
-                src={BARA_ASSETS.mascot}
+                src={branding.mascotUrl || BARA_ASSETS.mascot}
                 alt="Bara"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
+                }}
               />
             </div>
             <span className="hidden xl:inline">Sambutan Bara</span>

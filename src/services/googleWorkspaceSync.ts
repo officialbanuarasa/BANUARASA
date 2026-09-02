@@ -102,6 +102,14 @@ class GoogleWorkspaceSyncService {
     } else {
       localStorage.removeItem(GAS_URL_KEY);
     }
+    // Broadcast GAS URL to server so all visitors on all devices share it
+    try {
+      fetch('/api/gas-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gasUrl: this.gasUrl }),
+      }).catch(() => {});
+    } catch {}
   }
 
   // --- Live Google Apps Script Health Check & Data Fetching ---
@@ -410,50 +418,64 @@ class GoogleWorkspaceSyncService {
 
   // Fetch all latest data from Google Apps Script Web App or trigger sync update
   async fetchAllDataFromGas(): Promise<{ success: boolean; message: string; updatedCount?: number }> {
+    const { storage } = await import('./storage');
+
+    // 1. Sync with server state first
+    await storage.syncWithServer();
+
     const url = this.getGasUrl();
     if (!url) {
       // Local sync refresh - ensures all storage subscribers re-render latest local changes
-      return { success: true, message: 'Data lokal tersinkronisasi.' };
+      storage.notifyListeners();
+      return { success: true, message: 'Data server & lokal tersinkronisasi.' };
     }
 
     try {
       const liveRes = await this.fetchLiveDataFromSpreadsheet();
 
       if (liveRes && liveRes.success && liveRes.data) {
-        // Update local storage if GAS returned data
-        const { storage } = await import('./storage');
         let count = 0;
         const data = liveRes.data;
         if (data.events && Array.isArray(data.events) && data.events.length > 0) {
-          localStorage.setItem('kbm_events_v3', JSON.stringify(data.events));
+          localStorage.setItem('kbm_v3_events', JSON.stringify(data.events));
           count += data.events.length;
         }
         if (data.members && Array.isArray(data.members) && data.members.length > 0) {
-          localStorage.setItem('kbm_members_v3', JSON.stringify(data.members));
+          localStorage.setItem('kbm_v3_members', JSON.stringify(data.members));
           count += data.members.length;
         }
         if (data.registrations && Array.isArray(data.registrations) && data.registrations.length > 0) {
-          localStorage.setItem('kbm_registrations_v3', JSON.stringify(data.registrations));
+          localStorage.setItem('kbm_v3_registrations', JSON.stringify(data.registrations));
           count += data.registrations.length;
         }
         if (data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
-          localStorage.setItem('kbm_payments_v3', JSON.stringify(data.payments));
+          localStorage.setItem('kbm_v3_payments', JSON.stringify(data.payments));
           count += data.payments.length;
         }
         if (data.savings && Array.isArray(data.savings) && data.savings.length > 0) {
-          localStorage.setItem('kbm_savings_v3', JSON.stringify(data.savings));
+          localStorage.setItem('kbm_v3_savings', JSON.stringify(data.savings));
           count += data.savings.length;
         }
         if (data.sales && Array.isArray(data.sales) && data.sales.length > 0) {
-          localStorage.setItem('kbm_sales_v3', JSON.stringify(data.sales));
+          localStorage.setItem('kbm_v3_sales_reports', JSON.stringify(data.sales));
           count += data.sales.length;
         }
+        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+          localStorage.setItem('kbm_v3_products', JSON.stringify(data.products));
+          count += data.products.length;
+        }
+        if (data.branding && typeof data.branding === 'object') {
+          localStorage.setItem('kbm_v3_branding_assets', JSON.stringify(data.branding));
+          count += 1;
+        }
 
-        // Notify storage subscribers
+        // Notify storage subscribers and push to shared server
         storage.notifyListeners();
+        storage.persistToServer();
         return { success: true, message: `Berhasil menyinkronkan data dari Google Spreadsheet!`, updatedCount: count };
       }
 
+      storage.notifyListeners();
       return { success: true, message: 'Sinkronisasi selesai.' };
     } catch (err: any) {
       console.warn('Auto-refresh from Google Apps Script:', err?.message || err);

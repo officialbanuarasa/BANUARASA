@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { storage } from '../services/storage';
 import { getStandPrice, getStandCategory } from '../services/standEngine';
 import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
-import { AuthUser, Member } from '../types';
+import { AuthUser, Member, EventItem } from '../types';
 import {
   Sparkles,
   Store,
@@ -76,15 +76,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const products = storage.getProducts();
   const registrations = storage.getRegistrations();
   const branding = storage.getBrandingConfig();
-  const currentEvent = events[0] || {
+  const currentEvent: EventItem = events[0] || {
     event_id: 'BWM-2026-001',
+    event_number: 24,
     event_name: 'Banuarasa Weekend Market Edisi #24',
     event_date: '2026-09-05',
     start_time: '06:00',
     end_time: '12:00',
     location: 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau',
-    status: 'ACTIVE',
-    total_stands: 64,
+    description: 'Pengalaman wisata gastronomi autentik yang menggabungkan cita rasa tradisional khas Berau, narasi budaya, interaksi langsung dengan pelaku UMKM, serta sistem reservasi 64 stand berbasis digital dan sinkronisasi Google Workspace.',
+    banner_url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80',
+    registration_open: '2026-09-01T00:00:00.000Z',
+    registration_close: '2026-09-05T06:00:00.000Z',
+    event_status: 'OPEN_REGISTRATION',
+    created_at: '2026-08-01T00:00:00.000Z',
+    updated_at: '2026-08-01T00:00:00.000Z',
   };
 
   // 64 Stands Definition
@@ -271,33 +277,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-lg shadow-amber-500/20">
                   <img
-                    src={BANUARASA_ASSETS.logo}
-                    alt="Logo Banua Rasa Weekend Market"
+                    src={branding.logoUrl || BANUARASA_ASSETS.logo}
+                    alt={branding.logoAlt || 'Logo Banua Rasa Weekend Market'}
                     className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
+                    }}
                   />
                 </div>
                 <div>
                   <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-none text-white">
-                    BANUARASA <br />
+                    {branding.heroBannerTitle || 'BANUARASA'} <br />
                     <span className={`text-transparent bg-clip-text bg-gradient-to-r ${currentTheme.titleGradient}`}>
-                      WEEKEND MARKET
+                      {branding.heroBannerSubtitle || 'WEEKEND MARKET'}
                     </span>
                   </h2>
                 </div>
               </div>
               <div className="flex items-center flex-wrap gap-2 pt-1">
                 <span className="text-amber-400 font-extrabold text-sm sm:text-base tracking-wide">
-                  "Rasa Lokal, Cerita Global"
+                  "{branding.tagline || 'Rasa Lokal, Cerita Global'}"
                 </span>
                 <span className="text-slate-500">•</span>
                 <span className="text-slate-300 text-xs sm:text-sm font-medium">
-                  Ekosistem 64 Stand Kuliner, Seni & Budaya
+                  {branding.subTagline || 'Ekosistem 64 Stand Kuliner, Seni & Budaya'}
                 </span>
               </div>
             </div>
 
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed max-w-xl">
-              Pengalaman wisata gastronomi autentik yang menggabungkan cita rasa tradisional khas Berau, narasi budaya, interaksi langsung dengan pelaku UMKM, serta sistem reservasi 64 stand berbasis digital dan sinkronisasi Google Workspace.
+              {currentEvent.description || 'Pengalaman wisata gastronomi autentik yang menggabungkan cita rasa tradisional khas Berau, narasi budaya, interaksi langsung dengan pelaku UMKM, serta sistem reservasi 64 stand berbasis digital dan sinkronisasi Google Workspace.'}
             </p>
 
             {/* Mascot Bara Banner Card with shoot-2 and Mascot Icon */}
@@ -380,25 +389,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Pendaftaran Stand Buka
                 </span>
                 <h3 className="text-base font-black text-slate-900 mt-2">
-                  Banuarasa Weekend Market
+                  {currentEvent.event_name || 'Banuarasa Weekend Market'}
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">Pasar Gastronomi & Kreatif Mingguan</p>
+                <p className="text-xs text-slate-500 font-medium">{branding.tagline || 'Pasar Gastronomi & Kreatif Mingguan'}</p>
               </div>
 
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col items-center justify-center text-amber-900 shrink-0">
-                <span className="text-[10px] font-bold uppercase">Sabtu-Minggu</span>
-                <span className="text-sm font-black">2026</span>
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col items-center justify-center text-amber-900 shrink-0 text-center px-1">
+                <span className="text-[9px] font-bold uppercase truncate max-w-full">{currentEvent.event_date || 'Sabtu-Minggu'}</span>
+                <span className="text-xs font-black">{new Date().getFullYear()}</span>
               </div>
             </div>
 
             <div className="space-y-2 py-3 border-y border-slate-100 text-xs text-slate-600 font-medium">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Pukul 06:00 - 12:00 WITA</span>
+                <span>Pukul {currentEvent.start_time || '06:00'} - {currentEvent.end_time || '12:00'} WITA</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-rose-600 shrink-0" />
-                <span className="truncate">Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau</span>
+                <span className="truncate">{currentEvent.location || 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau'}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Store className="w-4 h-4 text-purple-600 shrink-0" />
@@ -1056,20 +1065,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-md">
               <img
-                src={BANUARASA_ASSETS.logo}
-                alt="Logo Resmi Banua Rasa Weekend Market"
+                src={branding.logoUrl || BANUARASA_ASSETS.logo}
+                alt={branding.logoAlt || 'Logo Resmi Banua Rasa Weekend Market'}
                 className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
+                }}
               />
             </div>
             <div>
               <h5 className="text-sm font-black text-slate-900 leading-tight">
-                BANUARASA <span className="text-emerald-600">WEEKEND MARKET</span>
+                {branding.heroBannerTitle || 'BANUARASA'} <span className="text-emerald-600">{branding.heroBannerSubtitle || 'WEEKEND MARKET'}</span>
               </h5>
               <p className="text-xs font-bold text-amber-700">
-                "Rasa Lokal, Cerita Global" • Koperasi Berau Melangkah Bersama
+                "{branding.tagline || 'Rasa Lokal, Cerita Global'}" • {branding.organizationName || 'Koperasi Berau Melangkah Bersama'}
               </p>
               <p className="text-[10px] text-slate-400 mt-0.5">
-                Kawasan Tepian Teratai & Gedung Pusat UMKM Tanjung Redeb, Kabupaten Berau, Kalimantan Timur
+                {currentEvent.location || 'Kawasan Tepian Teratai & Gedung Pusat UMKM Tanjung Redeb, Kabupaten Berau, Kalimantan Timur'}
               </p>
             </div>
           </div>
@@ -1082,16 +1094,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               >
                 <div className="w-4 h-4 rounded-full overflow-hidden shrink-0 border border-amber-500">
                   <img
-                    src={BARA_ASSETS.mascot}
+                    src={branding.mascotUrl || BARA_ASSETS.mascot}
                     alt="Bara"
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
+                    }}
                   />
                 </div>
                 <span>Sambutan Bara</span>
               </button>
             )}
             <p className="text-[11px] text-slate-400 font-medium">
-              © 2026 Hak Cipta Dilindungi
+              © {new Date().getFullYear()} Hak Cipta Dilindungi
             </p>
           </div>
         </div>

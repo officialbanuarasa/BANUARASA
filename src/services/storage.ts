@@ -148,6 +148,20 @@ const STORAGE_KEYS = {
 class StorageService {
   private listeners: Set<() => void> = new Set();
   private isLocked: boolean = false;
+  private persistDebounceTimer: any = null;
+  private isHydratingFromServer: boolean = false;
+  private lastServerUpdatedAt: string | null = null;
+
+  constructor() {
+    // Cross-tab synchronization within the same browser
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key && Object.values(STORAGE_KEYS).includes(e.key)) {
+          this.notify();
+        }
+      });
+    }
+  }
 
   subscribe(callback: () => void) {
     this.listeners.add(callback);
@@ -174,12 +188,129 @@ class StorageService {
     }
   }
 
-  private setItem<T>(key: string, value: T): void {
+  private setItem<T>(key: string, value: T, skipServerPersist = false): void {
     try {
       localStorage.setItem(key, JSON.stringify(value));
       this.notify();
+      if (!skipServerPersist && !this.isHydratingFromServer) {
+        this.debouncedPersistToServer();
+      }
     } catch (e) {
       console.error('Storage error', e);
+    }
+  }
+
+  // Debounced push to Express server /api/app-state
+  private debouncedPersistToServer() {
+    if (this.persistDebounceTimer) {
+      clearTimeout(this.persistDebounceTimer);
+    }
+    this.persistDebounceTimer = setTimeout(() => {
+      this.persistToServer();
+    }, 400);
+  }
+
+  async persistToServer(): Promise<boolean> {
+    try {
+      const payload = {
+        events: this.getEvents(),
+        branding: this.getBrandingConfig(),
+        members: this.getMembers(),
+        registrations: this.getRegistrations(),
+        payments: this.getPayments(),
+        savings: this.getSavings(),
+        salesReports: this.getSalesReports(),
+        products: this.getProducts(),
+        announcements: this.getAnnouncements(),
+        gasUrl: localStorage.getItem('kbm_gas_web_app_url_v3') || '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      const res = await fetch('/api/app-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.updatedAt) {
+          this.lastServerUpdatedAt = json.updatedAt;
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('[StorageService] Persist to server network error:', err);
+      return false;
+    }
+  }
+
+  // Fetch shared application state from server (ensures all browsers & phones stay updated)
+  async syncWithServer(): Promise<{ updated: boolean; count?: number }> {
+    try {
+      const res = await fetch('/api/app-state');
+      if (!res.ok) return { updated: false };
+      const json = await res.json();
+      const serverData = json.data;
+      if (!serverData || typeof serverData !== 'object') return { updated: false };
+
+      // If server state is identical or empty, return
+      if (json.updatedAt && json.updatedAt === this.lastServerUpdatedAt) {
+        return { updated: false };
+      }
+
+      this.isHydratingFromServer = true;
+      let hasChanges = false;
+
+      if (Array.isArray(serverData.events) && serverData.events.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(serverData.events));
+        hasChanges = true;
+      }
+      if (serverData.branding && typeof serverData.branding === 'object') {
+        localStorage.setItem(STORAGE_KEYS.BRANDING, JSON.stringify(serverData.branding));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(serverData.members));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.registrations) && serverData.registrations.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.REGISTRATIONS, JSON.stringify(serverData.registrations));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.payments) && serverData.payments.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(serverData.payments));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.savings) && serverData.savings.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.SAVINGS, JSON.stringify(serverData.savings));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.salesReports) && serverData.salesReports.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.SALES_REPORTS, JSON.stringify(serverData.salesReports));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.products) && serverData.products.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(serverData.products));
+        hasChanges = true;
+      }
+      if (serverData.gasUrl && typeof serverData.gasUrl === 'string' && serverData.gasUrl.trim()) {
+        localStorage.setItem('kbm_gas_web_app_url_v3', serverData.gasUrl.trim());
+      }
+
+      this.isHydratingFromServer = false;
+      this.lastServerUpdatedAt = json.updatedAt || new Date().toISOString();
+
+      if (hasChanges) {
+        this.notify();
+      }
+
+      return { updated: hasChanges };
+    } catch (err) {
+      this.isHydratingFromServer = false;
+      console.warn('[StorageService] Error syncing with server:', err);
+      return { updated: false };
     }
   }
 
@@ -187,22 +318,30 @@ class StorageService {
   init() {
     const isInitialized = localStorage.getItem(STORAGE_KEYS.VERSION);
     if (!isInitialized) {
-      this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
-      this.setItem(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS);
-      this.setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-      this.setItem(STORAGE_KEYS.EVENTS, INITIAL_EVENTS);
-      this.setItem(STORAGE_KEYS.REGISTRATIONS, INITIAL_REGISTRATIONS);
-      this.setItem(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS);
-      this.setItem(STORAGE_KEYS.SAVINGS, INITIAL_SAVINGS);
-      this.setItem(STORAGE_KEYS.SALES_REPORTS, INITIAL_SALES_REPORTS);
-      this.setItem(STORAGE_KEYS.ANNOUNCEMENTS, INITIAL_ANNOUNCEMENTS);
-      this.setItem(STORAGE_KEYS.NEWS, INITIAL_NEWS);
-      this.setItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY);
-      this.setItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS);
-      this.setItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS);
-      this.setItem(STORAGE_KEYS.VERSION, '3.0.0');
+      this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS, true);
+      this.setItem(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS, true);
+      this.setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS, true);
+      this.setItem(STORAGE_KEYS.EVENTS, INITIAL_EVENTS, true);
+      this.setItem(STORAGE_KEYS.REGISTRATIONS, INITIAL_REGISTRATIONS, true);
+      this.setItem(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS, true);
+      this.setItem(STORAGE_KEYS.SAVINGS, INITIAL_SAVINGS, true);
+      this.setItem(STORAGE_KEYS.SALES_REPORTS, INITIAL_SALES_REPORTS, true);
+      this.setItem(STORAGE_KEYS.ANNOUNCEMENTS, INITIAL_ANNOUNCEMENTS, true);
+      this.setItem(STORAGE_KEYS.NEWS, INITIAL_NEWS, true);
+      this.setItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY, true);
+      this.setItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS, true);
+      this.setItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS, true);
+      this.setItem(STORAGE_KEYS.VERSION, '3.0.0', true);
     }
     this.cleanExpiredReservations();
+
+    // Immediately trigger server sync to hydrate latest state across all devices
+    this.syncWithServer().then((res) => {
+      // If server was empty and we have local initialized state, push it to server
+      if (!res.updated && isInitialized) {
+        this.persistToServer();
+      }
+    });
   }
 
   // --- Authentication & Session Management ---
