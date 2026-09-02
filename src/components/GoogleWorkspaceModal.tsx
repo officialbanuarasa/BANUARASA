@@ -136,6 +136,8 @@ export const GoogleWorkspaceModal: React.FC<GoogleWorkspaceModalProps> = ({
         payments: storage.getPayments(),
         savings: storage.getSavings(),
         salesReports: storage.getSalesReports(),
+        events: storage.getEvents(),
+        products: storage.getProducts(),
       };
       const res = await googleWorkspaceSync.postToGas('batchSync', payload);
       if (res.success) {

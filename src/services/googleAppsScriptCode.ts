@@ -174,10 +174,20 @@ function doPost(e) {
     initializeDatabase();
     let body = {};
     if (e && e.postData && e.postData.contents) {
-      body = JSON.parse(e.postData.contents);
+      try {
+        body = JSON.parse(e.postData.contents);
+      } catch (jsonErr) {
+        body = {};
+      }
+    } else if (e && e.parameter) {
+      body = e.parameter;
     }
-    const action = body.action;
-    const payload = body.data || body;
+
+    const action = body.action || (e && e.parameter && e.parameter.action);
+    let payload = (body.data !== undefined && body.data !== null) ? body.data : body;
+    if (!payload || typeof payload !== "object") {
+      payload = {};
+    }
 
     if (!action) {
       throw new Error("Field 'action' wajib disertakan dalam request POST.");
@@ -260,6 +270,12 @@ function doPost(e) {
       // 8. AUDIT LOGGING
       case "logAudit":
         result = appendRow(SHEETS.AUDIT, payload);
+        break;
+
+      // 9. EVENT MANAGEMENT
+      case "createEvent":
+      case "updateEvent":
+        result = upsertRow(SHEETS.EVENT, "event_id", payload.event_id, payload);
         break;
 
       default:
@@ -478,37 +494,74 @@ function getOrCreateSubfolder(parentFolder, subfolderName) {
  * Sinkronisasi kumpulan data sekaligus (Batch Sync)
  */
 function handleBatchSync(payload) {
+  if (!payload || typeof payload !== "object") {
+    payload = {};
+  }
   const results = {};
+
   if (payload.members && Array.isArray(payload.members)) {
     payload.members.forEach(function(m) {
-      upsertRow(SHEETS.ANGGOTA, "member_id", m.member_id, m);
+      if (m && m.member_id) {
+        upsertRow(SHEETS.ANGGOTA, "member_id", m.member_id, m);
+      }
     });
     results.membersSynced = payload.members.length;
   }
+
   if (payload.registrations && Array.isArray(payload.registrations)) {
     payload.registrations.forEach(function(r) {
-      upsertRow(SHEETS.STANDS, "registration_id", r.registration_id, r);
+      if (r && r.registration_id) {
+        upsertRow(SHEETS.STANDS, "registration_id", r.registration_id, r);
+      }
     });
     results.registrationsSynced = payload.registrations.length;
   }
+
   if (payload.payments && Array.isArray(payload.payments)) {
     payload.payments.forEach(function(p) {
-      upsertRow(SHEETS.PEMBAYARAN, "payment_id", p.payment_id, p);
+      if (p && p.payment_id) {
+        upsertRow(SHEETS.PEMBAYARAN, "payment_id", p.payment_id, p);
+      }
     });
     results.paymentsSynced = payload.payments.length;
   }
+
   if (payload.savings && Array.isArray(payload.savings)) {
     payload.savings.forEach(function(s) {
-      upsertRow(SHEETS.SIMPANAN, "saving_id", s.saving_id, s);
+      if (s && s.saving_id) {
+        upsertRow(SHEETS.SIMPANAN, "saving_id", s.saving_id, s);
+      }
     });
     results.savingsSynced = payload.savings.length;
   }
+
   if (payload.salesReports && Array.isArray(payload.salesReports)) {
     payload.salesReports.forEach(function(sr) {
-      upsertRow(SHEETS.OMZET, "sales_report_id", sr.sales_report_id, sr);
+      if (sr && sr.sales_report_id) {
+        upsertRow(SHEETS.OMZET, "sales_report_id", sr.sales_report_id, sr);
+      }
     });
     results.salesReportsSynced = payload.salesReports.length;
   }
+
+  if (payload.events && Array.isArray(payload.events)) {
+    payload.events.forEach(function(ev) {
+      if (ev && ev.event_id) {
+        upsertRow(SHEETS.EVENT, "event_id", ev.event_id, ev);
+      }
+    });
+    results.eventsSynced = payload.events.length;
+  }
+
+  if (payload.products && Array.isArray(payload.products)) {
+    payload.products.forEach(function(prod) {
+      if (prod && prod.product_id) {
+        upsertRow(SHEETS.PRODUK, "product_id", prod.product_id, prod);
+      }
+    });
+    results.productsSynced = payload.products.length;
+  }
+
   return results;
 }
 
