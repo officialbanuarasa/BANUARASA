@@ -20,6 +20,7 @@ import {
   CustomBannerItem,
   MediaSourceType,
   MediaAssetCategory,
+  MemberCardDesignConfig,
 } from '../types';
 import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
 import {
@@ -122,6 +123,32 @@ export const DEFAULT_BRANDING_CONFIG: AppBrandingConfig = {
   updated_at: '2026-08-01T00:00:00.000Z',
 };
 
+export const DEFAULT_MEMBER_CARD_DESIGN: MemberCardDesignConfig = {
+  theme: 'LUXURY_SLATE',
+  cardTitle: 'KARTU TANDA ANGGOTA RESMI',
+  organizationName: 'KOPERASI BERAU MELANGKAH BERSAMA',
+  marketName: 'BANUARASA WEEKEND MARKET',
+  badgeText: 'ANGGOTA TERVERIFIKASI',
+  tagline: 'Wisata Gastronomi & UMKM Kreatif Berau',
+  authorizedOfficerName: 'H. AHMAD FAUZI',
+  authorizedOfficerTitle: 'Ketua Pengurus Koperasi',
+  authorizedOfficerNip: 'REG.KOP-6403/2026',
+  showPhoto: true,
+  showQrCode: true,
+  showBusinessName: true,
+  showCategory: true,
+  showAddress: true,
+  showJoinDate: true,
+  showValidityPeriod: true,
+  validityDurationYears: 3,
+  customLogoUrl: BANUARASA_ASSETS.logo,
+  customWatermarkUrl: BARA_ASSETS.mascot,
+  disclaimerNotes: 'Kartu ini adalah bukti keanggotaan sah Koperasi Berau Melangkah Bersama & hak partisipasi stand Banuarasa Weekend Market.',
+  cardAccentColor: '#10B981',
+  updated_at: '2026-08-01T00:00:00.000Z',
+  updated_by: 'SUPER_ADMIN',
+};
+
 const STORAGE_KEYS = {
   VERSION: 'kbm_data_version_v3',
   MEMBERS: 'kbm_v3_members',
@@ -140,6 +167,7 @@ const STORAGE_KEYS = {
   NOTIFICATIONS: 'kbm_v3_notifications',
   CURRENT_USER: 'kbm_v3_current_user_session',
   BRANDING: 'kbm_v3_branding_assets',
+  CARD_DESIGN: 'kbm_v3_member_card_design',
   SUPER_ADMIN_CUSTOM_PASSWORD: 'kbm_v3_super_admin_custom_pass',
   SUPER_ADMIN_CUSTOM_HASH: 'kbm_v3_super_admin_custom_hash',
   IS_DUMMY_PURGED: 'kbm_v3_is_dummy_purged',
@@ -215,13 +243,20 @@ class StorageService {
       const payload = {
         events: this.getEvents(),
         branding: this.getBrandingConfig(),
+        cardDesign: this.getMemberCardDesign(),
         members: this.getMembers(),
         registrations: this.getRegistrations(),
         payments: this.getPayments(),
         savings: this.getSavings(),
         salesReports: this.getSalesReports(),
         products: this.getProducts(),
+        documents: this.getDocuments(),
         announcements: this.getAnnouncements(),
+        notifications: this.getNotifications(),
+        auditLogs: this.getAuditLogs(),
+        news: this.getItem(STORAGE_KEYS.NEWS, INITIAL_NEWS),
+        gallery: this.getItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY),
+        sponsors: this.getItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS),
         gasUrl: localStorage.getItem('kbm_gas_web_app_url_v3') || '',
         updatedAt: new Date().toISOString(),
       };
@@ -271,6 +306,10 @@ class StorageService {
         localStorage.setItem(STORAGE_KEYS.BRANDING, JSON.stringify(serverData.branding));
         hasChanges = true;
       }
+      if (serverData.cardDesign && typeof serverData.cardDesign === 'object') {
+        localStorage.setItem(STORAGE_KEYS.CARD_DESIGN, JSON.stringify(serverData.cardDesign));
+        hasChanges = true;
+      }
       if (Array.isArray(serverData.members) && serverData.members.length > 0) {
         localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(serverData.members));
         hasChanges = true;
@@ -295,8 +334,60 @@ class StorageService {
         localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(serverData.products));
         hasChanges = true;
       }
+      if (Array.isArray(serverData.documents) && serverData.documents.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(serverData.documents));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.announcements) && serverData.announcements.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(serverData.announcements));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.notifications) && serverData.notifications.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(serverData.notifications));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.auditLogs) && serverData.auditLogs.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(serverData.auditLogs));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.news) && serverData.news.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(serverData.news));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.gallery) && serverData.gallery.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(serverData.gallery));
+        hasChanges = true;
+      }
+      if (Array.isArray(serverData.sponsors) && serverData.sponsors.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.SPONSORS, JSON.stringify(serverData.sponsors));
+        hasChanges = true;
+      }
       if (serverData.gasUrl && typeof serverData.gasUrl === 'string' && serverData.gasUrl.trim()) {
         localStorage.setItem('kbm_gas_web_app_url_v3', serverData.gasUrl.trim());
+      }
+
+      // Synchronize logged-in user profile if current member's profile was updated
+      const u = this.getCurrentUser();
+      if (u && u.role === 'MEMBER' && u.member_id) {
+        const freshMember = this.getMemberById(u.member_id);
+        if (freshMember) {
+          if (
+            u.name !== freshMember.nama_lengkap ||
+            u.foto_profil_url !== freshMember.foto_profil_url ||
+            u.nama_usaha !== freshMember.nama_usaha ||
+            u.nomor_anggota !== freshMember.nomor_anggota
+          ) {
+            const updatedAuth: AuthUser = {
+              ...u,
+              name: freshMember.nama_lengkap,
+              foto_profil_url: freshMember.foto_profil_url,
+              nama_usaha: freshMember.nama_usaha,
+              nomor_anggota: freshMember.nomor_anggota,
+            };
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedAuth));
+            hasChanges = true;
+          }
+        }
       }
 
       this.isHydratingFromServer = false;
@@ -755,6 +846,14 @@ class StorageService {
       description: `Profil anggota ${members[idx].nama_lengkap} (${memberId}) diperbarui ${adminId ? 'oleh Super Admin' : ''}`,
       result: 'SUCCESS',
     });
+
+    this.addNotification({
+      title: 'Profil Anggota Diperbarui',
+      message: `Data profil ${members[idx].nama_lengkap} (${memberId}) telah diperbarui oleh ${adminId ? 'Super Admin' : 'Pengurus'}.`,
+      type: 'INFO',
+    });
+    this.persistToServer();
+
     return true;
   }
 
@@ -818,6 +917,13 @@ class StorageService {
       result: 'SUCCESS',
     });
 
+    this.addNotification({
+      title: 'Pendaftaran Anggota Baru',
+      message: `Anggota baru ${newMember.nama_lengkap} (${newMember.nama_usaha}) berhasil didaftarkan oleh Super Admin.`,
+      type: 'SUCCESS',
+    });
+    this.persistToServer();
+
     return newMember;
   }
 
@@ -866,6 +972,14 @@ class StorageService {
       description: `Pendaftaran anggota baru: ${member.nama_lengkap} (${member.nama_usaha}) terdata di Google Spreadsheet & Google Drive`,
       result: 'SUCCESS',
     });
+
+    this.addNotification({
+      title: 'Pendaftaran Anggota Baru',
+      message: `${member.nama_lengkap} (${member.nama_usaha}) berhasil mendaftar sebagai anggota Koperasi.`,
+      type: 'SUCCESS',
+    });
+    this.persistToServer();
+
     return member;
   }
 
@@ -1326,11 +1440,14 @@ class StorageService {
         result: 'SUCCESS',
       });
 
+      const targetMember = this.getMemberById(memberId);
+      const memberName = targetMember ? targetMember.nama_lengkap : memberId;
       this.addNotification({
-        title: 'Reservasi Stand Berhasil',
-        message: `Stand ${standCode} berhasil di-booking. Harap selesaikan pembayaran sebesar Rp${standPrice.toLocaleString('id-ID')} dalam 2 jam.`,
+        title: `Pesanan Stand Baru (${standCode})`,
+        message: `${memberName} telah memesan Stand ${standCode} (${eventId}). Total biaya Rp${standPrice.toLocaleString('id-ID')}.`,
         type: 'SUCCESS',
       });
+      this.persistToServer();
 
       return {
         success: true,
@@ -1555,11 +1672,14 @@ class StorageService {
       result: 'SUCCESS',
     });
 
+    const payerMember = this.getMemberById(params.member_id);
+    const payerName = payerMember ? payerMember.nama_lengkap : params.member_id;
     this.addNotification({
-      title: 'Bukti Pembayaran Terkirim',
-      message: `Bukti transfer sebesar Rp${params.amount.toLocaleString('id-ID')} tersimpan di Google Drive dan sedang dalam antrean verifikasi pengurus.`,
+      title: 'Bukti Pembayaran Baru Masuk',
+      message: `${payerName} mengunggah bukti transfer ${params.payment_type.replace('_', ' ')} sebesar Rp${params.amount.toLocaleString('id-ID')}. Menunggu verifikasi admin.`,
       type: 'INFO',
     });
+    this.persistToServer();
 
     return newPayment;
   }
@@ -1634,13 +1754,16 @@ class StorageService {
       result: 'SUCCESS',
     });
 
+    const targetMember = this.getMemberById(pay.member_id);
+    const targetName = targetMember ? targetMember.nama_lengkap : pay.member_id;
     this.addNotification({
-      title: isApproved ? 'Pembayaran Disetujui' : 'Pembayaran Ditolak',
+      title: isApproved ? 'Pembayaran Diverifikasi' : 'Pembayaran Ditolak',
       message: isApproved
-        ? `Pembayaran ${pay.payment_type.replace('_', ' ')} Anda sebesar Rp${pay.amount.toLocaleString('id-ID')} telah dikonfirmasi.`
-        : `Pembayaran ditolak: ${rejectionReason}. Silakan unggah bukti transfer yang valid.`,
+        ? `Pembayaran ${pay.payment_type.replace('_', ' ')} anggota ${targetName} sebesar Rp${pay.amount.toLocaleString('id-ID')} telah disetujui.`
+        : `Pembayaran anggota ${targetName} ditolak. Alasan: ${rejectionReason || 'Bukti tidak sesuai'}.`,
       type: isApproved ? 'SUCCESS' : 'ALERT',
     });
+    this.persistToServer();
 
     return {
       success: true,
@@ -2768,6 +2891,124 @@ class StorageService {
     });
 
     return true;
+  }
+
+  // --- Member Card Template & Design Studio ---
+  getMemberCardDesign(): MemberCardDesignConfig {
+    return this.getItem<MemberCardDesignConfig>(
+      STORAGE_KEYS.CARD_DESIGN,
+      DEFAULT_MEMBER_CARD_DESIGN
+    );
+  }
+
+  updateMemberCardDesign(
+    updates: Partial<MemberCardDesignConfig>,
+    adminUsername = 'SUPER_ADMIN'
+  ): MemberCardDesignConfig {
+    const current = this.getMemberCardDesign();
+    const updated: MemberCardDesignConfig = {
+      ...current,
+      ...updates,
+      updated_at: new Date().toISOString(),
+      updated_by: adminUsername,
+    };
+
+    this.setItem(STORAGE_KEYS.CARD_DESIGN, updated);
+    this.notify();
+    this.persistToServer();
+
+    this.logAudit({
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
+      action: 'UPDATE_CARD_DESIGN',
+      module: 'CARD_STUDIO',
+      reference_id: 'KTA-DESIGN',
+      description: `Desain Kartu Anggota (KTA Digital) diperbarui ke tema ${updated.theme}`,
+      result: 'SUCCESS',
+    });
+
+    this.addNotification({
+      title: 'Desain KTA Digital Diperbarui',
+      message: `Super Admin telah memperbarui layout desain kartu anggota resmi ke tema ${updated.theme}.`,
+      type: 'INFO',
+    });
+
+    return updated;
+  }
+
+  // --- Member Profile & Biodata Update by Member / Admin ---
+  updateMemberProfile(
+    memberId: string,
+    profileData: Partial<Member>
+  ): { success: boolean; message: string; member?: Member } {
+    const members = this.getMembers();
+    const index = members.findIndex((m) => m.member_id === memberId);
+    if (index === -1) {
+      return { success: false, message: 'Data anggota tidak ditemukan.' };
+    }
+
+    const current = members[index];
+    const updatedMember: Member = {
+      ...current,
+      ...profileData,
+      updated_at: new Date().toISOString(),
+    };
+
+    members[index] = updatedMember;
+    this.setItem(STORAGE_KEYS.MEMBERS, members);
+
+    // Sync active session if logged in as this member
+    const currentUser = this.getCurrentUser();
+    if (currentUser && currentUser.member_id === memberId) {
+      const updatedAuth: AuthUser = {
+        ...currentUser,
+        name: updatedMember.nama_lengkap,
+        foto_profil_url: updatedMember.foto_profil_url,
+        nama_usaha: updatedMember.nama_usaha,
+        nomor_anggota: updatedMember.nomor_anggota,
+      };
+      this.setItem(STORAGE_KEYS.CURRENT_USER, updatedAuth);
+    }
+
+    this.notify();
+    this.persistToServer();
+
+    // Async sync photo to Google Drive
+    if (profileData.foto_profil_url && profileData.foto_profil_url !== current.foto_profil_url) {
+      try {
+        googleWorkspaceSync.syncFileToGoogleDrive({
+          fileUrl: profileData.foto_profil_url,
+          fileName: `Foto_Profil_${updatedMember.member_id}.jpg`,
+          category: 'FOTO_PROFIL',
+          uploadedBy: updatedMember.nama_lengkap,
+          memberId: updatedMember.member_id,
+        });
+      } catch (err) {
+        console.warn('Google Drive photo upload failed', err);
+      }
+    }
+
+    this.logAudit({
+      user_id: memberId,
+      user_role: currentUser?.role || 'MEMBER',
+      action: 'UPDATE_MEMBER_PROFILE',
+      module: 'MEMBERS',
+      reference_id: memberId,
+      description: `Biodata profil anggota ${updatedMember.nama_lengkap} (${updatedMember.member_id}) berhasil diperbarui`,
+      result: 'SUCCESS',
+    });
+
+    this.addNotification({
+      title: 'Biodata Anggota Diperbarui',
+      message: `Profil anggota ${updatedMember.nama_lengkap} (${updatedMember.nama_usaha}) berhasil disimpan dan disinkronkan.`,
+      type: 'SUCCESS',
+    });
+
+    return {
+      success: true,
+      message: 'Biodata & Foto Profil berhasil disimpan dan disinkronkan!',
+      member: updatedMember,
+    };
   }
 }
 

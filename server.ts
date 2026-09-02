@@ -31,11 +31,96 @@ function loadPersistedState() {
   }
 }
 
-function savePersistedState(state: any) {
+// Helper function to merge array records by primary ID & timestamp
+function mergeById<T extends { [key: string]: any }>(
+  existingList: T[] | undefined,
+  incomingList: T[] | undefined,
+  idKey: string,
+  timeKey = "updated_at"
+): T[] {
+  if (!Array.isArray(incomingList)) return existingList || [];
+  if (!Array.isArray(existingList) || existingList.length === 0) return incomingList;
+
+  const map = new Map<string, T>();
+
+  // Put existing into map
+  for (const item of existingList) {
+    if (item && item[idKey]) {
+      map.set(String(item[idKey]), item);
+    }
+  }
+
+  // Merge or insert incoming
+  for (const item of incomingList) {
+    if (item && item[idKey]) {
+      const key = String(item[idKey]);
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, item);
+      } else {
+        // compare timestamps if present
+        const prevTime = prev[timeKey] || prev.timestamp || prev.created_at || "";
+        const incomingTime = item[timeKey] || item.timestamp || item.created_at || "";
+        if (incomingTime >= prevTime || !prevTime) {
+          map.set(key, { ...prev, ...item });
+        }
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function mergeNotifications(existing: any[] = [], incoming: any[] = []): any[] {
+  if (!Array.isArray(incoming)) return existing || [];
+  if (!Array.isArray(existing) || existing.length === 0) return incoming;
+
+  const map = new Map<string, any>();
+  for (const n of existing) {
+    if (n && n.id) map.set(n.id, n);
+  }
+  for (const n of incoming) {
+    if (n && n.id) {
+      const prev = map.get(n.id);
+      if (!prev) {
+        map.set(n.id, n);
+      } else {
+        map.set(n.id, { ...prev, ...n });
+      }
+    }
+  }
+
+  // Sort descending by timestamp, keep latest 100
+  const sorted = Array.from(map.values()).sort((a, b) => {
+    const tA = new Date(a.timestamp || 0).getTime();
+    const tB = new Date(b.timestamp || 0).getTime();
+    return tB - tA;
+  });
+  return sorted.slice(0, 100);
+}
+
+function savePersistedState(incoming: any) {
   try {
+    const prev = sharedAppState || {};
     sharedAppState = {
-      ...sharedAppState,
-      ...state,
+      ...prev,
+      events: mergeById(prev.events, incoming.events, "event_id"),
+      members: mergeById(prev.members, incoming.members, "member_id"),
+      registrations: mergeById(prev.registrations, incoming.registrations, "registration_id"),
+      payments: mergeById(prev.payments, incoming.payments, "payment_id"),
+      savings: mergeById(prev.savings, incoming.savings, "saving_id"),
+      salesReports: mergeById(prev.salesReports, incoming.salesReports, "report_id"),
+      products: mergeById(prev.products, incoming.products, "product_id"),
+      documents: mergeById(prev.documents, incoming.documents, "document_id"),
+      announcements: mergeById(prev.announcements, incoming.announcements, "id"),
+      news: mergeById(prev.news, incoming.news, "id"),
+      gallery: mergeById(prev.gallery, incoming.gallery, "id"),
+      sponsors: mergeById(prev.sponsors, incoming.sponsors, "id"),
+      auditLogs: mergeById(prev.auditLogs, incoming.auditLogs, "log_id", "timestamp").slice(0, 200),
+      notifications: mergeNotifications(prev.notifications, incoming.notifications),
+      branding: incoming.branding ? { ...(prev.branding || {}), ...incoming.branding } : prev.branding || {},
+      cardDesign: incoming.cardDesign ? { ...(prev.cardDesign || {}), ...incoming.cardDesign } : prev.cardDesign || undefined,
+      gasUrl: typeof incoming.gasUrl === "string" && incoming.gasUrl.trim() ? incoming.gasUrl.trim() : prev.gasUrl || "",
       updatedAt: new Date().toISOString(),
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(sharedAppState, null, 2), "utf-8");

@@ -325,3 +325,31 @@ export interface AppBrandingConfig {
   updated_at: string;
   updated_by?: string;
 }
+
+export type MemberCardTheme = 'LUXURY_SLATE' | 'EMERALD_GOLD' | 'ROYAL_PURPLE' | 'OCEAN_BLUE' | 'MINIMAL_LIGHT';
+
+export interface MemberCardDesignConfig {
+  theme: MemberCardTheme;
+  cardTitle: string;
+  organizationName: string;
+  marketName: string;
+  badgeText: string;
+  tagline: string;
+  authorizedOfficerName: string;
+  authorizedOfficerTitle: string;
+  authorizedOfficerNip?: string;
+  showPhoto: boolean;
+  showQrCode: boolean;
+  showBusinessName: boolean;
+  showCategory: boolean;
+  showAddress: boolean;
+  showJoinDate: boolean;
+  showValidityPeriod: boolean;
+  validityDurationYears: number;
+  customLogoUrl?: string;
+  customWatermarkUrl?: string;
+  disclaimerNotes: string;
+  cardAccentColor?: string;
+  updated_at: string;
+  updated_by?: string;
+}

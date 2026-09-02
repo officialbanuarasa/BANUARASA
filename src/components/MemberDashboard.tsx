@@ -21,7 +21,11 @@ import {
   Building,
   Info,
   KeyRound,
+  Edit3,
+  User,
+  Camera,
 } from 'lucide-react';
+import { MemberProfileEditModal } from './MemberProfileEditModal';
 
 interface MemberDashboardProps {
   member: Member;
@@ -50,16 +54,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
   const events = storage.getEvents();
   const activeEvent = events[0];
-  const registrations = storage.getRegistrations().filter((r) => r.member_id === member.member_id);
-  const products = storage.getProducts(member.member_id);
-  const salesReports = storage.getSalesReports(member.member_id);
-  const documents = storage.getDocuments(member.member_id);
-  const savingsSummary = storage.getMemberSavingsSummary(member.member_id);
+  const liveMember = storage.getMemberById(member.member_id) || member;
+  const registrations = storage.getRegistrations().filter((r) => r.member_id === liveMember.member_id);
+  const products = storage.getProducts(liveMember.member_id);
+  const salesReports = storage.getSalesReports(liveMember.member_id);
+  const documents = storage.getDocuments(liveMember.member_id);
+  const savingsSummary = storage.getMemberSavingsSummary(liveMember.member_id);
 
   // States for Modals/Forms
   const [showProductForm, setShowProductForm] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showDocForm, setShowDocForm] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
 
   // Product Form State
   const [newProductName, setNewProductName] = useState('');
@@ -91,7 +97,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     if (!newProductName.trim()) return;
 
     storage.addProduct({
-      member_id: member.member_id,
+      member_id: liveMember.member_id,
       product_name: newProductName,
       category: newProductCategory === 'KULINER' ? 'Kuliner' : newProductCategory === 'FASHION' ? 'Fashion' : 'Kriya',
       price: Number(newProductPrice),
@@ -113,7 +119,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
     storage.submitSalesReport({
       event_id: activeEvent?.event_id || 'BWM-2026-001',
-      member_id: member.member_id,
+      member_id: liveMember.member_id,
       registration_id: currentEventRegistration?.registration_id || `REG-${activeEvent?.event_id || 'BWM-001'}-STAND-A`,
       total_transactions: 1,
       gross_sales: Number(salesGross),
@@ -130,7 +136,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const handleUploadDoc = (e: React.FormEvent) => {
     e.preventDefault();
     storage.uploadDocument({
-      member_id: member.member_id,
+      member_id: liveMember.member_id,
       document_type: docType,
       document_number: docNumber,
       file_name: docFileName,
@@ -242,23 +248,58 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         </div>
 
         {/* Right Side: Digital Card Bento (4 cols) */}
-        <div className="lg:col-span-4 bg-slate-900 text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-4 bg-slate-900 text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+          {/* Subtle glow accent */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-md border border-emerald-500/30">
                 Kartu Anggota Digital
               </span>
-              <QrCode className="w-5 h-5 text-emerald-400" />
+              <button
+                type="button"
+                onClick={() => setIsEditProfileOpen(true)}
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/20 transition-colors"
+                title="Lengkapi & Ubah Biodata / Foto"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Biodata</span>
+              </button>
             </div>
-            <h3 className="text-sm font-mono font-bold text-emerald-300">
-              {member.nomor_anggota}
-            </h3>
-            <p className="text-base font-black text-white mt-1">{member.nama_lengkap}</p>
-            <p className="text-xs font-semibold text-slate-300">{member.nama_usaha}</p>
+
+            <div className="flex items-center gap-3 mt-2">
+              <div className="relative group shrink-0">
+                <img
+                  src={
+                    liveMember.foto_profil_url ||
+                    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80'
+                  }
+                  alt={liveMember.nama_lengkap}
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-400/80 shadow-md bg-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileOpen(true)}
+                  className="absolute -bottom-1 -right-1 p-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-xs cursor-pointer"
+                  title="Ganti Foto Profil"
+                >
+                  <Camera className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-mono font-bold text-emerald-300 tracking-wider truncate">
+                  {liveMember.nomor_anggota}
+                </h3>
+                <p className="text-sm font-black text-white truncate mt-0.5">{liveMember.nama_lengkap}</p>
+                <p className="text-xs font-semibold text-slate-300 truncate">{liveMember.nama_usaha}</p>
+              </div>
+            </div>
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between gap-2">
-            <span className="text-[10px] text-slate-400 font-mono">ID: {member.member_id}</span>
+            <span className="text-[10px] text-slate-400 font-mono">ID: {liveMember.member_id}</span>
             <div className="flex items-center gap-1.5">
               {onOpenChangePassword && (
                 <button
@@ -276,7 +317,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 onClick={onOpenDigitalCard}
                 className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black rounded-xl transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
               >
-                <span>Buka Kartu</span>
+                <span>Buka KTA</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -773,6 +814,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Member Profile & Photo Edit Modal */}
+      <MemberProfileEditModal
+        isOpen={isEditProfileOpen}
+        member={liveMember}
+        onClose={() => setIsEditProfileOpen(false)}
+      />
     </div>
   );
 };

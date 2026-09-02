@@ -72,9 +72,10 @@ export const App: React.FC = () => {
   const handleRefreshData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsRefreshing(true);
+      await storage.syncWithServer();
       await googleWorkspaceSync.fetchAllDataFromGas();
     } catch (err) {
-      console.warn('Auto-refresh spreadsheet error:', err);
+      console.warn('Auto-refresh data error:', err);
     } finally {
       if (!isSilent) setIsRefreshing(false);
     }
@@ -99,16 +100,35 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // Auto-refresh every 10 seconds to keep Google Drive & Spreadsheet data updated
+  // Real-time synchronization: fast polling (3s) for local/server shared state + background GAS refresh (15s)
   useEffect(() => {
-    // Initial silent sync on mount
+    // Initial sync
     handleRefreshData(true);
 
-    const intervalTimer = setInterval(() => {
-      handleRefreshData(true);
-    }, 10000); // 10 seconds auto-refresh
+    // Fast 3s server sync for immediate updates across all phones & computers
+    const fastSyncTimer = setInterval(() => {
+      storage.syncWithServer();
+    }, 3000);
 
-    return () => clearInterval(intervalTimer);
+    // Background 15s Google Apps Script sync
+    const gasSyncTimer = setInterval(() => {
+      googleWorkspaceSync.fetchAllDataFromGas();
+    }, 15000);
+
+    // Re-sync immediately when user switches tabs or wakes phone
+    const handleFocus = () => {
+      storage.syncWithServer();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      clearInterval(fastSyncTimer);
+      clearInterval(gasSyncTimer);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
   }, [handleRefreshData]);
 
   const handleLoginSuccess = (user: AuthUser) => {

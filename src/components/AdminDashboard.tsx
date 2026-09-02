@@ -23,6 +23,7 @@ import {
   EventCrudModal,
 } from './AdminCrudModals';
 import { AdminMediaManager } from './AdminMediaManager';
+import { AdminCardStudio } from './AdminCardStudio';
 import {
   ShieldCheck,
   CreditCard,
@@ -75,7 +76,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenChangePassword,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
-    'OVERVIEW' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING'
+    'OVERVIEW' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
   >('OVERVIEW');
 
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
@@ -341,6 +342,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex items-center gap-2 pt-1 overflow-x-auto">
           {[
             { id: 'OVERVIEW', label: 'Ringkasan Eksekutif', icon: ShieldCheck },
+            { id: 'CARD_STUDIO', label: 'Desain KTA (Kartu Anggota)', icon: Sparkles },
             { id: 'PAYMENTS', label: `Verifikasi Bayar (${pendingPaymentsCount})`, icon: CreditCard },
             { id: 'STANDS', label: 'Manajemen 64 Stand', icon: Calendar },
             { id: 'MEMBERS', label: `Anggota & Legalitas (${members.length})`, icon: Users },
@@ -1298,6 +1300,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* KTA STUDIO (MEMBER CARD DESIGNER) TAB */}
+      {activeAdminTab === 'CARD_STUDIO' && (
+        <AdminCardStudio
+          adminUsername={adminId}
+          onSaved={() => showToast('Desain KTA Digital berhasil diperbarui & disinkronkan ke seluruh sistem!')}
+        />
       )}
 
       {/* BRANDING, LOGO, BANNER & MEDIA ASSETS MANAGER TAB */}
