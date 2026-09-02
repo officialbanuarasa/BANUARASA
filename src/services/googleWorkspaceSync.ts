@@ -334,6 +334,9 @@ class GoogleWorkspaceSyncService {
       else if (sheetName.includes('PEMBAYARAN')) actionName = 'updatePayment';
       else if (sheetName.includes('SIMPANAN')) actionName = 'updateSaving';
       else if (sheetName.includes('OMZET')) actionName = 'updateSalesReport';
+      else if (sheetName.includes('EVENT')) actionName = 'updateEvent';
+      else if (sheetName.includes('PRODUK')) actionName = 'updateProduct';
+      else if (sheetName.includes('LEGALITAS') || sheetName.includes('DOKUMEN')) actionName = 'updateDocument';
 
       this.postToGas(actionName, data).catch(() => {});
     }
@@ -351,13 +354,17 @@ class GoogleWorkspaceSyncService {
     const gasUrl = this.getGasUrl();
     if (gasUrl) {
       let actionName = 'deleteRow';
-      if (sheetName.includes('ANGGOTA')) actionName = 'deleteMember';
-      else if (sheetName.includes('STAND')) actionName = 'deleteStand';
-      else if (sheetName.includes('PEMBAYARAN')) actionName = 'deletePayment';
-      else if (sheetName.includes('SIMPANAN')) actionName = 'deleteSaving';
-      else if (sheetName.includes('OMZET')) actionName = 'deleteSalesReport';
+      let idKey = 'id';
+      if (sheetName.includes('ANGGOTA')) { actionName = 'deleteMember'; idKey = 'member_id'; }
+      else if (sheetName.includes('STAND')) { actionName = 'deleteStand'; idKey = 'registration_id'; }
+      else if (sheetName.includes('PEMBAYARAN')) { actionName = 'deletePayment'; idKey = 'payment_id'; }
+      else if (sheetName.includes('SIMPANAN')) { actionName = 'deleteSaving'; idKey = 'saving_id'; }
+      else if (sheetName.includes('OMZET')) { actionName = 'deleteSalesReport'; idKey = 'sales_report_id'; }
+      else if (sheetName.includes('EVENT')) { actionName = 'deleteEvent'; idKey = 'event_id'; }
+      else if (sheetName.includes('PRODUK')) { actionName = 'deleteProduct'; idKey = 'product_id'; }
+      else if (sheetName.includes('LEGALITAS') || sheetName.includes('DOKUMEN')) { actionName = 'deleteDocument'; idKey = 'document_id'; }
 
-      this.postToGas(actionName, { [sheetName.includes('ANGGOTA') ? 'member_id' : sheetName.includes('STAND') ? 'registration_id' : sheetName.includes('PEMBAYARAN') ? 'payment_id' : sheetName.includes('SIMPANAN') ? 'saving_id' : 'sales_report_id']: rowId }).catch(() => {});
+      this.postToGas(actionName, { [idKey]: rowId }).catch(() => {});
     }
 
     return true;
@@ -399,6 +406,59 @@ class GoogleWorkspaceSyncService {
 
   getSheetSyncLogs(): GoogleSheetRow[] {
     return this.sheetSyncLogs;
+  }
+
+  // Fetch all latest data from Google Apps Script Web App or trigger sync update
+  async fetchAllDataFromGas(): Promise<{ success: boolean; message: string; updatedCount?: number }> {
+    const url = this.getGasUrl();
+    if (!url) {
+      // Local sync refresh - ensures all storage subscribers re-render latest local changes
+      return { success: true, message: 'Data lokal tersinkronisasi.' };
+    }
+
+    try {
+      const liveRes = await this.fetchLiveDataFromSpreadsheet();
+
+      if (liveRes && liveRes.success && liveRes.data) {
+        // Update local storage if GAS returned data
+        const { storage } = await import('./storage');
+        let count = 0;
+        const data = liveRes.data;
+        if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+          localStorage.setItem('kbm_events_v3', JSON.stringify(data.events));
+          count += data.events.length;
+        }
+        if (data.members && Array.isArray(data.members) && data.members.length > 0) {
+          localStorage.setItem('kbm_members_v3', JSON.stringify(data.members));
+          count += data.members.length;
+        }
+        if (data.registrations && Array.isArray(data.registrations) && data.registrations.length > 0) {
+          localStorage.setItem('kbm_registrations_v3', JSON.stringify(data.registrations));
+          count += data.registrations.length;
+        }
+        if (data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+          localStorage.setItem('kbm_payments_v3', JSON.stringify(data.payments));
+          count += data.payments.length;
+        }
+        if (data.savings && Array.isArray(data.savings) && data.savings.length > 0) {
+          localStorage.setItem('kbm_savings_v3', JSON.stringify(data.savings));
+          count += data.savings.length;
+        }
+        if (data.sales && Array.isArray(data.sales) && data.sales.length > 0) {
+          localStorage.setItem('kbm_sales_v3', JSON.stringify(data.sales));
+          count += data.sales.length;
+        }
+
+        // Notify storage subscribers
+        storage.notifyListeners();
+        return { success: true, message: `Berhasil menyinkronkan data dari Google Spreadsheet!`, updatedCount: count };
+      }
+
+      return { success: true, message: 'Sinkronisasi selesai.' };
+    } catch (err: any) {
+      console.warn('Auto-refresh from Google Apps Script:', err?.message || err);
+      return { success: false, message: 'Gagal menghubungi Google Apps Script.' };
+    }
   }
 
   // Generate clean CSV for export

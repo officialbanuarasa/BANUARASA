@@ -8,6 +8,7 @@ import {
   PaymentType,
   PaymentMethod,
   MembershipStatus,
+  EventItem,
 } from '../types';
 import { storage } from '../services/storage';
 import {
@@ -23,6 +24,10 @@ import {
   TrendingUp,
   Save,
   CheckCircle2,
+  Calendar,
+  Clock,
+  MapPin,
+  Sparkles,
 } from 'lucide-react';
 
 interface MemberModalProps {
@@ -1077,6 +1082,283 @@ export const SalesReportCrudModal: React.FC<SalesReportModalProps> = ({
           >
             <Save className="w-4 h-4" />
             <span>{salesToEdit ? 'Simpan Perubahan' : 'Catat Omzet'}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+// ==================== EVENT CRUD MODAL (SUPER ADMIN) ====================
+interface EventCrudModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  eventToEdit?: EventItem | null;
+  adminId: string;
+  onSaved: (msg: string) => void;
+}
+
+export const EventCrudModal: React.FC<EventCrudModalProps> = ({
+  isOpen,
+  onClose,
+  eventToEdit,
+  adminId,
+  onSaved,
+}) => {
+  const [eventName, setEventName] = useState('Banuarasa Weekend Market Edisi #24');
+  const [eventDate, setEventDate] = useState('2026-09-05');
+  const [startTime, setStartTime] = useState('06:00');
+  const [endTime, setEndTime] = useState('12:00');
+  const [location, setLocation] = useState('Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau');
+  const [description, setDescription] = useState('Pasar mingguan UMKM & kuliner khas Berau dengan 64 stand resmi.');
+  const [eventStatus, setEventStatus] = useState<EventItem['event_status']>('ACTIVE');
+  const [bannerUrl, setBannerUrl] = useState('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80');
+
+  useEffect(() => {
+    if (eventToEdit) {
+      setEventName(eventToEdit.event_name || 'Banuarasa Weekend Market');
+      setEventDate(eventToEdit.event_date || '2026-09-05');
+      setStartTime(eventToEdit.start_time || '06:00');
+      setEndTime(eventToEdit.end_time || '12:00');
+      setLocation(eventToEdit.location || 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau');
+      setDescription(eventToEdit.description || '');
+      setEventStatus(eventToEdit.event_status || 'ACTIVE');
+      setBannerUrl(eventToEdit.banner_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80');
+    } else {
+      const activeEv = storage.getEvents()[0];
+      if (activeEv) {
+        setEventName(activeEv.event_name);
+        setEventDate(activeEv.event_date);
+        setStartTime(activeEv.start_time);
+        setEndTime(activeEv.end_time);
+        setLocation(activeEv.location);
+        setDescription(activeEv.description);
+        setEventStatus(activeEv.event_status);
+        setBannerUrl(activeEv.banner_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80');
+      }
+    }
+  }, [eventToEdit, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (eventToEdit) {
+      const res = storage.updateEvent(
+        eventToEdit.event_id,
+        {
+          event_name: eventName,
+          event_date: eventDate,
+          start_time: startTime,
+          end_time: endTime,
+          location,
+          description,
+          event_status: eventStatus,
+          banner_url: bannerUrl,
+        },
+        adminId
+      );
+      if (res.success) {
+        onSaved(res.message);
+        onClose();
+      }
+    } else {
+      const activeEv = storage.getEvents()[0];
+      if (activeEv) {
+        const res = storage.updateEvent(
+          activeEv.event_id,
+          {
+            event_name: eventName,
+            event_date: eventDate,
+            start_time: startTime,
+            end_time: endTime,
+            location,
+            description,
+            event_status: eventStatus,
+            banner_url: bannerUrl,
+          },
+          adminId
+        );
+        onSaved(res.message);
+        onClose();
+      } else {
+        storage.createEvent(
+          {
+            event_number: 25,
+            event_name: eventName,
+            event_date: eventDate,
+            start_time: startTime,
+            end_time: endTime,
+            location,
+            description,
+            event_status: eventStatus,
+            banner_url: bannerUrl,
+            registration_open: `${eventDate}T00:00:00Z`,
+            registration_close: `${eventDate}T23:59:59Z`,
+          },
+          adminId
+        );
+        onSaved(`Event baru "${eventName}" berhasil dibuat dan dipublikasikan.`);
+        onClose();
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">
+                {eventToEdit ? 'Ubah Informasi Event Stand' : 'Pengaturan Event Banuarasa'}
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Update waktu, tanggal, dan lokasi yang tampil di dashboard semua user
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Nama Event / Edisi Pelaksanaan *</label>
+            <input
+              type="text"
+              required
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+              placeholder="Contoh: Banuarasa Weekend Market Edisi #24"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-1">
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Tanggal *</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>Jam Mulai *</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                placeholder="06:00"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>Jam Selesai *</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                placeholder="12:00"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-rose-600" />
+              <span>Tempat / Lokasi Pelaksanaan Event *</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Contoh: Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Status Event & Pendaftaran</label>
+            <select
+              value={eventStatus}
+              onChange={(e) => setEventStatus(e.target.value as any)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+            >
+              <option value="ACTIVE">ACTIVE (Pendaftaran & Stand Dibuka)</option>
+              <option value="OPEN_REGISTRATION">OPEN_REGISTRATION (Reservasi Berlangsung)</option>
+              <option value="ONGOING">ONGOING (Pasar Sedang Berlangsung Hari Ini)</option>
+              <option value="REGISTRATION_CLOSED">REGISTRATION_CLOSED (Pendaftaran Ditutup)</option>
+              <option value="COMPLETED">COMPLETED (Event Selesai)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Deskripsi / Informasi Tambahan</label>
+            <textarea
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Informasi tema kuliner, pentas seni, atau tata tertib..."
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">URL Gambar Banner Event</label>
+            <input
+              type="url"
+              value={bannerUrl}
+              onChange={(e) => setBannerUrl(e.target.value)}
+              placeholder="https://images.unsplash.com/..."
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px]"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>Simpan Informasi Event</span>
           </button>
         </div>
       </form>

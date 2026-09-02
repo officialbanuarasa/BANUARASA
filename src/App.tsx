@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserRole, Member, EventItem, EventRegistration, Product, Payment, AuthUser } from './types';
 import { storage } from './services/storage';
+import { googleWorkspaceSync } from './services/googleWorkspaceSync';
 import { BANUARASA_ASSETS, BARA_ASSETS } from './assets/baraAssets';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
@@ -65,6 +66,19 @@ export const App: React.FC = () => {
   const [inspectingPayment, setInspectingPayment] = useState<Payment | null>(null);
   const [inspectingProduct, setInspectingProduct] = useState<Product | null>(null);
   const [isRegisterMemberOpen, setIsRegisterMemberOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Manual or background sync with Google Apps Script / Spreadsheet
+  const handleRefreshData = useCallback(async (isSilent = false) => {
+    try {
+      if (!isSilent) setIsRefreshing(true);
+      await googleWorkspaceSync.fetchAllDataFromGas();
+    } catch (err) {
+      console.warn('Auto-refresh spreadsheet error:', err);
+    } finally {
+      if (!isSilent) setIsRefreshing(false);
+    }
+  }, []);
 
   // Sync state when storage changes
   useEffect(() => {
@@ -84,6 +98,18 @@ export const App: React.FC = () => {
     });
     return unsub;
   }, []);
+
+  // Auto-refresh every 10 seconds to keep Google Drive & Spreadsheet data updated
+  useEffect(() => {
+    // Initial silent sync on mount
+    handleRefreshData(true);
+
+    const intervalTimer = setInterval(() => {
+      handleRefreshData(true);
+    }, 10000); // 10 seconds auto-refresh
+
+    return () => clearInterval(intervalTimer);
+  }, [handleRefreshData]);
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
@@ -167,6 +193,8 @@ export const App: React.FC = () => {
         onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
         onOpenChangePassword={() => handleOpenChangePassword(null, false)}
         onLogout={handleLogout}
+        onRefresh={() => handleRefreshData(false)}
+        isRefreshing={isRefreshing}
       />
 
       {/* Main Responsive Canvas */}
@@ -181,6 +209,8 @@ export const App: React.FC = () => {
             onOpenGoogleModal={() => setIsGoogleWorkspaceModalOpen(true)}
             onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
             onSelectProduct={(p) => setInspectingProduct(p)}
+            onRefresh={() => handleRefreshData(false)}
+            isRefreshing={isRefreshing}
           />
         )}
 

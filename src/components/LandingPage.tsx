@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { storage } from '../services/storage';
 import { getStandPrice, getStandCategory } from '../services/standEngine';
 import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
@@ -38,6 +38,7 @@ import {
   Smile,
   Check,
   Palette,
+  RefreshCw,
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -45,6 +46,8 @@ interface LandingPageProps {
   onOpenGoogleModal: () => void;
   onOpenSplashIntro?: () => void;
   onSelectProduct?: (product: any) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -52,11 +55,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenGoogleModal,
   onOpenSplashIntro,
   onSelectProduct,
+  onRefresh,
+  isRefreshing,
 }) => {
   const [activeStandFilter, setActiveStandFilter] = useState<'ALL' | 'VIP' | 'KAT2' | 'KAT3'>('ALL');
   const [hoveredStand, setHoveredStand] = useState<string | null>(null);
   const [activeGastronomyTab, setActiveGastronomyTab] = useState<'FOOD' | 'STORY' | 'PEOPLE' | 'EXPERIENCE'>('FOOD');
   const [bannerTheme, setBannerTheme] = useState<'EMERALD' | 'GOLD' | 'TERATAI' | 'MARITIME'>('EMERALD');
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      setVersion((v) => v + 1);
+    });
+    return unsub;
+  }, []);
 
   const members = storage.getMembers();
   const events = storage.getEvents();
@@ -628,61 +641,79 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-black text-slate-900">
                 Denah Interaktif 64 Stand Banuarasa Weekend Market
               </h3>
               <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">
                 64 Alokasi Stand
               </span>
+              <span className="text-xs bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full">
+                {currentEvent.event_name}
+              </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Pilih stand favorit Anda. Klik salah satu stand untuk masuk dan melakukan reservasi langsung.
+              Jadwal Pelaksanaan: <strong className="text-slate-800">{currentEvent.event_date}</strong> ({currentEvent.start_time} - {currentEvent.end_time} WITA) • Lokasi: <strong className="text-slate-800">{currentEvent.location}</strong>
             </p>
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              onClick={() => setActiveStandFilter('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                activeStandFilter === 'ALL'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Semua Stand (64)
-            </button>
-            <button
-              onClick={() => setActiveStandFilter('VIP')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                activeStandFilter === 'VIP'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
-              }`}
-            >
-              Kategori 1 (A-J) • Rp50k
-            </button>
-            <button
-              onClick={() => setActiveStandFilter('KAT2')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                activeStandFilter === 'KAT2'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-blue-50 text-blue-900 hover:bg-blue-100'
-              }`}
-            >
-              Kategori 2 (1-43) • Rp50k
-            </button>
-            <button
-              onClick={() => setActiveStandFilter('KAT3')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                activeStandFilter === 'KAT3'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
-              }`}
-            >
-              Kategori 3 (44-54) • Rp35k
-            </button>
+          {/* Action buttons & Filter Pills */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 shadow-xs"
+                title="Sinkronkan data stand terbaru langsung dari Google Spreadsheet"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
+                <span>{isRefreshing ? 'Menyinkronkan...' : 'Refresh Data Stand'}</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <button
+                onClick={() => setActiveStandFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeStandFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Semua Stand (64)
+              </button>
+              <button
+                onClick={() => setActiveStandFilter('VIP')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeStandFilter === 'VIP'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                }`}
+              >
+                Kategori 1 (A-J) • Rp50k
+              </button>
+              <button
+                onClick={() => setActiveStandFilter('KAT2')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeStandFilter === 'KAT2'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-blue-50 text-blue-900 hover:bg-blue-100'
+                }`}
+              >
+                Kategori 2 (1-43) • Rp50k
+              </button>
+              <button
+                onClick={() => setActiveStandFilter('KAT3')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeStandFilter === 'KAT3'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+                }`}
+              >
+                Kategori 3 (44-54) • Rp35k
+              </button>
+            </div>
           </div>
         </div>
 
@@ -696,7 +727,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Star className="w-4 h-4 text-emerald-600 fill-emerald-500" />
                   <span>Kategori 1 (A sampai J) — Rp50.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-emerald-800">Posisi Paling Strategis Depan Panggung Festival</span>
+                <span className="text-[11px] text-emerald-800 font-semibold">10 Stand Resmi</span>
               </div>
 
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
@@ -738,7 +769,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Store className="w-4 h-4 text-blue-600" />
                   <span>Kategori 2 (1 sampai 43) — Rp50.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-blue-800">Fasilitas Listrik 450W & Meja Display Gastronomi</span>
+                <span className="text-[11px] text-blue-800 font-semibold">43 Stand Kuliner & Kriya</span>
               </div>
 
               <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-14 gap-2">
@@ -778,7 +809,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Store className="w-4 h-4 text-amber-600" />
                   <span>Kategori 3 (44 sampai 54) — Rp35.000 / Event</span>
                 </span>
-                <span className="text-[11px] text-amber-800">Dekat Pintu Masuk Timur & Pusat Pengunjung</span>
+                <span className="text-[11px] text-amber-800 font-semibold">11 Stand UMKM</span>
               </div>
 
               <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">

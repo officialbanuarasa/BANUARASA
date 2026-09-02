@@ -154,13 +154,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     </span>
                     <span className="text-xs font-bold text-slate-800">Bank Mandiri</span>
                   </div>
-                  <p className="text-sm font-mono font-bold text-slate-900">1490-0303-02105</p>
-                  <p className="text-[10px] text-slate-500">a.n. Koperasi Berau Melangkah Bersama</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">1490030302105</p>
+                  <p className="text-[10px] text-slate-500">A/n. Pemasaran berau melangkah Bersama</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('1490-0303-02105', 'mandiri')}
-                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors"
+                  onClick={() => handleCopy('1490030302105', 'mandiri')}
+                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors cursor-pointer"
                   title="Salin Nomor Rekening"
                 >
                   {copiedBank === 'mandiri' ? (
@@ -171,23 +171,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </button>
               </div>
 
-              {/* Whatsapp */}
+              {/* Whatsapp Konfirmasi */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                      BRI
+                      WA KONFIRMASI
                     </span>
-                    <span className="text-xs font-bold text-slate-800">Whatsapp</span>
+                    <span className="text-xs font-bold text-slate-800">WhatsApp Admin</span>
                   </div>
                   <p className="text-sm font-mono font-bold text-slate-900">+62812-5240-8734</p>
-                  <p className="text-[10px] text-slate-500">a.n. Koperasi Berau Melangkah Bersama</p>
+                  <p className="text-[10px] text-slate-500">A/n. Pemasaran berau melangkah Bersama</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('+62812-5240-8734', 'Whatsapp')}
-                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors"
-                  title="Salin Nomor Whatsapp"
+                  onClick={() => handleCopy('+62812-5240-8734', 'whatsapp')}
+                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors cursor-pointer"
+                  title="Salin Nomor WhatsApp"
                 >
                   {copiedBank === 'whatsapp' ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />

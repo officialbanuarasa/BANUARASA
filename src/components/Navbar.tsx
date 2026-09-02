@@ -21,6 +21,7 @@ import {
   FileSpreadsheet,
   Smile,
   KeyRound,
+  RefreshCw,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -37,6 +38,8 @@ interface NavbarProps {
   onOpenSplashIntro?: () => void;
   onOpenChangePassword?: () => void;
   onLogout: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -53,6 +56,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSplashIntro,
   onOpenChangePassword,
   onLogout,
+  onRefresh,
+  isRefreshing,
 }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -148,7 +153,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Mobile quick icons */}
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-1.5 md:hidden">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="p-2 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 transition-colors disabled:opacity-60 cursor-pointer"
+              title="Refresh Data Spreadsheet"
+            >
+              <RefreshCw className={`w-4 h-4 text-emerald-700 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
           {onOpenSplashIntro && (
             <button
               onClick={onOpenSplashIntro}
@@ -260,6 +275,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Cloud className="w-3.5 h-3.5 text-emerald-600" />
             <span className="hidden lg:inline">Google Workspace</span>
+          </button>
+        )}
+
+        {/* Global Manual Refresh Button */}
+        {onRefresh && (
+          <button
+            id="btn-navbar-refresh-data"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200 hover:border-emerald-300 text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-60 shadow-2xs"
+            title="Refresh dan sinkronkan data terbaru dari Google Spreadsheet"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Sync...' : 'Refresh'}</span>
           </button>
         )}
 

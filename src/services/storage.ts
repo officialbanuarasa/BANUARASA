@@ -156,6 +156,10 @@ class StorageService {
     };
   }
 
+  notifyListeners() {
+    this.notify();
+  }
+
   private notify() {
     this.listeners.forEach((cb) => cb());
   }
@@ -993,7 +997,7 @@ class StorageService {
     return this.getEvents().find((e) => e.event_id === eventId);
   }
 
-  createEvent(eventData: Omit<EventItem, 'event_id' | 'created_at' | 'updated_at'>): EventItem {
+  createEvent(eventData: Omit<EventItem, 'event_id' | 'created_at' | 'updated_at'>, adminUsername = 'SUPER_ADMIN'): EventItem {
     const events = this.getEvents();
     const eventId = `BWM-2026-${(events.length + 1).toString().padStart(3, '0')}`;
     const now = new Date().toISOString();
@@ -1003,19 +1007,83 @@ class StorageService {
       created_at: now,
       updated_at: now,
     };
-    events.push(newEvent);
+    events.unshift(newEvent);
     this.setItem(STORAGE_KEYS.EVENTS, events);
 
+    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_EVENT_MARKET', eventId, newEvent);
+
     this.logAudit({
-      user_id: 'ADMIN',
-      user_role: 'ADMIN_EVENT',
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
       action: 'CREATE_EVENT',
       module: 'EVENT',
       reference_id: eventId,
-      description: `Event baru dibuat: ${newEvent.event_name} (${newEvent.event_date})`,
+      description: `Event baru dibuat: ${newEvent.event_name} (${newEvent.event_date} di ${newEvent.location})`,
       result: 'SUCCESS',
     });
     return newEvent;
+  }
+
+  updateEvent(
+    eventId: string,
+    updates: Partial<EventItem>,
+    adminUsername = 'SUPER_ADMIN'
+  ): { success: boolean; message: string; event?: EventItem } {
+    const events = this.getEvents();
+    const idx = events.findIndex((e) => e.event_id === eventId);
+    if (idx === -1) {
+      return { success: false, message: 'Event tidak ditemukan.' };
+    }
+
+    const updatedEvent: EventItem = {
+      ...events[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    events[idx] = updatedEvent;
+    this.setItem(STORAGE_KEYS.EVENTS, events);
+
+    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_EVENT_MARKET', eventId, updatedEvent);
+
+    this.logAudit({
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
+      action: 'UPDATE_EVENT',
+      module: 'EVENT',
+      reference_id: eventId,
+      description: `Informasi Event diperbarui: ${updatedEvent.event_name} (${updatedEvent.event_date}, ${updatedEvent.start_time}-${updatedEvent.end_time} di ${updatedEvent.location})`,
+      result: 'SUCCESS',
+    });
+
+    return {
+      success: true,
+      message: `Informasi Event ${updatedEvent.event_name} berhasil diperbarui.`,
+      event: updatedEvent,
+    };
+  }
+
+  deleteEvent(eventId: string, adminUsername = 'SUPER_ADMIN'): { success: boolean; message: string } {
+    const events = this.getEvents();
+    const target = events.find((e) => e.event_id === eventId);
+    if (!target) {
+      return { success: false, message: 'Event tidak ditemukan.' };
+    }
+
+    const filtered = events.filter((e) => e.event_id !== eventId);
+    this.setItem(STORAGE_KEYS.EVENTS, filtered);
+    googleWorkspaceSync.deleteSpreadsheetRow('SHEET_EVENT_MARKET', eventId);
+
+    this.logAudit({
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
+      action: 'DELETE_EVENT',
+      module: 'EVENT',
+      reference_id: eventId,
+      description: `Event ${target.event_name} dihapus oleh ${adminUsername}`,
+      result: 'SUCCESS',
+    });
+
+    return { success: true, message: `Event ${target.event_name} berhasil dihapus.` };
   }
 
   // --- Registrations & Stand Booking with LockService ---

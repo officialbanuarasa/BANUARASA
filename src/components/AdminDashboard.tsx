@@ -20,6 +20,7 @@ import {
   PaymentCrudModal,
   SavingCrudModal,
   SalesReportCrudModal,
+  EventCrudModal,
 } from './AdminCrudModals';
 import { AdminMediaManager } from './AdminMediaManager';
 import {
@@ -101,6 +102,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAddSalesOpen, setIsAddSalesOpen] = useState(false);
   const [salesToEdit, setSalesToEdit] = useState<SalesReport | null>(null);
   const [salesToDelete, setSalesToDelete] = useState<SalesReport | null>(null);
+
+  const [isEditEventOpen, setIsEditEventOpen] = useState(false);
 
   const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
   const [docRejectReason, setDocRejectReason] = useState('');
@@ -650,35 +653,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* STANDS TAB */}
       {activeAdminTab === 'STANDS' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">
-                Manajemen 64 Stand - {activeEvent?.event_name}
-              </h3>
-              <p className="text-xs text-slate-500">
-                Pemetaan 64 stand resmi Banuarasa Weekend Market beserta tenant terdaftar.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => {
-                  setStandToEdit(null);
-                  setIsAssignStandOpen(true);
-                }}
-                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Alokasi Stand Manual</span>
-              </button>
-              <button
-                onClick={() => onOpenStandMap(activeEvent)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
-              >
-                Buka Peta Visual 64 Stand
-              </button>
+        <div className="space-y-6">
+          {/* Superadmin Event Details Card: Waktu, Tempat, dan Tanggal Pelaksanaan */}
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 rounded-3xl border border-emerald-500/30 p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/40">
+                    Pengaturan Event Weekend Market
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-500/40">
+                    Status: {activeEvent?.event_status || 'ACTIVE'}
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  {activeEvent?.event_name || 'Banuarasa Weekend Market Edisi #24'}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tanggal Pelaksanaan</p>
+                      <p className="font-black text-white">{activeEvent?.event_date || '2026-09-05'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Waktu / Jam Operasional</p>
+                      <p className="font-black text-white">{activeEvent?.start_time || '06:00'} - {activeEvent?.end_time || '12:00'} WITA</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Building2 className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tempat / Lokasi</p>
+                      <p className="font-bold text-white truncate max-w-[180px]">{activeEvent?.location || 'Jl. Dr. Murjani I, Tanjung Redeb'}</p>
+                    </div>
+                  </div>
+                </div>
+                {activeEvent?.description && (
+                  <p className="text-slate-300 text-xs pt-1">{activeEvent.description}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
+                <button
+                  onClick={() => setIsEditEventOpen(true)}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] cursor-pointer"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  <span>Ubah Informasi Event Stand</span>
+                </button>
+                <button
+                  onClick={() => onOpenStandMap(activeEvent)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>Lihat Peta Visual Stand</span>
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Stand Table Container */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  Daftar 64 Stand & Penyewa - {activeEvent?.event_name}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Data 64 stand resmi Banuarasa Weekend Market beserta tenant UMKM yang terdaftar di Google Spreadsheet.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    setStandToEdit(null);
+                    setIsAssignStandOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Alokasi Stand Manual</span>
+                </button>
+                <button
+                  onClick={() => onOpenStandMap(activeEvent)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
+                >
+                  Buka Peta Visual 64 Stand
+                </button>
+              </div>
+            </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -767,9 +835,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </table>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
-      {/* MEMBERS DIRECTORY TAB (WITH CRUD ACTIONS) */}
+    {/* MEMBERS DIRECTORY TAB (WITH CRUD ACTIONS) */}
       {activeAdminTab === 'MEMBERS' && (
         <div className="space-y-6">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
@@ -1297,6 +1366,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         salesToEdit={salesToEdit}
         members={members}
         eventId={activeEvent?.event_id || 'BWM-2026-001'}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      {/* EVENT CRUD MODAL (SUPER ADMIN EVENT MANAGEMENT) */}
+      <EventCrudModal
+        isOpen={isEditEventOpen}
+        onClose={() => setIsEditEventOpen(false)}
+        eventToEdit={activeEvent}
         adminId={adminId}
         onSaved={showToast}
       />
