@@ -2,6 +2,9 @@ export type UserRole = 'SUPER_ADMIN' | 'ADMIN_KOPERASI' | 'ADMIN_EVENT' | 'MEMBE
 
 export type MembershipStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
+export type KoperasiMembershipCategory = 'KOPERASI' | 'PASAR_ONLY';
+export type KoperasiStatus = 'AKTIF' | 'BELUM_AKTIF';
+
 export interface Member {
   member_id: string; // BM-00001 or MBR-0001
   nomor_anggota: string; // KBMB-2026-001
@@ -21,6 +24,8 @@ export interface Member {
   instagram?: string;
   whatsapp: string;
   status_keanggotaan: MembershipStatus;
+  tipe_keanggotaan?: KoperasiMembershipCategory; // 'KOPERASI' (default) atau 'PASAR_ONLY' (hanya anggota Banuarasa Weekend Market)
+  status_koperasi?: KoperasiStatus; // 'AKTIF' atau 'BELUM_AKTIF'
   tanggal_bergabung: string;
   password_hash?: string;
   password?: string;
@@ -350,6 +355,19 @@ export interface MemberCardDesignConfig {
   customWatermarkUrl?: string;
   disclaimerNotes: string;
   cardAccentColor?: string;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface KoperasiConfig {
+  simpanan_pokok_nominal: number; // default e.g. 100000
+  simpanan_wajib_nominal: number; // default e.g. 25000
+  nama_koperasi: string;
+  nama_bank: string;
+  nomor_rekening: string;
+  atas_nama_rekening: string;
+  nomor_wa_konfirmasi: string;
+  catatan_iuran?: string;
   updated_at: string;
   updated_by?: string;
 }
