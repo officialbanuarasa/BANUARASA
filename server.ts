@@ -24,6 +24,12 @@ function loadPersistedState() {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, "utf-8");
       sharedAppState = JSON.parse(raw);
+      if (sharedAppState && Array.isArray(sharedAppState.registrations)) {
+        sharedAppState.registrations = sharedAppState.registrations.map((r: any) => ({
+          ...r,
+          stand_code: String(r?.stand_code ?? '').trim(),
+        }));
+      }
       console.log("[Server] Loaded persisted shared app state from disk.");
     }
   } catch (err) {
@@ -102,11 +108,62 @@ function mergeNotifications(existing: any[] = [], incoming: any[] = []): any[] {
 function savePersistedState(incoming: any) {
   try {
     const prev = sharedAppState || {};
+    const sanitizedIncomingRegs = Array.isArray(incoming.registrations)
+      ? incoming.registrations.map((r: any) => ({
+          ...r,
+          stand_code: String(r?.stand_code ?? '').trim(),
+        }))
+      : incoming.registrations;
+
+    const DUMMY_MOCK_NAMES = new Set([
+      "Infinix Snack & Drink",
+      "Fatma Bakery & Kudapan",
+      "Dapur Lestari Berau",
+      "Risoles Premium Bananum",
+      "Qiya Cake & Dessert",
+      "Dapur Bu Anik",
+      "Tara Hijab & Fashion",
+      "Galery Omayah Souvenir",
+      "Taurus Food & Beverage",
+      "Nanara Frozen Food",
+      "Kasma Bakery & Drink",
+      "Bardiatus Aneka Kue",
+      "Rahayu Pesisir Resto",
+      "Hardiati Craft & Snack",
+      "Yani Cake & Cookies",
+      "Kopi & Roastery Bambang",
+      "Rica Food & Dimsum",
+      "Wati Herbal & Jamu Berau",
+      "Dian Dewi Fashion Etnik",
+      "Kedai Ummah Berau",
+      "Arjuna Mandiri Snack",
+      "Dina Cookies & Dessert",
+      "Mieku Khas Berau",
+      "Wahyuni Kriya Anyaman",
+      "Rizky Sambal & Kuliner Laut",
+      "Nanda Batik & Tenun Berau",
+      "Sri Makanan Tradisi Derawan",
+      "Charis Aksesoris Etnik",
+      "Miah Sar Bakery",
+      "Yulia Brownies Berau",
+      "Nia Natha Handmade",
+      "Sabugar Minuman Tradisional",
+      "Dahlia Cake & Pastry",
+      "Malewa Olahan Laut Berau",
+      "Sri Mael Handicraft",
+      "Iriyanti Seafood & Grill",
+      "Yeni Anggraeni Culinary"
+    ]);
+
+    const sanitizedIncomingMembers = Array.isArray(incoming.members)
+      ? incoming.members.filter((m: any) => !DUMMY_MOCK_NAMES.has(m?.nama_usaha))
+      : incoming.members;
+
     sharedAppState = {
       ...prev,
       events: mergeById(prev.events, incoming.events, "event_id"),
-      members: mergeById(prev.members, incoming.members, "member_id"),
-      registrations: mergeById(prev.registrations, incoming.registrations, "registration_id"),
+      members: mergeById(prev.members, sanitizedIncomingMembers, "member_id"),
+      registrations: mergeById(prev.registrations, sanitizedIncomingRegs, "registration_id"),
       payments: mergeById(prev.payments, incoming.payments, "payment_id"),
       savings: mergeById(prev.savings, incoming.savings, "saving_id"),
       salesReports: mergeById(prev.salesReports, incoming.salesReports, "report_id"),

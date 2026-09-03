@@ -1,15 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { storage } from '../services/storage';
 import { AuthUser, Member } from '../types';
 import { BARA_ASSETS } from '../assets/baraAssets';
 import {
   X,
-  ShieldCheck,
   UserCheck,
   UserPlus,
   LogIn,
   Sparkles,
-  Lock,
   Mail,
   AlertCircle,
   KeyRound,
@@ -32,17 +30,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoginSuccess,
   onRegisterSuccess,
 }) => {
-  const [authMode, setAuthMode] = useState<'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER'>(initialMode);
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>(() =>
+    initialMode === 'REGISTER' ? 'REGISTER' : 'LOGIN'
+  );
 
-  // Member Login Form State
-  const [memberIdentifier, setMemberIdentifier] = useState('');
-  const [memberPassword, setMemberPassword] = useState('');
-  const [memberLoginError, setMemberLoginError] = useState('');
+  // Login Form State
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
 
-  // Admin Login Form State
-  const [adminUsername, setAdminUsername] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminLoginError, setAdminLoginError] = useState('');
+  useEffect(() => {
+    if (isOpen) {
+      setAuthMode(initialMode === 'REGISTER' ? 'REGISTER' : 'LOGIN');
+      setLoginError('');
+      setRegError('');
+    }
+  }, [isOpen, initialMode]);
 
   // Register Form State
   const [regNama, setRegNama] = useState('');
@@ -62,39 +65,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   if (!isOpen) return null;
 
   // Handlers
-  const handleMemberLogin = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setMemberLoginError('');
+    setLoginError('');
 
-    if (!memberIdentifier || !memberPassword) {
-      setMemberLoginError('Silakan isi email/WhatsApp/Nomor Anggota dan kata sandi.');
+    if (!identifier.trim() || !password.trim()) {
+      setLoginError('Silakan isi email/WhatsApp/Nomor Anggota dan kata sandi.');
       return;
     }
 
-    const res = storage.login(memberIdentifier, memberPassword);
+    const res = storage.login(identifier, password);
     if (res.success && res.user) {
       onLoginSuccess(res.user);
       onClose();
     } else {
-      setMemberLoginError(res.message);
-    }
-  };
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdminLoginError('');
-
-    if (!adminUsername || !adminPassword) {
-      setAdminLoginError('Silakan isi username dan kata sandi Super Admin.');
-      return;
-    }
-
-    const res = storage.login(adminUsername, adminPassword);
-    if (res.success && res.user && res.user.role === 'SUPER_ADMIN') {
-      onLoginSuccess(res.user);
-      onClose();
-    } else {
-      setAdminLoginError(res.message || 'Kredensial Super Admin tidak valid.');
+      setLoginError(res.message || 'Kombinasi identitas dan kata sandi tidak cocok.');
     }
   };
 
@@ -181,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-black text-sm sm:text-base text-white">
-                  {authMode === 'ADMIN_LOGIN' ? 'Portal Masuk Pengurus' : 'Portal Anggota Banuarasa'}
+                  Portal Masuk Banuarasa
                 </h3>
               </div>
               <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
@@ -198,99 +183,80 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Switcher: Only Visitor / Member tabs shown by default for clean separation */}
-        {authMode !== 'ADMIN_LOGIN' ? (
-          <div className="grid grid-cols-2 p-2 bg-slate-100 border-b border-slate-200 shrink-0 gap-1 text-xs font-extrabold">
-            <button
-              id="modal-tab-member-login"
-              type="button"
-              onClick={() => {
-                setAuthMode('MEMBER_LOGIN');
-                setMemberLoginError('');
-              }}
-              className={`py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                authMode === 'MEMBER_LOGIN'
-                  ? 'bg-white text-emerald-900 shadow-xs border border-slate-200 font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <UserCheck className="w-4 h-4 text-emerald-600" />
-              <span>Masuk Anggota UMKM</span>
-            </button>
+        {/* Tab Switcher: Only 2 options (Masuk ke Akun & Daftar Anggota) */}
+        <div className="grid grid-cols-2 p-2 bg-slate-100 border-b border-slate-200 shrink-0 gap-1 text-xs font-extrabold">
+          <button
+            id="modal-tab-login"
+            type="button"
+            onClick={() => {
+              setAuthMode('LOGIN');
+              setLoginError('');
+            }}
+            className={`py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              authMode === 'LOGIN'
+                ? 'bg-white text-emerald-900 shadow-xs border border-slate-200 font-black'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <UserCheck className="w-4 h-4 text-emerald-600" />
+            <span>Masuk ke Akun</span>
+          </button>
 
-            <button
-              id="modal-tab-register"
-              type="button"
-              onClick={() => {
-                setAuthMode('REGISTER');
-                setRegError('');
-              }}
-              className={`py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                authMode === 'REGISTER'
-                  ? 'bg-white text-emerald-900 shadow-xs border border-slate-200 font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <UserPlus className="w-4 h-4 text-emerald-600" />
-              <span>Daftar Anggota Baru</span>
-            </button>
-          </div>
-        ) : (
-          <div className="p-3 bg-purple-50 border-b border-purple-200 flex items-center justify-between text-xs">
-            <span className="font-bold text-purple-900 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-purple-700" />
-              <span>Otoritas Super Admin / Pengurus Koperasi</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('MEMBER_LOGIN');
-                setAdminLoginError('');
-              }}
-              className="text-[11px] font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
-            >
-              Kembali ke Masuk Anggota
-            </button>
-          </div>
-        )}
+          <button
+            id="modal-tab-register"
+            type="button"
+            onClick={() => {
+              setAuthMode('REGISTER');
+              setRegError('');
+            }}
+            className={`py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              authMode === 'REGISTER'
+                ? 'bg-white text-emerald-900 shadow-xs border border-slate-200 font-black'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <UserPlus className="w-4 h-4 text-emerald-600" />
+            <span>Daftar Anggota Baru</span>
+          </button>
+        </div>
 
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto space-y-5">
-          {/* TAB 1: MEMBER LOGIN */}
-          {authMode === 'MEMBER_LOGIN' && (
+          {/* TAB 1: LOGIN */}
+          {authMode === 'LOGIN' && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-3">
                 <Sparkles className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                 <div className="text-xs text-emerald-950">
                   <p className="font-bold text-emerald-900">
-                    Masuk ke Member Area & Pemilihan Stand
+                    Masuk ke Sistem Banuarasa
                   </p>
                   <p className="text-emerald-800 leading-relaxed mt-0.5">
-                    Gunakan email atau nomor WhatsApp yang telah terdaftar pada database koperasi.
+                    Gunakan email, nomor WhatsApp, atau ID akun terdaftar untuk mengakses dashboard.
                   </p>
                 </div>
               </div>
 
-              {memberLoginError && (
+              {loginError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{memberLoginError}</span>
+                  <span>{loginError}</span>
                 </div>
               )}
 
-              <form onSubmit={handleMemberLogin} className="space-y-3.5">
+              <form onSubmit={handleLogin} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Email / Nomor Anggota / WhatsApp <span className="text-rose-500">*</span>
+                    Email / Nomor WhatsApp / Nomor Anggota <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
-                      id="input-member-id"
+                      id="input-login-id"
                       type="text"
-                      value={memberIdentifier}
-                      onChange={(e) => setMemberIdentifier(e.target.value)}
-                      placeholder="Contoh: zulkarnain.berau@gmail.com atau BM-00241"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="Masukkan email, nomor WhatsApp, atau ID akun"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
                       required
                     />
@@ -299,15 +265,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi / PIN Anggota <span className="text-rose-500">*</span>
+                    Kata Sandi <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
-                      id="input-member-pass"
+                      id="input-login-pass"
                       type="password"
-                      value={memberPassword}
-                      onChange={(e) => setMemberPassword(e.target.value)}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Masukkan kata sandi akun"
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
                       required
@@ -317,26 +283,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <button
                   type="submit"
-                  id="btn-submit-member-login"
+                  id="btn-submit-login"
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Masuk ke Member Area</span>
+                  <span>Masuk ke Akun</span>
                 </button>
               </form>
 
-              {/* Minimal discreet admin entry at the very bottom */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                <span>Belum punya akun? <button type="button" onClick={() => setAuthMode('REGISTER')} className="text-emerald-700 font-bold hover:underline">Daftar di sini</button></span>
+              <div className="pt-3 border-t border-slate-100 text-center text-xs text-slate-500">
+                Belum memiliki akun anggota?{' '}
                 <button
                   type="button"
-                  onClick={() => {
-                    setAuthMode('ADMIN_LOGIN');
-                    setAdminLoginError('');
-                  }}
-                  className="text-slate-400 hover:text-slate-700 font-medium transition-colors"
+                  onClick={() => setAuthMode('REGISTER')}
+                  className="text-emerald-700 font-bold hover:underline"
                 >
-                  Akses Pengurus
+                  Daftar Sekarang
                 </button>
               </div>
             </div>
@@ -352,7 +314,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Formulir Pendaftaran Anggota UMKM Baru
                   </p>
                   <p className="text-emerald-800 leading-relaxed mt-0.5">
-                    Isi data biodata dan usaha untuk mendapatkan Nomor Anggota Koperasi serta akses memilih stand Banuarasa.
+                    Isi data biodata dan usaha untuk mendapatkan Nomor Anggota Koperasi serta hak memilih stand Banuarasa.
                   </p>
                 </div>
               </div>
@@ -460,7 +422,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       required
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="nama@gmail.com"
+                      placeholder="nama@email.com"
                       className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
                     />
                   </div>
@@ -468,14 +430,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Alamat Domisili / Alamat Usaha di Berau
+                    Alamat Domisili / Tempat Usaha
                   </label>
                   <input
-                    id="reg-alamat"
+                    id="reg-alamat-usaha"
                     type="text"
                     value={regAlamatUsaha}
                     onChange={(e) => setRegAlamatUsaha(e.target.value)}
-                    placeholder="Jl. Pemuda No. 12, Tanjung Redeb, Berau"
+                    placeholder="Jl. Pulau Derawan No. 12, Tanjung Redeb"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Deskripsi Singkat Produk / Usaha
+                  </label>
+                  <textarea
+                    id="reg-deskripsi-usaha"
+                    rows={2}
+                    value={regDeskripsiUsaha}
+                    onChange={(e) => setRegDeskripsiUsaha(e.target.value)}
+                    placeholder="Jelaskan produk unggulan yang Anda tawarkan..."
                     className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-emerald-500 focus:outline-hidden"
                   />
                 </div>
@@ -484,7 +460,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="submit"
                   id="btn-submit-register"
                   disabled={isSubmitting}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>{isSubmitting ? 'Memproses Pendaftaran...' : 'Daftar Sebagai Anggota Koperasi'}</span>
@@ -495,83 +471,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Sudah punya akun anggota?{' '}
                 <button
                   type="button"
-                  onClick={() => setAuthMode('MEMBER_LOGIN')}
+                  onClick={() => setAuthMode('LOGIN')}
                   className="text-emerald-700 font-bold hover:underline"
                 >
                   Masuk di sini
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* TAB 3: ADMIN LOGIN */}
-          {authMode === 'ADMIN_LOGIN' && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-3.5 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-purple-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-purple-950">
-                  <p className="font-bold text-purple-900">
-                    Masuk Super Admin / Pengurus Koperasi
-                  </p>
-                  <p className="text-purple-800 leading-relaxed mt-0.5">
-                    Akses kontrol manajemen 64 stand, desain KTA, verifikasi pembayaran, dan audit kas.
-                  </p>
-                </div>
-              </div>
-
-              {adminLoginError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{adminLoginError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleAdminLogin} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Username / Email Pengurus <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      id="input-admin-id"
-                      type="text"
-                      value={adminUsername}
-                      onChange={(e) => setAdminUsername(e.target.value)}
-                      placeholder="superadmin"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-purple-500 focus:outline-hidden"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi Master <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      id="input-admin-pass"
-                      type="password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Masukkan kata sandi pengurus"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-purple-500 focus:outline-hidden"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  id="btn-submit-admin-login"
-                  className="w-full py-3 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-purple-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Masuk sebagai Super Admin</span>
-                </button>
-              </form>
             </div>
           )}
         </div>

@@ -109,10 +109,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const kat3Stands = Array.from({ length: 11 }, (_, i) => (i + 44).toString());
 
   const getStandOccupancy = (standCode: string) => {
+    const targetCode = String(standCode || '').trim().toUpperCase();
     const reg = registrations.find(
       (r) =>
         r.event_id === currentEvent.event_id &&
-        r.stand_code.toUpperCase() === standCode.toUpperCase() &&
+        String(r.stand_code || '').trim().toUpperCase() === targetCode &&
         ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(r.registration_status)
     );
     if (!reg) return { status: 'AVAILABLE', reg: null };
@@ -434,7 +435,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
                   className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <span>Masuk Anggota UMKM</span>
+                  <span>Masuk Akun UMKM</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
@@ -445,15 +446,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 >
                   <Users className="w-4 h-4 text-emerald-400" />
                   <span>Daftar UMKM Baru</span>
-                </button>
-
-                <button
-                  id="btn-hero-admin"
-                  onClick={() => onOpenAuthModal('ADMIN_LOGIN')}
-                  className="px-4 py-3 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs sm:text-sm rounded-xl border border-purple-800/50 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-purple-400" />
-                  <span>Super Admin</span>
                 </button>
               </>
             )}

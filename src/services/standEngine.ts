@@ -8,8 +8,8 @@ import { Stand, StandCategory } from '../types';
  * Stand 44 - 54 (11 stands)  = Rp35.000
  * Total = 64 stands.
  */
-export function getStandPrice(standCode: string): number {
-  const code = standCode.trim().toUpperCase();
+export function getStandPrice(standCode: string | number): number {
+  const code = String(standCode ?? '').trim().toUpperCase();
 
   // Check Category 1: A to J
   const category1Letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -32,8 +32,8 @@ export function getStandPrice(standCode: string): number {
   return 50000;
 }
 
-export function getStandCategory(standCode: string): StandCategory {
-  const code = standCode.trim().toUpperCase();
+export function getStandCategory(standCode: string | number): StandCategory {
+  const code = String(standCode ?? '').trim().toUpperCase();
   const category1Letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
   if (category1Letters.includes(code)) {
     return 'KATEGORI_1';

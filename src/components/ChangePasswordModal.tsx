@@ -270,9 +270,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 </button>
               </div>
               <p className="text-[10px] text-slate-400">
-                {targetRole === 'SUPER_ADMIN'
-                  ? 'Default awal: admin123 atau master password'
-                  : 'Bisa gunakan PIN bawaan 123456 atau 6 digit NIK/HP bila belum pernah diubah'}
+                Masukkan kata sandi lama akun yang sedang aktif untuk verifikasi keamanan.
               </p>
             </div>
           )}

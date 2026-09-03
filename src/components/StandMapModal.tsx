@@ -43,9 +43,10 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
 
   // Map each stand with its current booking status
   const getStandStatus = (standCode: string) => {
+    const targetCode = String(standCode || '').trim().toUpperCase();
     const reg = registrations.find(
       (r) =>
-        r.stand_code.toUpperCase() === standCode.toUpperCase() &&
+        String(r.stand_code || '').trim().toUpperCase() === targetCode &&
         ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(
           r.registration_status
         )

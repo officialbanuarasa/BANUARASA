@@ -173,6 +173,77 @@ const STORAGE_KEYS = {
   IS_DUMMY_PURGED: 'kbm_v3_is_dummy_purged',
 };
 
+export const CURRENT_DATA_VERSION = '3.2.0';
+
+/**
+ * Pembersih Cookies dan Session Perangkat
+ * Menghapus seluruh cookies browser pada path root dan domain untuk mencegah caching usang
+ */
+export function clearAllBrowserCookies(): void {
+  if (typeof document === 'undefined') return;
+  try {
+    const cookies = document.cookie.split(';');
+    for (const c of cookies) {
+      const eqPos = c.indexOf('=');
+      const name = eqPos > -1 ? c.substring(0, eqPos).trim() : c.trim();
+      if (name) {
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;`;
+        if (typeof window !== 'undefined' && window.location.hostname) {
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname};`;
+          const hostParts = window.location.hostname.split('.');
+          if (hostParts.length > 2) {
+            const rootDomain = hostParts.slice(-2).join('.');
+            document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.${rootDomain};`;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[StorageService] Error clearing cookies:', err);
+  }
+}
+
+// Daftar brand lama yang berasal dari mock data awal sebelum import Google Sheets
+export const OBSOLETE_DUMMY_BRANDS = new Set([
+  'Infinix Snack & Drink',
+  'Fatma Bakery & Kudapan',
+  'Dapur Lestari Berau',
+  'Risoles Premium Bananum',
+  'Qiya Cake & Dessert',
+  'Dapur Bu Anik',
+  'Tara Hijab & Fashion',
+  'Galery Omayah Souvenir',
+  'Taurus Food & Beverage',
+  'Nanara Frozen Food',
+  'Kasma Bakery & Drink',
+  'Bardiatus Aneka Kue',
+  'Rahayu Pesisir Resto',
+  'Hardiati Craft & Snack',
+  'Yani Cake & Cookies',
+  'Kopi & Roastery Bambang',
+  'Rica Food & Dimsum',
+  'Wati Herbal & Jamu Berau',
+  'Dian Dewi Fashion Etnik',
+  'Kedai Ummah Berau',
+  'Arjuna Mandiri Snack',
+  'Dina Cookies & Dessert',
+  'Mieku Khas Berau',
+  'Wahyuni Kriya Anyaman',
+  'Rizky Sambal & Kuliner Laut',
+  'Nanda Batik & Tenun Berau',
+  'Sri Makanan Tradisi Derawan',
+  'Charis Aksesoris Etnik',
+  'Miah Sar Bakery',
+  'Yulia Brownies Berau',
+  'Nia Natha Handmade',
+  'Sabugar Minuman Tradisional',
+  'Dahlia Cake & Pastry',
+  'Malewa Olahan Laut Berau',
+  'Sri Mael Handicraft',
+  'Iriyanti Seafood & Grill',
+  'Yeni Anggraeni Culinary'
+]);
+
 class StorageService {
   private listeners: Set<() => void> = new Set();
   private isLocked: boolean = false;
@@ -181,8 +252,13 @@ class StorageService {
   private lastServerUpdatedAt: string | null = null;
 
   constructor() {
-    // Cross-tab synchronization within the same browser
+    // Cross-tab synchronization within the same browser & automatic cache/cookie refresh
     if (typeof window !== 'undefined') {
+      try {
+        this.init();
+      } catch (err) {
+        console.warn('[StorageService] Error during auto-init:', err);
+      }
       window.addEventListener('storage', (e) => {
         if (e.key && Object.values(STORAGE_KEYS).includes(e.key)) {
           this.notify();
@@ -244,7 +320,7 @@ class StorageService {
         events: this.getEvents(),
         branding: this.getBrandingConfig(),
         cardDesign: this.getMemberCardDesign(),
-        members: this.getMembers(),
+        members: this.getMembers().filter((m) => !OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha)),
         registrations: this.getRegistrations(),
         payments: this.getPayments(),
         savings: this.getSavings(),
@@ -281,8 +357,35 @@ class StorageService {
     }
   }
 
+  // Synchronize logged-in user profile if member data (brand, name, photo, etc.) changed
+  syncCurrentUserWithMemberProfile(): boolean {
+    const u = this.getCurrentUser();
+    if (!u || u.role !== 'MEMBER' || !u.member_id) return false;
+    const freshMember = this.getMemberById(u.member_id);
+    if (!freshMember) return false;
+
+    if (
+      u.name !== freshMember.nama_lengkap ||
+      u.foto_profil_url !== freshMember.foto_profil_url ||
+      u.nama_usaha !== freshMember.nama_usaha ||
+      u.nomor_anggota !== freshMember.nomor_anggota
+    ) {
+      const updatedAuth: AuthUser = {
+        ...u,
+        name: freshMember.nama_lengkap,
+        foto_profil_url: freshMember.foto_profil_url,
+        nama_usaha: freshMember.nama_usaha,
+        nomor_anggota: freshMember.nomor_anggota,
+      };
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedAuth));
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
   // Fetch shared application state from server (ensures all browsers & phones stay updated)
-  async syncWithServer(): Promise<{ updated: boolean; count?: number }> {
+  async syncWithServer(force = false): Promise<{ updated: boolean; count?: number }> {
     try {
       const res = await fetch('/api/app-state');
       if (!res.ok) return { updated: false };
@@ -290,8 +393,8 @@ class StorageService {
       const serverData = json.data;
       if (!serverData || typeof serverData !== 'object') return { updated: false };
 
-      // If server state is identical or empty, return
-      if (json.updatedAt && json.updatedAt === this.lastServerUpdatedAt) {
+      // If server state is identical or empty and not forced, return
+      if (!force && json.updatedAt && json.updatedAt === this.lastServerUpdatedAt) {
         return { updated: false };
       }
 
@@ -311,11 +414,19 @@ class StorageService {
         hasChanges = true;
       }
       if (Array.isArray(serverData.members) && serverData.members.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(serverData.members));
-        hasChanges = true;
+        // Filter out any stale dummy members
+        const sanitizedMembers = serverData.members.filter((m: any) => !OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha));
+        if (sanitizedMembers.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(sanitizedMembers));
+          hasChanges = true;
+        }
       }
       if (Array.isArray(serverData.registrations) && serverData.registrations.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.REGISTRATIONS, JSON.stringify(serverData.registrations));
+        const sanitized = serverData.registrations.map((r: any) => ({
+          ...r,
+          stand_code: String(r?.stand_code ?? '').trim(),
+        }));
+        localStorage.setItem(STORAGE_KEYS.REGISTRATIONS, JSON.stringify(sanitized));
         hasChanges = true;
       }
       if (Array.isArray(serverData.payments) && serverData.payments.length > 0) {
@@ -366,28 +477,9 @@ class StorageService {
         localStorage.setItem('kbm_gas_web_app_url_v3', serverData.gasUrl.trim());
       }
 
-      // Synchronize logged-in user profile if current member's profile was updated
-      const u = this.getCurrentUser();
-      if (u && u.role === 'MEMBER' && u.member_id) {
-        const freshMember = this.getMemberById(u.member_id);
-        if (freshMember) {
-          if (
-            u.name !== freshMember.nama_lengkap ||
-            u.foto_profil_url !== freshMember.foto_profil_url ||
-            u.nama_usaha !== freshMember.nama_usaha ||
-            u.nomor_anggota !== freshMember.nomor_anggota
-          ) {
-            const updatedAuth: AuthUser = {
-              ...u,
-              name: freshMember.nama_lengkap,
-              foto_profil_url: freshMember.foto_profil_url,
-              nama_usaha: freshMember.nama_usaha,
-              nomor_anggota: freshMember.nomor_anggota,
-            };
-            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedAuth));
-            hasChanges = true;
-          }
-        }
+      // Synchronize active user session with fresh member record
+      if (this.syncCurrentUserWithMemberProfile()) {
+        hasChanges = true;
       }
 
       this.isHydratingFromServer = false;
@@ -405,10 +497,62 @@ class StorageService {
     }
   }
 
-  // Initializer
+  // Initializer: Otomatis membersihkan cookies dan cache lokal usang agar data selalu sinkron dengan Spreadsheet
   init() {
-    const isInitialized = localStorage.getItem(STORAGE_KEYS.VERSION);
-    if (!isInitialized) {
+    // 1. Selalu hapus cookies pada perangkat agar tidak terjadi konflik session/cache usang
+    clearAllBrowserCookies();
+
+    const storedVersion = localStorage.getItem(STORAGE_KEYS.VERSION);
+
+    // Periksa apakah perangkat pengguna menyimpan data dummy brand lama
+    let hasObsoleteMockData = false;
+    try {
+      const currentMembersRaw = localStorage.getItem(STORAGE_KEYS.MEMBERS);
+      if (currentMembersRaw) {
+        const parsed = JSON.parse(currentMembersRaw);
+        if (Array.isArray(parsed)) {
+          hasObsoleteMockData = parsed.some((m: any) => OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha));
+        }
+      }
+    } catch {
+      hasObsoleteMockData = true;
+    }
+
+    // Periksa apakah session login user saat ini masih menggunakan brand dummy lama
+    try {
+      const currentUserRaw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      if (currentUserRaw) {
+        const u = JSON.parse(currentUserRaw);
+        if (u?.nama_usaha && OBSOLETE_DUMMY_BRANDS.has(u.nama_usaha)) {
+          hasObsoleteMockData = true;
+        }
+      }
+    } catch {}
+
+    const needsMigration = storedVersion !== CURRENT_DATA_VERSION || hasObsoleteMockData;
+
+    if (needsMigration) {
+      console.log(`[StorageService] Memperbarui cache perangkat ke versi ${CURRENT_DATA_VERSION} dan membersihkan cookies usang.`);
+      clearAllBrowserCookies();
+      this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS, true);
+      this.setItem(STORAGE_KEYS.VERSION, CURRENT_DATA_VERSION, true);
+
+      // Inisialisasi koleksi jika belum ada
+      if (!localStorage.getItem(STORAGE_KEYS.DOCUMENTS)) this.setItem(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) this.setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.EVENTS)) this.setItem(STORAGE_KEYS.EVENTS, INITIAL_EVENTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.REGISTRATIONS)) this.setItem(STORAGE_KEYS.REGISTRATIONS, INITIAL_REGISTRATIONS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.PAYMENTS)) this.setItem(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.SAVINGS)) this.setItem(STORAGE_KEYS.SAVINGS, INITIAL_SAVINGS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.SALES_REPORTS)) this.setItem(STORAGE_KEYS.SALES_REPORTS, INITIAL_SALES_REPORTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS)) this.setItem(STORAGE_KEYS.ANNOUNCEMENTS, INITIAL_ANNOUNCEMENTS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.NEWS)) this.setItem(STORAGE_KEYS.NEWS, INITIAL_NEWS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) this.setItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY, true);
+      if (!localStorage.getItem(STORAGE_KEYS.SPONSORS)) this.setItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS, true);
+      if (!localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS)) this.setItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS, true);
+
+      this.syncCurrentUserWithMemberProfile();
+    } else if (!storedVersion) {
       this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS, true);
       this.setItem(STORAGE_KEYS.DOCUMENTS, INITIAL_DOCUMENTS, true);
       this.setItem(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS, true);
@@ -422,17 +566,32 @@ class StorageService {
       this.setItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY, true);
       this.setItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS, true);
       this.setItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS, true);
-      this.setItem(STORAGE_KEYS.VERSION, '3.0.0', true);
+      this.setItem(STORAGE_KEYS.VERSION, CURRENT_DATA_VERSION, true);
     }
-    this.cleanExpiredReservations();
 
-    // Immediately trigger server sync to hydrate latest state across all devices
-    this.syncWithServer().then((res) => {
-      // If server was empty and we have local initialized state, push it to server
-      if (!res.updated && isInitialized) {
-        this.persistToServer();
-      }
+    this.cleanExpiredReservations();
+    this.syncCurrentUserWithMemberProfile();
+
+    // Segera lakukan sinkronisasi dengan server agar seluruh gawai memperoleh data terkini
+    this.syncWithServer(true).then(() => {
+      this.syncCurrentUserWithMemberProfile();
     });
+  }
+
+  // Fungsi utilitas untuk membersihkan cookies & cache perangkat secara manual/otomatis
+  purgeDeviceCookiesAndCache(): { success: boolean; message: string } {
+    clearAllBrowserCookies();
+    this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS, true);
+    this.setItem(STORAGE_KEYS.VERSION, CURRENT_DATA_VERSION, true);
+    this.syncCurrentUserWithMemberProfile();
+    this.syncWithServer(true).then(() => {
+      this.syncCurrentUserWithMemberProfile();
+      this.notify();
+    });
+    return {
+      success: true,
+      message: 'Cookies dan cache lokal perangkat berhasil dibersihkan! Data anggota dan brand usaha telah dimutakhirkan.',
+    };
   }
 
   // --- Authentication & Session Management ---
@@ -1341,7 +1500,15 @@ class StorageService {
 
   // --- Registrations & Stand Booking with LockService ---
   getRegistrations(eventId?: string): EventRegistration[] {
-    const regs = this.getItem(STORAGE_KEYS.REGISTRATIONS, INITIAL_REGISTRATIONS);
+    const rawRegs = this.getItem(STORAGE_KEYS.REGISTRATIONS, INITIAL_REGISTRATIONS);
+    const regs: EventRegistration[] = Array.isArray(rawRegs)
+      ? rawRegs.map((r: any) => ({
+          ...r,
+          stand_code: String(r?.stand_code ?? '').trim(),
+          registration_id: String(r?.registration_id ?? '').trim(),
+          member_id: String(r?.member_id ?? '').trim(),
+        }))
+      : [];
     return eventId ? regs.filter((r) => r.event_id === eventId) : regs;
   }
 
@@ -1351,6 +1518,7 @@ class StorageService {
     memberId: string,
     notes?: string
   ): Promise<{ success: boolean; message: string; registration?: EventRegistration }> {
+    const cleanStandCode = String(standCode || '').trim().toUpperCase();
     const lockAcquired = await this.acquireLock(4000);
     if (!lockAcquired) {
       return {
@@ -1366,7 +1534,7 @@ class StorageService {
       // Check if stand already taken in this event
       const occupied = allRegs.find(
         (r) =>
-          r.stand_code.toUpperCase() === standCode.toUpperCase() &&
+          String(r.stand_code || '').trim().toUpperCase() === cleanStandCode &&
           ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(r.registration_status)
       );
 
@@ -1473,10 +1641,11 @@ class StorageService {
     },
     adminId: string
   ): { success: boolean; message: string; registration?: EventRegistration } {
+    const cleanStandCode = String(params.standCode || '').trim().toUpperCase();
     const allRegs = this.getRegistrations(params.eventId);
     const existing = allRegs.find(
       (r) =>
-        r.stand_code.toUpperCase() === params.standCode.toUpperCase() &&
+        String(r.stand_code || '').trim().toUpperCase() === cleanStandCode &&
         ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(r.registration_status)
     );
     if (existing) {
@@ -2279,11 +2448,12 @@ class StorageService {
 
     // 2. Find Event Registration (Stand)
     const targetMemberId = matchedMember ? matchedMember.member_id : cleanCode;
+    const targetMemberUpper = String(targetMemberId || '').toUpperCase();
     const reg = registrations.find(
       (r) =>
-        r.member_id.toUpperCase() === targetMemberId.toUpperCase() ||
-        r.registration_id.toUpperCase() === cleanUpper ||
-        r.stand_code.toUpperCase() === cleanUpper
+        String(r.member_id || '').toUpperCase() === targetMemberUpper ||
+        String(r.registration_id || '').toUpperCase() === cleanUpper ||
+        String(r.stand_code || '').toUpperCase() === cleanUpper
     );
 
     // Case A: Member found and has stand registration in this event

@@ -418,14 +418,16 @@ class GoogleWorkspaceSyncService {
 
   // Fetch all latest data from Google Apps Script Web App or trigger sync update
   async fetchAllDataFromGas(): Promise<{ success: boolean; message: string; updatedCount?: number }> {
-    const { storage } = await import('./storage');
+    const { storage, clearAllBrowserCookies } = await import('./storage');
 
-    // 1. Sync with server state first
-    await storage.syncWithServer();
+    // 1. Purge cookies and force sync with server state first
+    clearAllBrowserCookies();
+    await storage.syncWithServer(true);
 
     const url = this.getGasUrl();
     if (!url) {
       // Local sync refresh - ensures all storage subscribers re-render latest local changes
+      storage.syncCurrentUserWithMemberProfile();
       storage.notifyListeners();
       return { success: true, message: 'Data server & lokal tersinkronisasi.' };
     }
@@ -442,6 +444,7 @@ class GoogleWorkspaceSyncService {
         }
         if (data.members && Array.isArray(data.members) && data.members.length > 0) {
           localStorage.setItem('kbm_v3_members', JSON.stringify(data.members));
+          storage.syncCurrentUserWithMemberProfile();
           count += data.members.length;
         }
         if (data.registrations && Array.isArray(data.registrations) && data.registrations.length > 0) {
@@ -469,12 +472,15 @@ class GoogleWorkspaceSyncService {
           count += 1;
         }
 
-        // Notify storage subscribers and push to shared server
+        // Clean any residual cookies, notify storage subscribers and push to shared server
+        clearAllBrowserCookies();
+        storage.syncCurrentUserWithMemberProfile();
         storage.notifyListeners();
         storage.persistToServer();
         return { success: true, message: `Berhasil menyinkronkan data dari Google Spreadsheet!`, updatedCount: count };
       }
 
+      storage.syncCurrentUserWithMemberProfile();
       storage.notifyListeners();
       return { success: true, message: 'Sinkronisasi selesai.' };
     } catch (err: any) {

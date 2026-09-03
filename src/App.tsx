@@ -20,6 +20,7 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BaraMascotWidget } from './components/BaraMascotWidget';
 import { SplashIntroModal } from './components/SplashIntroModal';
 import { BarcodeGeneratorModal } from './components/BarcodeGeneratorModal';
+import { UserCheck, ShieldCheck } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Current logged in user session
@@ -28,18 +29,14 @@ export const App: React.FC = () => {
     const u = storage.getCurrentUser();
     return u ? u.role : 'PUBLIC';
   });
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    const u = storage.getCurrentUser();
-    if (!u) return 'landing';
-    return u.role === 'SUPER_ADMIN' ? 'admin-dashboard' : 'member-dashboard';
-  });
+  const [activeTab, setActiveTab] = useState<string>('landing');
 
   const [currentMember, setCurrentMember] = useState<Member | null>(() => {
     const u = storage.getCurrentUser();
     if (u?.member_id) {
-      return storage.getMemberById(u.member_id) || storage.getMembers()[0] || null;
+      return storage.getMemberById(u.member_id) || null;
     }
-    return storage.getMembers()[0] || null;
+    return null;
   });
 
   // Modals state
@@ -99,10 +96,12 @@ export const App: React.FC = () => {
         if (u.member_id) {
           const m = storage.getMemberById(u.member_id);
           setCurrentMember(m || null);
+        } else {
+          setCurrentMember(null);
         }
       } else {
-        const firstM = storage.getMembers()[0] || null;
-        setCurrentMember(firstM);
+        setCurrentRole('PUBLIC');
+        setCurrentMember(null);
       }
     });
     return unsub;
@@ -253,7 +252,7 @@ export const App: React.FC = () => {
           activeTab === 'member-events' ||
           activeTab === 'member-savings') && (
           <>
-            {currentMember ? (
+            {currentUser && currentUser.role === 'MEMBER' && currentMember ? (
               <MemberDashboard
                 member={currentMember}
                 onOpenStandMap={handleOpenStandMap}
@@ -263,16 +262,31 @@ export const App: React.FC = () => {
                 onOpenBarcodeModal={handleOpenBarcodeModal}
               />
             ) : (
-              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
-                <p className="text-sm font-bold text-slate-700">
-                  Data anggota tidak ditemukan atau Anda belum masuk.
+              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4 my-8">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-black text-slate-900">Area Anggota UMKM</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Silakan masuk atau daftarkan akun anggota UMKM Anda terlebih dahulu untuk mengakses dashboard anggota, sewa stand, dan KTA digital.
                 </p>
-                <button
-                  onClick={() => setActiveTab('landing')}
-                  className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer"
-                >
-                  Kembali ke Portal Masuk
-                </button>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setAuthModalMode('MEMBER_LOGIN');
+                      setIsAuthModalOpen(true);
+                    }}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Masuk ke Akun
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('landing')}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Kembali ke Beranda
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -281,12 +295,12 @@ export const App: React.FC = () => {
         {/* ADMIN DASHBOARD (Role Protected) */}
         {activeTab === 'admin-dashboard' && (
           <>
-            {currentUser?.role === 'SUPER_ADMIN' ||
-            currentUser?.role === 'ADMIN_KOPERASI' ||
-            currentUser?.role === 'ADMIN_EVENT' ||
-            currentRole === 'SUPER_ADMIN' ? (
+            {currentUser &&
+            (currentUser.role === 'SUPER_ADMIN' ||
+              currentUser.role === 'ADMIN_KOPERASI' ||
+              currentUser.role === 'ADMIN_EVENT') ? (
               <AdminDashboard
-                adminId={currentUser?.id || 'ADM-SUPER'}
+                adminId={currentUser.id || 'ADM-SUPER'}
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
@@ -295,15 +309,19 @@ export const App: React.FC = () => {
                 onOpenBarcodeModal={handleOpenBarcodeModal}
               />
             ) : (
-              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
-                <p className="text-sm font-bold text-rose-700">
-                  Akses Ditolak: Halaman ini memerlukan hak akses Pengurus / Super Admin.
+              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4 my-8">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-black text-slate-900">Akses Dibatasi</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Halaman ini hanya dapat diakses oleh akun pengurus yang telah terotentikasi.
                 </p>
                 <button
                   onClick={() => setActiveTab('landing')}
-                  className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  Masuk sebagai Super Admin
+                  Kembali ke Beranda
                 </button>
               </div>
             )}

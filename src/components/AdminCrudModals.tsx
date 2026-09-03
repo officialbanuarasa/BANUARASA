@@ -301,7 +301,7 @@ export const StandCrudModal: React.FC<StandModalProps> = ({
       const ok = storage.updateRegistration(
         standToEdit.registration_id,
         {
-          stand_code: standCode.toUpperCase(),
+          stand_code: String(standCode || '').toUpperCase(),
           member_id: memberId,
           stand_price: standPrice,
           registration_status: regStatus,
@@ -319,7 +319,7 @@ export const StandCrudModal: React.FC<StandModalProps> = ({
       const res = storage.assignStandManual(
         {
           eventId,
-          standCode: standCode.toUpperCase(),
+          standCode: String(standCode || '').toUpperCase(),
           memberId,
           standPrice,
           registrationStatus: regStatus,

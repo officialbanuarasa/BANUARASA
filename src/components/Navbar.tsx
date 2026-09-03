@@ -95,8 +95,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentRole === 'SUPER_ADMIN';
-  const isMember = currentUser?.role === 'MEMBER' && !isSuperAdmin;
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isMember = currentUser?.role === 'MEMBER';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2.5 transition-all shadow-xs">
@@ -333,6 +333,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <span>Ganti Kata Sandi</span>
                         </button>
                       )}
+
+                      <button
+                        onClick={() => {
+                          setShowRoleDropdown(false);
+                          storage.purgeDeviceCookiesAndCache();
+                          if (onRefresh) onRefresh();
+                        }}
+                        className="w-full py-2 px-3 hover:bg-emerald-50 text-emerald-800 font-bold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                        title="Bersihkan cookies dan refresh data anggota agar selalu sinkron dengan Spreadsheet"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Bersihkan Cache & Sinkron</span>
+                      </button>
 
                       <button
                         onClick={() => {
