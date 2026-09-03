@@ -27,6 +27,7 @@ interface NavbarProps {
   currentMember?: Member | null;
   onOpenMemberCard: () => void;
   onOpenQRScanner: () => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
   onOpenAuthModal?: (mode?: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
   onOpenGoogleModal?: () => void;
   onOpenSplashIntro?: () => void;
@@ -45,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentMember,
   onOpenMemberCard,
   onOpenQRScanner,
+  onOpenBarcodeModal,
   onOpenAuthModal,
   onOpenGoogleModal,
   onOpenSplashIntro,
@@ -190,6 +192,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* When User is Logged In */}
           {currentUser ? (
             <>
+              {/* Quick Barcode Button for Member or Admin */}
+              {onOpenBarcodeModal && (
+                <button
+                  onClick={() => onOpenBarcodeModal(currentMember)}
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-2xs transition-colors cursor-pointer"
+                  title="Buka Barcode Generator & Verifikator KTA"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Barcode</span>
+                </button>
+              )}
+
               {/* Quick KTA Digital Button for Member */}
               {isMember && (
                 <button
@@ -294,6 +308,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
 
                     <div className="space-y-1 pt-1">
+                      {onOpenBarcodeModal && (
+                        <button
+                          onClick={() => {
+                            setShowRoleDropdown(false);
+                            onOpenBarcodeModal(currentMember);
+                          }}
+                          className="w-full py-2 px-3 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <QrCode className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Barcode & QR Generator</span>
+                        </button>
+                      )}
+
                       {onOpenChangePassword && (
                         <button
                           onClick={() => {

@@ -33,6 +33,7 @@ interface MemberDashboardProps {
   onOpenPaymentModal: (params: { registration?: EventRegistration; paymentType?: any; defaultAmount?: number }) => void;
   onOpenDigitalCard: () => void;
   onOpenChangePassword?: () => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
 }
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
@@ -41,6 +42,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onOpenPaymentModal,
   onOpenDigitalCard,
   onOpenChangePassword,
+  onOpenBarcodeModal,
 }) => {
   const [, setVersion] = useState(0);
 
@@ -236,11 +238,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   <span>UPLOAD BUKTI TRANSFER (RP{currentEventRegistration.stand_price.toLocaleString('id-ID')})</span>
                 </button>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200 flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Stand Terkonfirmasi Resmi</span>
                   </span>
+                  {onOpenBarcodeModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenBarcodeModal(liveMember)}
+                      className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Lihat Barcode Stand & KTA untuk Verifikasi Cepat"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      <span>Barcode Tiket & KTA</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -301,6 +314,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between gap-2">
             <span className="text-[10px] text-slate-400 font-mono">ID: {liveMember.member_id}</span>
             <div className="flex items-center gap-1.5">
+              {onOpenBarcodeModal && (
+                <button
+                  type="button"
+                  onClick={() => onOpenBarcodeModal(liveMember)}
+                  className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 cursor-pointer border border-amber-500/30"
+                  title="Generate Barcode & QR Code KTA untuk Verifikasi"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Barcode</span>
+                </button>
+              )}
               {onOpenChangePassword && (
                 <button
                   type="button"

@@ -19,6 +19,7 @@ import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BaraMascotWidget } from './components/BaraMascotWidget';
 import { SplashIntroModal } from './components/SplashIntroModal';
+import { BarcodeGeneratorModal } from './components/BarcodeGeneratorModal';
 
 export const App: React.FC = () => {
   // Current logged in user session
@@ -63,10 +64,17 @@ export const App: React.FC = () => {
 
   const [isDigitalCardOpen, setIsDigitalCardOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [selectedMemberForBarcode, setSelectedMemberForBarcode] = useState<Member | null>(null);
   const [inspectingPayment, setInspectingPayment] = useState<Payment | null>(null);
   const [inspectingProduct, setInspectingProduct] = useState<Product | null>(null);
   const [isRegisterMemberOpen, setIsRegisterMemberOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleOpenBarcodeModal = (member?: Member | null) => {
+    setSelectedMemberForBarcode(member || currentMember || storage.getMembers()[0] || null);
+    setIsBarcodeModalOpen(true);
+  };
 
   // Manual or background sync with Google Apps Script / Spreadsheet
   const handleRefreshData = useCallback(async (isSilent = false) => {
@@ -205,6 +213,7 @@ export const App: React.FC = () => {
         currentMember={currentMember}
         onOpenMemberCard={() => setIsDigitalCardOpen(true)}
         onOpenQRScanner={() => setIsQRScannerOpen(true)}
+        onOpenBarcodeModal={handleOpenBarcodeModal}
         onOpenAuthModal={(mode) => {
           setAuthModalMode(mode || 'MEMBER_LOGIN');
           setIsAuthModalOpen(true);
@@ -222,10 +231,15 @@ export const App: React.FC = () => {
         {/* HOMEPAGE / LANDING: Public Landing Page of Koperasi & Weekend Market */}
         {activeTab === 'landing' && (
           <LandingPage
+            currentUser={currentUser}
+            currentMember={currentMember}
             onOpenAuthModal={(mode) => {
               setAuthModalMode(mode);
               setIsAuthModalOpen(true);
             }}
+            onOpenStandMap={handleOpenStandMap}
+            onNavigateTab={setActiveTab}
+            onOpenBarcodeModal={handleOpenBarcodeModal}
             onOpenGoogleModal={() => setIsGoogleWorkspaceModalOpen(true)}
             onOpenSplashIntro={() => setIsSplashIntroOpen(true)}
             onSelectProduct={(p) => setInspectingProduct(p)}
@@ -246,6 +260,7 @@ export const App: React.FC = () => {
                 onOpenPaymentModal={handleOpenPaymentModal}
                 onOpenDigitalCard={() => setIsDigitalCardOpen(true)}
                 onOpenChangePassword={() => handleOpenChangePassword(null, false)}
+                onOpenBarcodeModal={handleOpenBarcodeModal}
               />
             ) : (
               <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
@@ -277,6 +292,7 @@ export const App: React.FC = () => {
                 onOpenStandMap={handleOpenStandMap}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
                 onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
+                onOpenBarcodeModal={handleOpenBarcodeModal}
               />
             ) : (
               <div className="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm max-w-md mx-auto space-y-4">
@@ -363,6 +379,15 @@ export const App: React.FC = () => {
           isOpen={isDigitalCardOpen}
           onClose={() => setIsDigitalCardOpen(false)}
           member={currentMember}
+          onOpenBarcodeModal={handleOpenBarcodeModal}
+        />
+      )}
+
+      {isBarcodeModalOpen && (
+        <BarcodeGeneratorModal
+          isOpen={isBarcodeModalOpen}
+          onClose={() => setIsBarcodeModalOpen(false)}
+          initialMember={selectedMemberForBarcode || currentMember || undefined}
         />
       )}
 

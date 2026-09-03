@@ -2222,69 +2222,149 @@ class StorageService {
     return true;
   }
 
-  // --- Check-in via QR Code ---
+  // --- Check-in & KTA Verification via Barcode / QR Code ---
   processEventCheckIn(
     scannedText: string,
     eventId: string,
     adminId: string
-  ): { success: boolean; message: string; registration?: EventRegistration; member?: Member } {
-    const registrations = this.getRegistrations(eventId);
+  ): {
+    success: boolean;
+    message: string;
+    isMemberVerified?: boolean;
+    registration?: EventRegistration;
+    member?: Member;
+  } {
+    const raw = scannedText.trim();
+    if (!raw) {
+      return { success: false, message: 'Kode barcode / QR kosong.' };
+    }
+
+    // Extract ID from URL if formatted like https://...?id=BM-0001
+    let cleanCode = raw;
+    try {
+      if (raw.includes('http://') || raw.includes('https://')) {
+        const parsed = new URL(raw);
+        const queryId = parsed.searchParams.get('id');
+        if (queryId) cleanCode = queryId.trim();
+      } else if (raw.startsWith('{') && raw.endsWith('}')) {
+        const json = JSON.parse(raw);
+        if (json.member_id) cleanCode = json.member_id;
+        else if (json.id) cleanCode = json.id;
+      }
+    } catch {
+      // Use raw if parsing fails
+    }
+
+    const cleanUpper = cleanCode.toUpperCase();
     const members = this.getMembers();
+    const registrations = this.getRegistrations(eventId);
 
-    // Check if scan text is member_id (e.g. BM-00241) or registration_id (REG-...)
-    const reg = registrations.find(
-      (r) =>
-        (r.member_id === scannedText.trim() || r.registration_id === scannedText.trim()) &&
-        r.registration_status === 'CONFIRMED'
-    );
+    // 1. Find Member from Spreadsheet database
+    const matchedMember = members.find((m) => {
+      const mId = String(m.member_id || '').toUpperCase();
+      const mNomor = String(m.nomor_anggota || '').toUpperCase();
+      const mNik = String(m.nik || '');
+      const mEmail = String(m.email || '').toLowerCase();
+      const mPhone = String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '');
+      const rawDigits = cleanCode.replace(/[^0-9]/g, '');
 
-    if (!reg) {
-      return {
-        success: false,
-        message: 'Data anggota / stand tidak ditemukan atau belum berstatus CONFIRMED untuk event ini.',
-      };
-    }
-
-    if (reg.check_in_status === 'CHECKED_IN') {
-      const member = members.find((m) => m.member_id === reg.member_id);
-      return {
-        success: true,
-        message: `Anggota ${member?.nama_lengkap || reg.member_id} sudah pernah check-in sebelumnya pada ${new Date(reg.check_in_time || '').toLocaleTimeString('id-ID')}.`,
-        registration: reg,
-        member,
-      };
-    }
-
-    const now = new Date().toISOString();
-    const allRegs = this.getRegistrations();
-    const idx = allRegs.findIndex((r) => r.registration_id === reg.registration_id);
-    if (idx !== -1) {
-      allRegs[idx] = {
-        ...allRegs[idx],
-        check_in_status: 'CHECKED_IN',
-        check_in_time: now,
-        updated_at: now,
-      };
-      this.setItem(STORAGE_KEYS.REGISTRATIONS, allRegs);
-    }
-
-    const member = members.find((m) => m.member_id === reg.member_id);
-
-    this.logAudit({
-      user_id: adminId,
-      user_role: 'ADMIN_EVENT',
-      action: 'CHECK_IN_TENANT',
-      module: 'EVENT',
-      reference_id: reg.registration_id,
-      description: `Check-in kehadiran tenant ${member?.nama_lengkap} di Stand ${reg.stand_code} berhasil dicatat.`,
-      result: 'SUCCESS',
+      return (
+        mId === cleanUpper ||
+        mNomor === cleanUpper ||
+        (mNik && mNik === cleanCode) ||
+        (mEmail && mEmail === cleanCode.toLowerCase()) ||
+        (rawDigits.length >= 6 && mPhone.includes(rawDigits))
+      );
     });
 
+    // 2. Find Event Registration (Stand)
+    const targetMemberId = matchedMember ? matchedMember.member_id : cleanCode;
+    const reg = registrations.find(
+      (r) =>
+        r.member_id.toUpperCase() === targetMemberId.toUpperCase() ||
+        r.registration_id.toUpperCase() === cleanUpper ||
+        r.stand_code.toUpperCase() === cleanUpper
+    );
+
+    // Case A: Member found and has stand registration in this event
+    if (reg) {
+      const member = matchedMember || this.getMemberById(reg.member_id);
+
+      if (reg.check_in_status === 'CHECKED_IN') {
+        return {
+          success: true,
+          isMemberVerified: true,
+          message: `Anggota ${member?.nama_lengkap || reg.member_id} (${member?.nama_usaha || 'Stand ' + reg.stand_code}) sudah check-in sebelumnya pada ${new Date(
+            reg.check_in_time || ''
+          ).toLocaleTimeString('id-ID')}. Data tersinkron dengan Google Spreadsheet.`,
+          registration: reg,
+          member,
+        };
+      }
+
+      if (reg.registration_status === 'CONFIRMED') {
+        const now = new Date().toISOString();
+        const allRegs = this.getRegistrations();
+        const idx = allRegs.findIndex((r) => r.registration_id === reg.registration_id);
+        if (idx !== -1) {
+          allRegs[idx] = {
+            ...allRegs[idx],
+            check_in_status: 'CHECKED_IN',
+            check_in_time: now,
+            updated_at: now,
+          };
+          this.setItem(STORAGE_KEYS.REGISTRATIONS, allRegs);
+
+          // Update spreadsheet
+          googleWorkspaceSync.syncRowToSpreadsheet('SHEET_STAND_REGISTRASI', reg.registration_id, {
+            check_in_status: 'CHECKED_IN',
+            check_in_time: now,
+          });
+        }
+
+        this.logAudit({
+          user_id: adminId,
+          user_role: 'ADMIN_EVENT',
+          action: 'CHECK_IN_TENANT',
+          module: 'EVENT',
+          reference_id: reg.registration_id,
+          description: `Check-in barcode tenant ${member?.nama_lengkap} di Stand ${reg.stand_code} berhasil terverifikasi.`,
+          result: 'SUCCESS',
+        });
+
+        return {
+          success: true,
+          isMemberVerified: true,
+          message: `Check-in Berhasil! Anggota ${member?.nama_lengkap} (${member?.nama_usaha}) terverifikasi di Stand ${reg.stand_code}.`,
+          registration: allRegs[idx] || reg,
+          member,
+        };
+      } else {
+        return {
+          success: true,
+          isMemberVerified: true,
+          message: `KTA Anggota Valid (${member?.nama_lengkap}). Namun alokasi Stand ${reg.stand_code} saat ini berstatus: ${reg.registration_status} (Belum Terkonfirmasi Lunas).`,
+          registration: reg,
+          member,
+        };
+      }
+    }
+
+    // Case B: Member is registered in Spreadsheet Koperasi, but no stand in this event
+    if (matchedMember) {
+      return {
+        success: true,
+        isMemberVerified: true,
+        message: `KTA Terverifikasi Sah di Google Sheets! Anggota: ${matchedMember.nama_lengkap} (${matchedMember.nama_usaha}) - No. Anggota: ${matchedMember.nomor_anggota}. Belum melakukan pemesanan stand pada event ini.`,
+        member: matchedMember,
+      };
+    }
+
+    // Case C: Neither member nor registration found
     return {
-      success: true,
-      message: `Check-in Berhasil! Selamat datang ${member?.nama_lengkap} (${member?.nama_usaha}) di Stand ${reg.stand_code}.`,
-      registration: allRegs[idx],
-      member,
+      success: false,
+      isMemberVerified: false,
+      message: `Barcode / QR Code "${cleanCode}" tidak terdaftar di database Google Sheets Koperasi Berau Melangkah Bersama.`,
     };
   }
 

@@ -65,6 +65,7 @@ interface AdminDashboardProps {
   onOpenStandMap: (event: EventItem) => void;
   onOpenGoogleWorkspaceModal?: () => void;
   onOpenChangePassword?: (targetMember?: Member | null, isSuperAdminReset?: boolean) => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -74,6 +75,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenStandMap,
   onOpenGoogleWorkspaceModal,
   onOpenChangePassword,
+  onOpenBarcodeModal,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
     'OVERVIEW' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
@@ -918,6 +920,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           >
                             WA
                           </a>
+
+                          {onOpenBarcodeModal && (
+                            <button
+                              onClick={() => onOpenBarcodeModal(m)}
+                              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-500/30"
+                              title="Generate Barcode 1D & QR Code Anggota"
+                            >
+                              <QrCode className="w-3 h-3 text-amber-600" />
+                              <span>Barcode</span>
+                            </button>
+                          )}
 
                           {onOpenChangePassword && (
                             <button

@@ -48,6 +48,11 @@ interface LandingPageProps {
   onSelectProduct?: (product: any) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  currentUser?: AuthUser | null;
+  currentMember?: Member | null;
+  onOpenStandMap?: (event: EventItem) => void;
+  onNavigateTab?: (tab: string) => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -57,6 +62,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onSelectProduct,
   onRefresh,
   isRefreshing,
+  currentUser,
+  currentMember,
+  onOpenStandMap,
+  onNavigateTab,
+  onOpenBarcodeModal,
 }) => {
   const [activeStandFilter, setActiveStandFilter] = useState<'ALL' | 'VIP' | 'KAT2' | 'KAT3'>('ALL');
   const [hoveredStand, setHoveredStand] = useState<string | null>(null);
@@ -119,6 +129,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   ).length;
 
   const totalAvailable = 64 - totalBooked;
+
+  const handleBookingClick = (preferredStand?: string) => {
+    if (currentUser && (currentUser.role === 'MEMBER' || currentUser.role === 'SUPER_ADMIN' || currentMember)) {
+      if (onOpenStandMap) {
+        onOpenStandMap(currentEvent);
+      } else if (onNavigateTab) {
+        onNavigateTab(currentUser.role === 'SUPER_ADMIN' ? 'admin-dashboard' : 'member-dashboard');
+      }
+    } else {
+      onOpenAuthModal('MEMBER_LOGIN');
+    }
+  };
+
+  const handleStandClick = (standCode: string) => {
+    handleBookingClick(standCode);
+  };
 
   // Banner theme styling presets
   const getBannerThemeClasses = () => {
@@ -348,32 +374,89 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Call to Actions */}
           <div className="pt-6 sm:pt-8 flex flex-wrap items-center gap-3 relative z-10 border-t border-slate-800/80 mt-6">
-            <button
-              id="btn-hero-login"
-              onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
-              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
-            >
-              <span>Masuk Anggota UMKM</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {currentUser?.role === 'MEMBER' || currentMember ? (
+              <>
+                <button
+                  id="btn-hero-book"
+                  onClick={() => handleBookingClick()}
+                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <Store className="w-4 h-4" />
+                  <span>Pesan Stand Event Sekarang</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
 
-            <button
-              id="btn-hero-register"
-              onClick={() => onOpenAuthModal('REGISTER')}
-              className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <Users className="w-4 h-4 text-emerald-400" />
-              <span>Daftar UMKM Baru</span>
-            </button>
+                <button
+                  id="btn-hero-dashboard"
+                  onClick={() => onNavigateTab && onNavigateTab('member-dashboard')}
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>Dashboard Anggota Saya</span>
+                </button>
 
-            <button
-              id="btn-hero-admin"
-              onClick={() => onOpenAuthModal('ADMIN_LOGIN')}
-              className="px-4 py-3 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs sm:text-sm rounded-xl border border-purple-800/50 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
-              <span>Super Admin</span>
-            </button>
+                {onOpenBarcodeModal && (
+                  <button
+                    id="btn-hero-barcode"
+                    onClick={() => onOpenBarcodeModal(currentMember)}
+                    className="px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs sm:text-sm rounded-xl border border-amber-500/40 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>Barcode KTA</span>
+                  </button>
+                )}
+              </>
+            ) : currentUser?.role === 'SUPER_ADMIN' ? (
+              <>
+                <button
+                  id="btn-hero-admin-manage"
+                  onClick={() => onNavigateTab && onNavigateTab('admin-dashboard')}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-purple-200" />
+                  <span>Buka Dashboard Super Admin</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  id="btn-hero-book-admin"
+                  onClick={() => handleBookingClick()}
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>Kelola Denah 64 Stand</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  id="btn-hero-login"
+                  onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <span>Masuk Anggota UMKM</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  id="btn-hero-register"
+                  onClick={() => onOpenAuthModal('REGISTER')}
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>Daftar UMKM Baru</span>
+                </button>
+
+                <button
+                  id="btn-hero-admin"
+                  onClick={() => onOpenAuthModal('ADMIN_LOGIN')}
+                  className="px-4 py-3 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs sm:text-sm rounded-xl border border-purple-800/50 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  <span>Super Admin</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -420,7 +503,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Mulai Rp35.000 / Hari
               </span>
               <button
-                onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+                onClick={() => handleBookingClick()}
                 className="text-xs font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
               >
                 <span>Pilih Stand Anda</span>
@@ -746,7 +829,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   return (
                     <button
                       key={code}
-                      onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+                      onClick={() => handleStandClick(code)}
                       onMouseEnter={() => setHoveredStand(code)}
                       onMouseLeave={() => setHoveredStand(null)}
                       className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
@@ -788,7 +871,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   return (
                     <button
                       key={code}
-                      onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+                      onClick={() => handleStandClick(code)}
                       className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
                         isAvailable
                           ? 'bg-white hover:bg-blue-50 border-slate-200 text-slate-800 hover:border-blue-500 hover:scale-105 shadow-xs'
@@ -828,7 +911,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   return (
                     <button
                       key={code}
-                      onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+                      onClick={() => handleStandClick(code)}
                       className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
                         isAvailable
                           ? 'bg-white hover:bg-blue-50 border-slate-200 text-slate-800 hover:border-blue-500 hover:scale-105 shadow-xs'
@@ -865,10 +948,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           <button
-            onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
+            onClick={() => handleBookingClick()}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
           >
-            <span>Masuk untuk Memesan Stand</span>
+            <span>{currentUser ? 'Pesan Stand 64 Sekarang' : 'Masuk untuk Memesan Stand'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

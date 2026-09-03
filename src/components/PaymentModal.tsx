@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EventRegistration, Member, PaymentType, PaymentMethod } from '../types';
 import { storage } from '../services/storage';
 import {
@@ -16,7 +16,7 @@ import {
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentMember: Member;
+  currentMember?: Member | null;
   registration?: EventRegistration | null;
   paymentType?: PaymentType;
   defaultAmount?: number;
@@ -33,7 +33,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onSuccess,
 }) => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('TRANSFER_BANK');
-  const [amount, setAmount] = useState<number>(registration ? registration.stand_price : defaultAmount);
+  const [amount, setAmount] = useState<number>(
+    registration && registration.stand_price ? registration.stand_price : defaultAmount
+  );
   const [proofUrl, setProofUrl] = useState<string>(
     'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'
   );
@@ -41,7 +43,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (registration && registration.stand_price) {
+      setAmount(registration.stand_price);
+    } else if (defaultAmount) {
+      setAmount(defaultAmount);
+    }
+  }, [registration, defaultAmount]);
+
   if (!isOpen) return null;
+
+  const memberId = currentMember?.member_id || registration?.member_id || 'MEMBER';
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -62,9 +74,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     try {
       storage.uploadPaymentProof({
         registration_id: registration?.registration_id,
-        member_id: currentMember.member_id,
-        payment_type: paymentType as PaymentType,
-        amount: Number(amount),
+        member_id: memberId,
+        payment_type: (paymentType || 'EVENT_PARTICIPATION') as PaymentType,
+        amount: Number(amount) || 50000,
         payment_method: selectedMethod,
         proof_file_url: proofUrl,
       });
@@ -80,9 +92,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const getDrivePathPreview = () => {
     if (registration) {
-      return `02_EVENT/2026/${registration.event_id}/Pembayaran/${registration.registration_id}/`;
+      return `02_EVENT/2026/${registration.event_id || 'BWM-001'}/Pembayaran/${registration.registration_id || 'REG'}/`;
     }
-    return `01_ANGGOTA/${currentMember.member_id}/Simpanan/`;
+    return `01_ANGGOTA/${memberId}/Simpanan/`;
   };
 
   return (
@@ -93,7 +105,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
-                {paymentType.replace('_', ' ')}
+                {String(paymentType || 'EVENT_PARTICIPATION').replace('_', ' ')}
               </span>
               {registration && (
                 <span className="text-xs text-slate-400 font-semibold">
@@ -132,7 +144,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <p className="text-[11px] text-emerald-700 mt-0.5">
                 {paymentType === 'EVENT_PARTICIPATION'
                   ? `Biaya Stand ${registration?.stand_code || ''} Banuarasa Weekend Market`
-                  : `Setoran ${paymentType.replace('_', ' ')}`}
+                  : `Setoran ${String(paymentType || '').replace('_', ' ')}`}
               </p>
             </div>
             <ShieldCheck className="w-10 h-10 text-emerald-600 opacity-80" />

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Member } from '../types';
 import { storage } from '../services/storage';
 import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
+import { generateQrCodeDataUrl } from '../utils/barcode';
 import {
   X,
   QrCode,
@@ -24,6 +25,7 @@ interface DigitalMemberCardModalProps {
   onClose: () => void;
   member: Member;
   onMemberUpdated?: (updatedMember: Member) => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
 }
 
 export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
@@ -31,13 +33,25 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
   onClose,
   member,
   onMemberUpdated,
+  onOpenBarcodeModal,
 }) => {
   if (!isOpen) return null;
 
   const [activeSide, setActiveSide] = useState<'FRONT' | 'BACK'>('FRONT');
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const design = storage.getMemberCardDesign();
   const liveMember = storage.getMemberById(member.member_id) || member;
+
+  useEffect(() => {
+    let isMounted = true;
+    generateQrCodeDataUrl(liveMember.member_id).then((url) => {
+      if (isMounted) setQrDataUrl(url);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [liveMember.member_id]);
 
   const handlePrint = () => {
     window.print();
@@ -227,8 +241,18 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
                     </div>
 
                     {design.showQrCode && (
-                      <div className="shrink-0 bg-white p-2 rounded-2xl shadow-md flex flex-col items-center">
-                        <QrCode className="w-12 h-12 text-slate-900" />
+                      <div
+                        onClick={() => onOpenBarcodeModal && onOpenBarcodeModal(liveMember)}
+                        className={`shrink-0 bg-white p-1.5 rounded-2xl shadow-md flex flex-col items-center ${
+                          onOpenBarcodeModal ? 'cursor-pointer hover:ring-2 hover:ring-amber-400 transition-all' : ''
+                        }`}
+                        title="Klik untuk melihat Barcode & QR Resmi"
+                      >
+                        {qrDataUrl ? (
+                          <img src={qrDataUrl} alt="QR Code" className="w-14 h-14 object-contain" />
+                        ) : (
+                          <QrCode className="w-12 h-12 text-slate-900" />
+                        )}
                         <span className="text-[7px] font-mono font-bold text-slate-800 mt-0.5">
                           {liveMember.member_id}
                         </span>
@@ -304,19 +328,30 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
             </div>
 
             {/* Quick Action Footer */}
-            <div className="grid grid-cols-2 gap-3 w-full pt-2">
+            <div className={`grid ${onOpenBarcodeModal ? 'grid-cols-3' : 'grid-cols-2'} gap-2 sm:gap-3 w-full pt-2`}>
+              {onOpenBarcodeModal && (
+                <button
+                  type="button"
+                  onClick={() => onOpenBarcodeModal(liveMember)}
+                  className="py-2.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 font-bold text-xs rounded-xl border border-amber-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  title="Buka Generator Barcode 1D & QR Code"
+                >
+                  <QrCode className="w-4 h-4 text-amber-600" />
+                  <span>Barcode</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handlePrint}
-                className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Cetak / Simpan PDF</span>
+                <span>Cetak / PDF</span>
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Tutup</span>
