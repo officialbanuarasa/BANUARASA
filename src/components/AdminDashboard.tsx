@@ -8,7 +8,11 @@ import {
   Saving, 
   SalesReport, 
   DocumentRecord, 
-  AuditLog 
+  AuditLog,
+  MasterStand,
+  StandCategory,
+  StandZone,
+  EventStatus
 } from '../types';
 import { storage } from '../services/storage';
 
@@ -39,12 +43,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDataUpdated,
   onOpenScanner
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'stands' | 'payments' | 'savings' | 'reports' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'events' | 'stands' | 'payments' | 'savings' | 'reports' | 'audit'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modal Verifikasi Pembayaran
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Ringkasan Statistik Utama
+  // Modal CRUD: Member
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [memberForm, setMemberForm] = useState({
+    nik: '',
+    nama_lengkap: '',
+    nama_usaha: '',
+    kategori_usaha: 'KULINER' as StandCategory,
+    nomor_hp: '',
+    email: '',
+    alamat: ''
+  });
+
+  // Modal CRUD: Event
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [eventForm, setEventForm] = useState({
+    title: '',
+    description: '',
+    event_date: '',
+    start_time: '06:00',
+    end_time: '12:00',
+    location: 'Tepian Sambaliung, Berau',
+    status: 'UPCOMING' as EventStatus,
+    total_stands: 64
+  });
+
+  // Modal CRUD: Stand Baru
+  const [isStandModalOpen, setIsStandModalOpen] = useState(false);
+  const [standForm, setStandForm] = useState({
+    stand_code: '',
+    category: 'KULINER' as StandCategory,
+    zone: 'ZONA_A' as StandZone,
+    base_price: 150000
+  });
+
+  // Modal CRUD: Tambah Simpanan Manual
+  const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
+  const [savingForm, setSavingForm] = useState({
+    member_id: '',
+    saving_type: 'SIMPANAN_WAJIB' as 'SIMPANAN_POKOK' | 'SIMPANAN_WAJIB' | 'SIMPANAN_SUKARELA',
+    amount: 50000
+  });
+
+  const isSuperAdmin = session.user.role === 'SUPER_ADMIN';
+
+  // Ringkasan Statistik
   const stats = useMemo(() => {
     const totalOmzet = salesReports.reduce((sum, r) => sum + (r.total_turnover || 0), 0);
     const totalSimpanan = savings.reduce((sum, s) => sum + (s.amount || 0), 0);
@@ -60,6 +112,184 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       totalOmzet
     };
   }, [members, events, registrations, payments, savings, salesReports]);
+
+  // ----------------------------------------------------
+  // HANDLER CRUD MEMBER
+  // ----------------------------------------------------
+  const handleOpenAddMember = () => {
+    setEditingMember(null);
+    setMemberForm({
+      nik: '',
+      nama_lengkap: '',
+      nama_usaha: '',
+      kategori_usaha: 'KULINER',
+      nomor_hp: '',
+      email: '',
+      alamat: ''
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleOpenEditMember = (m: Member) => {
+    setEditingMember(m);
+    setMemberForm({
+      nik: m.nik,
+      nama_lengkap: m.nama_lengkap,
+      nama_usaha: m.nama_usaha,
+      kategori_usaha: m.kategori_usaha,
+      nomor_hp: m.nomor_hp,
+      email: m.email,
+      alamat: m.alamat
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleSaveMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingMember) {
+      storage.saveMember({
+        ...editingMember,
+        ...memberForm
+      });
+    } else {
+      const newId = `MBR-${String(members.length + 1).padStart(4, '0')}`;
+      storage.saveMember({
+        member_id: newId,
+        ...memberForm,
+        whatsapp: memberForm.nomor_hp,
+        status_keanggotaan: 'ACTIVE',
+        created_at: new Date().toISOString()
+      });
+    }
+    setIsMemberModalOpen(false);
+    onDataUpdated();
+  };
+
+  const handleDeleteMember = (memberId: string, name: string) => {
+    if (!window.confirm(`Yakin ingin menghapus data anggota: ${name}?`)) return;
+    const allMembers = storage.getMembers();
+    const idx = allMembers.findIndex(m => m.member_id === memberId);
+    if (idx >= 0) {
+      allMembers.splice(idx, 1);
+      storage.logActivity('DELETE_MEMBER', 'MEMBER', `Menghapus anggota ${name}`, memberId);
+      onDataUpdated();
+    }
+  };
+
+  // ----------------------------------------------------
+  // HANDLER CRUD EVENT
+  // ----------------------------------------------------
+  const handleOpenAddEvent = () => {
+    setEditingEvent(null);
+    setEventForm({
+      title: '',
+      description: '',
+      event_date: new Date().toISOString().split('T')[0],
+      start_time: '06:00',
+      end_time: '12:00',
+      location: 'Tepian Sambaliung, Berau',
+      status: 'UPCOMING',
+      total_stands: 64
+    });
+    setIsEventModalOpen(true);
+  };
+
+  const handleOpenEditEvent = (ev: EventItem) => {
+    setEditingEvent(ev);
+    setEventForm({
+      title: ev.title,
+      description: ev.description,
+      event_date: ev.event_date,
+      start_time: ev.start_time,
+      end_time: ev.end_time,
+      location: ev.location,
+      status: ev.status,
+      total_stands: ev.total_stands
+    });
+    setIsEventModalOpen(true);
+  };
+
+  const handleSaveEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    const allEvents = storage.getEvents();
+    if (editingEvent) {
+      const idx = allEvents.findIndex(ev => ev.event_id === editingEvent.event_id);
+      if (idx >= 0) {
+        allEvents[idx] = { ...allEvents[idx], ...eventForm };
+        storage.logActivity('UPDATE_EVENT', 'EVENT', `Mengedit event ${eventForm.title}`, editingEvent.event_id);
+      }
+    } else {
+      const newEvent: EventItem = {
+        event_id: `EVT-${Date.now()}`,
+        ...eventForm,
+        timezone: 'Asia/Makassar',
+        created_at: new Date().toISOString()
+      };
+      allEvents.push(newEvent);
+      storage.logActivity('CREATE_EVENT', 'EVENT', `Membuat event baru ${newEvent.title}`, newEvent.event_id);
+    }
+    setIsEventModalOpen(false);
+    onDataUpdated();
+  };
+
+  const handleDeleteEvent = (eventId: string, title: string) => {
+    if (!window.confirm(`Hapus event "${title}"?`)) return;
+    const allEvents = storage.getEvents();
+    const idx = allEvents.findIndex(ev => ev.event_id === eventId);
+    if (idx >= 0) {
+      allEvents.splice(idx, 1);
+      storage.logActivity('DELETE_EVENT', 'EVENT', `Menghapus event ${title}`, eventId);
+      onDataUpdated();
+    }
+  };
+
+  // ----------------------------------------------------
+  // HANDLER STAND & SIMPANAN
+  // ----------------------------------------------------
+  const handleSaveStand = (e: React.FormEvent) => {
+    e.preventDefault();
+    const allStands = storage.getStands();
+    const newNumber = allStands.length + 1;
+    const newStand: MasterStand = {
+      stand_id: `STD-${String(newNumber).padStart(2, '0')}`,
+      stand_code: standForm.stand_code.toUpperCase(),
+      stand_number: newNumber,
+      category: standForm.category,
+      zone: standForm.zone,
+      base_price: Number(standForm.base_price) || 150000,
+      status: 'ACTIVE'
+    };
+    allStands.push(newStand);
+    storage.logActivity('CREATE_STAND', 'STAND', `Menambah master stand ${newStand.stand_code}`);
+    setIsStandModalOpen(false);
+    onDataUpdated();
+  };
+
+  const handleDeleteStand = (standId: string, code: string) => {
+    if (!window.confirm(`Hapus master stand ${code}?`)) return;
+    const allStands = storage.getStands();
+    const idx = allStands.findIndex(s => s.stand_id === standId);
+    if (idx >= 0) {
+      allStands.splice(idx, 1);
+      storage.logActivity('DELETE_STAND', 'STAND', `Menghapus stand ${code}`, standId);
+      onDataUpdated();
+    }
+  };
+
+  const handleSaveSaving = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetMember = members.find(m => m.member_id === savingForm.member_id);
+    if (!targetMember) return;
+
+    storage.addSaving({
+      member_id: targetMember.member_id,
+      member_name: targetMember.nama_lengkap,
+      saving_type: savingForm.saving_type,
+      amount: Number(savingForm.amount) || 0
+    });
+    setIsSavingModalOpen(false);
+    onDataUpdated();
+  };
 
   // Handler Verifikasi Pembayaran
   const handleVerifyPayment = (paymentId: string, status: 'VERIFIED' | 'REJECTED') => {
@@ -95,14 +325,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            {onOpenScanner && (
-              <button
-                onClick={onOpenScanner}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-sm transition"
-              >
-                <span>📷 Scan Barcode / Tiket</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onOpenScanner && (
+                <button
+                  onClick={onOpenScanner}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-xs transition"
+                >
+                  📷 Scan Barcode
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Navigasi Tab */}
@@ -110,7 +342,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {[
               { id: 'overview', label: 'Ringkasan' },
               { id: 'members', label: `Anggota (${members.length})` },
-              { id: 'stands', label: `Stand & Registrasi (${registrations.length})` },
+              { id: 'events', label: `Kelola Event (${events.length})` },
+              { id: 'stands', label: `Master & Booking Stand` },
               { id: 'payments', label: `Pembayaran (${payments.length})` },
               { id: 'savings', label: 'Simpanan Koperasi' },
               { id: 'reports', label: 'Laporan Omzet' },
@@ -134,6 +367,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Konten Utama */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -214,10 +448,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: MEMBERS */}
+        {/* TAB 2: MEMBERS (CRUD) */}
         {activeTab === 'members' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-3 bg-slate-50/50">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
               <input
                 type="text"
                 placeholder="Cari nama anggota / usaha / NIK..."
@@ -225,7 +459,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-emerald-500 w-full sm:w-80"
               />
-              <span className="text-xs text-slate-500 self-center">Total: {members.length} Anggota</span>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {isSuperAdmin && (
+                  <button
+                    onClick={handleOpenAddMember}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    + Tambah Anggota
+                  </button>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600">
@@ -237,6 +480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <th className="px-4 py-3">Kategori</th>
                     <th className="px-4 py-3">Kontak</th>
                     <th className="px-4 py-3">Status</th>
+                    {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -272,6 +516,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {m.status_keanggotaan}
                           </span>
                         </td>
+                        {isSuperAdmin && (
+                          <td className="px-4 py-3 text-right space-x-2">
+                            <button
+                              onClick={() => handleOpenEditMember(m)}
+                              className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMember(m.member_id, m.nama_lengkap)}
+                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                 </tbody>
@@ -280,31 +540,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: STANDS & REGISTRATIONS */}
-        {activeTab === 'stands' && (
+        {/* TAB 3: KELOLA EVENT (CRUD) */}
+        {activeTab === 'events' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800">Daftar Pendaftaran & Reservasi Stand</h2>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Daftar Agenda Acara Banuarasa</h2>
+              {isSuperAdmin && (
+                <button
+                  onClick={handleOpenAddEvent}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                >
+                  + Tambah Event Baru
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
                   <tr>
-                    <th className="px-4 py-3">Kode Stand</th>
-                    <th className="px-4 py-3">Peserta / Usaha</th>
-                    <th className="px-4 py-3">Event</th>
-                    <th className="px-4 py-3">Biaya</th>
+                    <th className="px-4 py-3">Nama Event</th>
+                    <th className="px-4 py-3">Tanggal & Waktu</th>
+                    <th className="px-4 py-3">Lokasi</th>
+                    <th className="px-4 py-3">Total Stand</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Waktu Daftar</th>
+                    {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {registrations.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-8 text-slate-400">Belum ada data pendaftaran stand.</td>
+                  {events.map(ev => (
+                    <tr key={ev.event_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-slate-800">{ev.title}</div>
+                        <div className="text-xs text-slate-400 line-clamp-1">{ev.description}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="font-semibold text-slate-700">{ev.event_date}</div>
+                        <div className="text-slate-400">{ev.start_time} - {ev.end_time} WITA</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">{ev.location}</td>
+                      <td className="px-4 py-3 font-semibold">{ev.total_stands} Stand</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                          {ev.status}
+                        </span>
+                      </td>
+                      {isSuperAdmin && (
+                        <td className="px-4 py-3 text-right space-x-2">
+                          <button
+                            onClick={() => handleOpenEditEvent(ev)}
+                            className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvent(ev.event_id, ev.title)}
+                            className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                          >
+                            Hapus
+                          </button>
+                        </td>
+                      )}
                     </tr>
-                  ) : (
-                    registrations.map(r => (
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: MASTER & BOOKING STAND */}
+        {activeTab === 'stands' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Master Stand Fisik Banuarasa</h2>
+                  <p className="text-xs text-slate-400">Daftar slot nomor stand yang tersedia</p>
+                </div>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setIsStandModalOpen(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    + Tambah Stand Baru
+                  </button>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3">Kode Stand</th>
+                      <th className="px-4 py-3">Zona</th>
+                      <th className="px-4 py-3">Kategori</th>
+                      <th className="px-4 py-3">Harga Pokok</th>
+                      <th className="px-4 py-3">Status</th>
+                      {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {storage.getStands().map(s => (
+                      <tr key={s.stand_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-bold text-slate-800">{s.stand_code}</td>
+                        <td className="px-4 py-3 text-xs">{s.zone}</td>
+                        <td className="px-4 py-3 text-xs">{s.category}</td>
+                        <td className="px-4 py-3 font-semibold text-emerald-600">Rp {s.base_price.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-xs">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{s.status}</span>
+                        </td>
+                        {isSuperAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => handleDeleteStand(s.stand_id, s.stand_code)}
+                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Riwayat Reservasi Stand */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <h2 className="text-base font-bold text-slate-800">Riwayat Reservasi & Pendaftaran Stand</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3">Kode Stand</th>
+                      <th className="px-4 py-3">Peserta / Usaha</th>
+                      <th className="px-4 py-3">Event</th>
+                      <th className="px-4 py-3">Biaya</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Waktu Daftar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {registrations.map(r => (
                       <tr key={r.registration_id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-bold text-emerald-600">{r.stand_code}</td>
                         <td className="px-4 py-3">
@@ -328,15 +707,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {new Date(r.created_at).toLocaleString('id-ID')}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 4: PAYMENTS */}
+        {/* TAB 5: PAYMENTS */}
         {activeTab === 'payments' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -356,81 +735,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {payments.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400">Belum ada catatan pembayaran.</td>
+                  {payments.map(p => (
+                    <tr key={p.payment_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono text-xs">{p.payment_id}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{p.member_name}</td>
+                      <td className="px-4 py-3 text-xs">{p.payment_type}</td>
+                      <td className="px-4 py-3 font-bold text-slate-800">Rp {p.amount.toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 text-xs">{p.payment_method}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          p.verification_status === 'VERIFIED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : p.verification_status === 'PENDING'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {p.verification_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{p.verified_by || '-'}</td>
                     </tr>
-                  ) : (
-                    payments.map(p => (
-                      <tr key={p.payment_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs">{p.payment_id}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{p.member_name}</td>
-                        <td className="px-4 py-3 text-xs">{p.payment_type}</td>
-                        <td className="px-4 py-3 font-bold text-slate-800">Rp {p.amount.toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3 text-xs">{p.payment_method}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            p.verification_status === 'VERIFIED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : p.verification_status === 'PENDING'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {p.verification_status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
-                          {p.verified_by || '-'}
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* TAB 5: SAVINGS */}
+        {/* TAB 6: SAVINGS (KOPERASI CRUD) */}
         {activeTab === 'savings' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800">Mutasi Simpanan Koperasi</h2>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Catatan Simpanan Koperasi</h2>
+                <p className="text-xs text-indigo-600 font-bold">Total Dana: Rp {stats.totalSimpanan.toLocaleString('id-ID')}</p>
+              </div>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setIsSavingModalOpen(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                >
+                  + Catat Simpanan Manual
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
                   <tr>
-                    <th className="px-4 py-3">ID Simpanan</th>
-                    <th className="px-4 py-3">Anggota</th>
+                    <th className="px-4 py-3">ID</th>
+                    <th className="px-4 py-3">Nama Anggota</th>
                     <th className="px-4 py-3">Jenis Simpanan</th>
                     <th className="px-4 py-3">Jumlah</th>
                     <th className="px-4 py-3">Waktu</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {savings.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">Belum ada transaksi simpanan tercatat.</td>
+                  {savings.map(s => (
+                    <tr key={s.saving_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono text-xs">{s.saving_id}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
+                      <td className="px-4 py-3 text-xs">{s.saving_type}</td>
+                      <td className="px-4 py-3 font-bold text-indigo-600">Rp {s.amount.toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{new Date(s.created_at).toLocaleString('id-ID')}</td>
                     </tr>
-                  ) : (
-                    savings.map(s => (
-                      <tr key={s.saving_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs">{s.saving_id}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
-                        <td className="px-4 py-3 text-xs">{s.saving_type}</td>
-                        <td className="px-4 py-3 font-bold text-indigo-600">Rp {s.amount.toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{new Date(s.created_at).toLocaleString('id-ID')}</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* TAB 6: REPORTS */}
+        {/* TAB 7: REPORTS */}
         {activeTab === 'reports' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -448,28 +824,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {salesReports.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">Belum ada laporan omzet masuk.</td>
+                  {salesReports.map(rep => (
+                    <tr key={rep.sales_report_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-bold text-emerald-600">{rep.stand_code}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{rep.member_name}</td>
+                      <td className="px-4 py-3 text-xs">{rep.event_title}</td>
+                      <td className="px-4 py-3 text-xs">{rep.report_date}</td>
+                      <td className="px-4 py-3 font-bold text-slate-800">Rp {rep.total_turnover.toLocaleString('id-ID')}</td>
                     </tr>
-                  ) : (
-                    salesReports.map(rep => (
-                      <tr key={rep.sales_report_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-bold text-emerald-600">{rep.stand_code}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{rep.member_name}</td>
-                        <td className="px-4 py-3 text-xs">{rep.event_title}</td>
-                        <td className="px-4 py-3 text-xs">{rep.report_date}</td>
-                        <td className="px-4 py-3 font-bold text-slate-800">Rp {rep.total_turnover.toLocaleString('id-ID')}</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* TAB 7: AUDIT TRAIL */}
+        {/* TAB 8: AUDIT TRAIL */}
         {activeTab === 'audit' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -487,33 +857,403 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-xs">
-                  {auditLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400 font-sans">Belum ada aktivitas tercatat.</td>
+                  {auditLogs.map(log => (
+                    <tr key={log.log_id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{log.timestamp_wita}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800 font-sans">{log.actor_name}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{log.actor_role}</span>
+                      </td>
+                      <td className="px-4 py-3 text-emerald-700 font-bold">{log.action}</td>
+                      <td className="px-4 py-3 text-slate-600 font-sans">{log.details}</td>
                     </tr>
-                  ) : (
-                    auditLogs.map(log => (
-                      <tr key={log.log_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{log.timestamp_wita}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800 font-sans">{log.actor_name}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                            {log.actor_role}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-emerald-700 font-bold">{log.action}</td>
-                        <td className="px-4 py-3 text-slate-600 font-sans">{log.details}</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
+
       </div>
 
-      {/* Modal Detail Verifikasi Pembayaran */}
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH / EDIT MEMBER */}
+      {/* -------------------------------------------------- */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingMember ? 'Edit Data Anggota' : 'Tambah Anggota Baru'}
+            </h3>
+            <form onSubmit={handleSaveMember} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nomor Induk Kependudukan (NIK)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="16 digit NIK"
+                  value={memberForm.nik}
+                  onChange={e => setMemberForm({ ...memberForm, nik: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nama sesuai KTP"
+                  value={memberForm.nama_lengkap}
+                  onChange={e => setMemberForm({ ...memberForm, nama_lengkap: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama Usaha UMKM</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Dapur Selera Berau"
+                  value={memberForm.nama_usaha}
+                  onChange={e => setMemberForm({ ...memberForm, nama_usaha: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Kategori Usaha</label>
+                <select
+                  value={memberForm.kategori_usaha}
+                  onChange={e => setMemberForm({ ...memberForm, kategori_usaha: e.target.value as StandCategory })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="KULINER">KULINER</option>
+                  <option value="KERAJINAN">KERAJINAN</option>
+                  <option value="FASHION">FASHION</option>
+                  <option value="JASA">JASA</option>
+                  <option value="UMUM">UMUM</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Nomor HP / WA</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="08xxxxxxxxxx"
+                    value={memberForm.nomor_hp}
+                    onChange={e => setMemberForm({ ...memberForm, nomor_hp: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Email</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="nama@email.com"
+                    value={memberForm.email}
+                    onChange={e => setMemberForm({ ...memberForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Alamat di Berau</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Kecamatan / Kelurahan"
+                  value={memberForm.alamat}
+                  onChange={e => setMemberForm({ ...memberForm, alamat: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Data
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH / EDIT EVENT */}
+      {/* -------------------------------------------------- */}
+      {isEventModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingEvent ? 'Edit Acara' : 'Tambah Acara Baru'}
+            </h3>
+            <form onSubmit={handleSaveEvent} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Judul Event</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Banuarasa Edisi Lebaran"
+                  value={eventForm.title}
+                  onChange={e => setEventForm({ ...eventForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Deskripsi Ringkas</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={eventForm.description}
+                  onChange={e => setEventForm({ ...eventForm, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                ></textarea>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Tanggal Event (YYYY-MM-DD)</label>
+                <input
+                  type="date"
+                  required
+                  value={eventForm.event_date}
+                  onChange={e => setEventForm({ ...eventForm, event_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Mulai (WITA)</label>
+                  <input
+                    type="time"
+                    required
+                    value={eventForm.start_time}
+                    onChange={e => setEventForm({ ...eventForm, start_time: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Selesai (WITA)</label>
+                  <input
+                    type="time"
+                    required
+                    value={eventForm.end_time}
+                    onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Lokasi</label>
+                <input
+                  type="text"
+                  required
+                  value={eventForm.location}
+                  onChange={e => setEventForm({ ...eventForm, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Status Event</label>
+                  <select
+                    value={eventForm.status}
+                    onChange={e => setEventForm({ ...eventForm, status: e.target.value as EventStatus })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="UPCOMING">UPCOMING</option>
+                    <option value="ONGOING">ONGOING</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="CANCELLED">CANCELLED</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Kapasitas Stand</label>
+                  <input
+                    type="number"
+                    required
+                    value={eventForm.total_stands}
+                    onChange={e => setEventForm({ ...eventForm, total_stands: Number(e.target.value) || 64 })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEventModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Acara
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH STAND BARU */}
+      {/* -------------------------------------------------- */}
+      {isStandModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">Tambah Master Stand</h3>
+            <form onSubmit={handleSaveStand} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Kode Stand</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: B-15 atau K-01"
+                  value={standForm.stand_code}
+                  onChange={e => setStandForm({ ...standForm, stand_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Zona Stand</label>
+                <select
+                  value={standForm.zone}
+                  onChange={e => setStandForm({ ...standForm, zone: e.target.value as StandZone })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="ZONA_A">ZONA_A (Utama)</option>
+                  <option value="ZONA_B">ZONA_B (Kuliner)</option>
+                  <option value="ZONA_C">ZONA_C (Kriya & Fashion)</option>
+                  <option value="TENGAH">TENGAH (Atrium)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Kategori Stand</label>
+                <select
+                  value={standForm.category}
+                  onChange={e => setStandForm({ ...standForm, category: e.target.value as StandCategory })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="KULINER">KULINER</option>
+                  <option value="KERAJINAN">KERAJINAN</option>
+                  <option value="FASHION">FASHION</option>
+                  <option value="UMUM">UMUM</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Harga Sewa Stand (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={standForm.base_price}
+                  onChange={e => setStandForm({ ...standForm, base_price: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsStandModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Stand
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH SIMPANAN KOPERASI MANUAL */}
+      {/* -------------------------------------------------- */}
+      {isSavingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">Catat Simpanan Anggota</h3>
+            <form onSubmit={handleSaveSaving} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Pilih Anggota</label>
+                <select
+                  required
+                  value={savingForm.member_id}
+                  onChange={e => setSavingForm({ ...savingForm, member_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="">-- Pilih Anggota --</option>
+                  {members.map(m => (
+                    <option key={m.member_id} value={m.member_id}>
+                      {m.nama_lengkap} ({m.member_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Jenis Simpanan</label>
+                <select
+                  value={savingForm.saving_type}
+                  onChange={e => setSavingForm({ ...savingForm, saving_type: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="SIMPANAN_POKOK">Simpanan Pokok (Awal Masuk)</option>
+                  <option value="SIMPANAN_WAJIB">Simpanan Wajib (Bulanan)</option>
+                  <option value="SIMPANAN_SUKARELA">Simpanan Sukarela</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={savingForm.amount}
+                  onChange={e => setSavingForm({ ...savingForm, amount: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSavingModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Transaksi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: VERIFIKASI PEMBAYARAN */}
+      {/* -------------------------------------------------- */}
       {selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl">
