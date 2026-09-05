@@ -26,6 +26,7 @@ export interface Member {
   status_keanggotaan: MembershipStatus;
   tipe_keanggotaan?: KoperasiMembershipCategory; // 'KOPERASI' (default) atau 'PASAR_ONLY' (hanya anggota Banuarasa Weekend Market)
   status_koperasi?: KoperasiStatus; // 'AKTIF' atau 'BELUM_AKTIF'
+  is_cooperative_member?: boolean; // true: Anggota Koperasi (kewajiban simpanan pokok & wajib), false: Bukan Anggota Koperasi (hanya pasar)
   tanggal_bergabung: string;
   password_hash?: string;
   password?: string;
@@ -187,6 +188,31 @@ export interface Saving {
   period_month_year: string; // e.g. "2026-08"
   notes?: string;
   created_at: string;
+}
+
+export interface CooperativeSettings {
+  simpanan_pokok_total: number; // default: 100000
+  simpanan_pokok_cicilan: number; // default: 20000 per cicilan
+  simpanan_wajib_per_bulan: number; // default: 25000
+  nama_koperasi: string;
+  keterangan?: string;
+  updated_at: string;
+}
+
+export interface MemberSavingsSummary {
+  isCooperativeMember: boolean;
+  targetSimpananPokok: number;
+  simpananPokokTerbayar: number;
+  sisaSimpananPokok: number;
+  jumlahCicilanPokokTerbayar: number;
+  targetCicilanPokokNominal: number;
+  totalCicilanPokokDibutuhkan: number;
+  targetSimpananWajibPerBulan: number;
+  totalSimpananWajibTerbayar: number;
+  bulanSimpananWajibCount: number;
+  isWajibCurrentMonthPaid: boolean;
+  simpananSukarela: number;
+  totalSimpanan: number;
 }
 
 export interface Announcement {
@@ -361,6 +387,7 @@ export interface MemberCardDesignConfig {
 
 export interface KoperasiConfig {
   simpanan_pokok_nominal: number; // default e.g. 100000
+  simpanan_pokok_cicilan_nominal?: number; // default e.g. 20000 per cicilan
   simpanan_wajib_nominal: number; // default e.g. 25000
   nama_koperasi: string;
   nama_bank: string;

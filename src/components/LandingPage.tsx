@@ -39,7 +39,10 @@ import {
   Check,
   Palette,
   RefreshCw,
+  Crown,
 } from 'lucide-react';
+import { EDITORIAL_TOPICS, EditorialTopic } from '../data/editorialTopics';
+import { EditorialDetailModal } from './EditorialDetailModal';
 
 interface LandingPageProps {
   onOpenAuthModal: (mode: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
@@ -72,7 +75,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [hoveredStand, setHoveredStand] = useState<string | null>(null);
   const [activeGastronomyTab, setActiveGastronomyTab] = useState<'FOOD' | 'STORY' | 'PEOPLE' | 'EXPERIENCE'>('FOOD');
   const [bannerTheme, setBannerTheme] = useState<'EMERALD' | 'GOLD' | 'TERATAI' | 'MARITIME'>('EMERALD');
+  const [activeEditorial, setActiveEditorial] = useState<EditorialTopic | null>(null);
   const [version, setVersion] = useState(0);
+
+  const openEditorial = (topicId: string) => {
+    const topic = EDITORIAL_TOPICS[topicId];
+    if (topic) {
+      setActiveEditorial(topic);
+    }
+  };
+
+  const handleEditorialAction = (actionType?: string) => {
+    switch (actionType) {
+      case 'SCROLL_STAND':
+        scrollToStandDisplay();
+        break;
+      case 'AUTH_LOGIN':
+        onOpenAuthModal('MEMBER_LOGIN');
+        break;
+      case 'AUTH_REGISTER':
+        onOpenAuthModal('REGISTER');
+        break;
+      case 'OPEN_GOOGLE':
+        onOpenGoogleModal();
+        break;
+      case 'SPLASH_BARA':
+        if (onOpenSplashIntro) onOpenSplashIntro();
+        break;
+      default:
+        break;
+    }
+  };
 
   useEffect(() => {
     const unsub = storage.subscribe(() => {
@@ -140,6 +173,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
     } else {
       onOpenAuthModal('MEMBER_LOGIN');
+    }
+  };
+
+  const scrollToStandDisplay = () => {
+    const el = document.getElementById('fitur-display-pendaftaran-stand');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      handleBookingClick();
     }
   };
 
@@ -299,13 +341,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Headline with Brand and Slogan */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-lg shadow-amber-500/20">
+            {/* Ucapan Selamat Datang di Wisata Gastronomi Kabupaten Berau */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-teal-500/20 border border-amber-400/50 text-amber-300 text-xs sm:text-sm font-black shadow-sm">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+              <span>Selamat Datang di Wisata Gastronomi Kabupaten Berau</span>
+            </div>
+
+            {/* Headline with Logo Banuarasa & Tagline: Rasa Lokal Cerita Global */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3.5 sm:gap-4">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-xl shadow-amber-500/20 flex items-center justify-center">
                   <img
                     src={branding.logoUrl || BANUARASA_ASSETS.logo}
-                    alt={branding.logoAlt || 'Logo Banua Rasa Weekend Market'}
+                    alt={branding.logoAlt || 'Logo Resmi Banuarasa Weekend Market'}
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
@@ -321,88 +369,207 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </h2>
                 </div>
               </div>
-              <div className="flex items-center flex-wrap gap-2 pt-1">
-                <span className="text-amber-400 font-extrabold text-sm sm:text-base tracking-wide">
-                  "{branding.tagline || 'Rasa Lokal, Cerita Global'}"
-                </span>
-                <span className="text-slate-500">•</span>
+
+              {/* Tagline: Rasa Lokal Cerita Global */}
+              <div className="flex items-center flex-wrap gap-2 pt-0.5">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-emerald-500/20 border border-amber-400/50 rounded-xl shadow-xs">
+                  <span className="text-xs font-bold text-slate-300">Tagline:</span>
+                  <span className="text-amber-300 font-black text-sm sm:text-base tracking-wide">
+                    "{branding.tagline || 'Rasa Lokal, Cerita Global'}"
+                  </span>
+                </div>
+                <span className="text-slate-500 hidden sm:inline">•</span>
                 <span className="text-slate-300 text-xs sm:text-sm font-medium">
                   {branding.subTagline || 'Ekosistem 64 Stand Kuliner, Seni & Budaya'}
                 </span>
               </div>
             </div>
 
-            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed max-w-xl">
-              {currentEvent.description || 'Pengalaman wisata gastronomi autentik yang menggabungkan cita rasa tradisional khas Berau, narasi budaya, interaksi langsung dengan pelaku UMKM, serta sistem reservasi 64 stand berbasis digital dan sinkronisasi Google Workspace.'}
+            {/* Quick Helper Subtitle */}
+            <p className="text-slate-300 text-xs sm:text-sm font-medium">
+              Pasar mingguan 64 stand kuliner autentik & kriya khas Berau. Ketuk tombol ikon lingkaran di bawah untuk membuka panduan & redaksi lengkap:
             </p>
 
-            {/* Mascot Bara Banner Card with shoot-2 and Mascot Icon */}
-            <div className="bg-slate-800/90 border border-amber-400/40 rounded-2xl p-4 flex items-center gap-4 max-w-lg shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
-              <div className="relative w-14 h-14 rounded-2xl overflow-hidden border-2 border-amber-400 shrink-0 bg-emerald-950 shadow-md">
-                <img
-                  src={branding.mascotUrl || BARA_ASSETS.mascot}
-                  alt="Bara Maskot"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
-                  }}
-                />
+            {/* PUSAT MENU IKON LINGKARAN (DOMINAN CIRCULAR ICONS & SHORT TITLES FOR BEGINNERS) */}
+            <div className="bg-slate-950/70 border border-slate-700/80 rounded-3xl p-4 sm:p-5 backdrop-blur-md shadow-2xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                  Pusat Informasi Cepat
+                </span>
+                <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700">
+                  Ketuk Ikon untuk Membaca
+                </span>
               </div>
-              <div className="space-y-1 relative z-10 flex-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-amber-300">Hai, Saya BARA!</span>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/30 text-emerald-200 rounded-md font-bold border border-emerald-500/40">
-                      Maskot Resmi
-                    </span>
+
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3">
+                {/* 1. Pesan Stand */}
+                <button
+                  type="button"
+                  id="btn-circle-pesan-stand"
+                  onClick={() => openEditorial('pesan-stand')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Panduan Pendaftaran Stand"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500 border-2 border-emerald-400/60 group-hover:border-emerald-300 text-emerald-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-emerald-500/30 transition-all">
+                    <Store className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  {onOpenSplashIntro && (
-                    <button
-                      onClick={onOpenSplashIntro}
-                      className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
-                    >
-                      Buka Sambutan
-                    </button>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-300 leading-snug">
-                  "Yuk nikmati kuliner khas Berau, pelajari filosofi masakan daerah, dan dukung 64 stand UMKM lokal binaan kami!"
-                </p>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Pesan Stand
+                  </span>
+                </button>
+
+                {/* 2. Gastronomi */}
+                <button
+                  type="button"
+                  id="btn-circle-gastronomi"
+                  onClick={() => openEditorial('wisata-gastronomi')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Makna Wisata Gastronomi"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500/20 group-hover:bg-amber-500 border-2 border-amber-400/60 group-hover:border-amber-300 text-amber-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-amber-500/30 transition-all">
+                    <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Gastronomi
+                  </span>
+                </button>
+
+                {/* 3. Maskot Bara */}
+                <button
+                  type="button"
+                  id="btn-circle-maskot-bara"
+                  onClick={() => openEditorial('maskot-bara')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Cerita Maskot BARA"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-rose-500/20 group-hover:bg-rose-500 border-2 border-rose-400/60 group-hover:border-rose-300 text-rose-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-rose-500/30 transition-all">
+                    <Smile className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Maskot Bara
+                  </span>
+                </button>
+
+                {/* 4. Koperasi */}
+                <button
+                  type="button"
+                  id="btn-circle-koperasi"
+                  onClick={() => openEditorial('koperasi-berau')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Koperasi Berau Melangkah Bersama"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500/20 group-hover:bg-blue-500 border-2 border-blue-400/60 group-hover:border-blue-300 text-blue-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-blue-500/30 transition-all">
+                    <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Koperasi
+                  </span>
+                </button>
+
+                {/* 5. Jadwal & Rute */}
+                <button
+                  type="button"
+                  id="btn-circle-jadwal"
+                  onClick={() => openEditorial('jadwal-lokasi')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Jadwal & Panduan Rute"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-purple-500/20 group-hover:bg-purple-500 border-2 border-purple-400/60 group-hover:border-purple-300 text-purple-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-purple-500/30 transition-all">
+                    <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Jadwal
+                  </span>
+                </button>
+
+                {/* 6. Google Cloud */}
+                <button
+                  type="button"
+                  id="btn-circle-google-cloud"
+                  onClick={() => openEditorial('google-cloud')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Integrasi Google Cloud & Spreadsheet"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-teal-500/20 group-hover:bg-teal-500 border-2 border-teal-400/60 group-hover:border-teal-300 text-teal-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-teal-500/30 transition-all">
+                    <Cloud className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Cloud Hub
+                  </span>
+                </button>
+
+                {/* 7. Katalog UMKM */}
+                <button
+                  type="button"
+                  id="btn-circle-katalog"
+                  onClick={() => openEditorial('katalog-umkm')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Katalog Produk UMKM"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500/20 group-hover:bg-orange-500 border-2 border-orange-400/60 group-hover:border-orange-300 text-orange-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-orange-500/30 transition-all">
+                    <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Katalog
+                  </span>
+                </button>
+
+                {/* 8. Panduan Pemula */}
+                <button
+                  type="button"
+                  id="btn-circle-panduan"
+                  onClick={() => openEditorial('panduan-pemula')}
+                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
+                  title="Buka Redaksi Panduan Pemula 3 Langkah"
+                >
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-indigo-500/20 group-hover:bg-indigo-500 border-2 border-indigo-400/60 group-hover:border-indigo-300 text-indigo-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-indigo-500/30 transition-all">
+                    <HelpCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
+                    Panduan
+                  </span>
+                </button>
               </div>
             </div>
           </div>
 
           {/* Call to Actions */}
-          <div className="pt-6 sm:pt-8 flex flex-wrap items-center gap-3 relative z-10 border-t border-slate-800/80 mt-6">
+          <div className="pt-5 sm:pt-6 flex flex-wrap items-center gap-3 relative z-10 border-t border-slate-800/80 mt-5">
             {currentUser?.role === 'MEMBER' || currentMember ? (
               <>
                 <button
                   id="btn-hero-book"
                   onClick={() => handleBookingClick()}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <Store className="w-4 h-4" />
-                  <span>Pesan Stand Event Sekarang</span>
+                  <div className="w-6 h-6 rounded-full bg-slate-950/20 flex items-center justify-center">
+                    <Store className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Pesan Stand Sekarang</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
                 <button
                   id="btn-hero-dashboard"
                   onClick={() => onNavigateTab && onNavigateTab('member-dashboard')}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
                 >
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <span>Dashboard Anggota Saya</span>
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Dashboard Saya</span>
                 </button>
 
                 {onOpenBarcodeModal && (
                   <button
                     id="btn-hero-barcode"
                     onClick={() => onOpenBarcodeModal(currentMember)}
-                    className="px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs sm:text-sm rounded-xl border border-amber-500/40 flex items-center gap-2 transition-all cursor-pointer"
+                    className="px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs sm:text-sm rounded-2xl border border-amber-500/40 flex items-center gap-2 transition-all cursor-pointer"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-300">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </div>
                     <span>Barcode KTA</span>
                   </button>
                 )}
@@ -412,40 +579,60 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <button
                   id="btn-hero-admin-manage"
                   onClick={() => onNavigateTab && onNavigateTab('admin-dashboard')}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <ShieldCheck className="w-4 h-4 text-purple-200" />
-                  <span>Buka Dashboard Super Admin</span>
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Admin Koperasi</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
                 <button
                   id="btn-hero-book-admin"
                   onClick={() => handleBookingClick()}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
                 >
-                  <Store className="w-4 h-4 text-emerald-400" />
-                  <span>Kelola Denah 64 Stand</span>
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Store className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Kelola 64 Stand</span>
                 </button>
               </>
             ) : (
               <>
                 <button
+                  id="btn-hero-view-stands"
+                  onClick={scrollToStandDisplay}
+                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <div className="w-6 h-6 rounded-full bg-slate-950/20 flex items-center justify-center">
+                    <Store className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Pilih & Pesan Stand 64</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
                   id="btn-hero-login"
                   onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
                 >
-                  <span>Masuk Akun UMKM</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+                    <Users className="w-3.5 h-3.5 text-slate-300" />
+                  </div>
+                  <span>Masuk Akun</span>
                 </button>
 
                 <button
                   id="btn-hero-register"
                   onClick={() => onOpenAuthModal('REGISTER')}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
+                  className="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-emerald-300 font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
                 >
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <span>Daftar UMKM Baru</span>
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  </div>
+                  <span>Daftar UMKM</span>
                 </button>
               </>
             )}
@@ -495,10 +682,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Mulai Rp35.000 / Hari
               </span>
               <button
-                onClick={() => handleBookingClick()}
+                onClick={() => {
+                  const el = document.getElementById('fitur-display-pendaftaran-stand');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    handleBookingClick();
+                  }
+                }}
                 className="text-xs font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
               >
-                <span>Pilih Stand Anda</span>
+                <span>Lihat Denah & Pilih Stand</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -537,195 +731,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 2. MASKOT BARA & GASTRONOMI BERAU HIGHLIGHT SECTION */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 lg:p-10 border border-emerald-800/40 shadow-xl overflow-hidden relative">
-        {/* Left: Bara Profile & Costume Details (5 Cols) */}
-        <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-400/20 text-amber-300 rounded-full text-xs font-bold border border-amber-400/30">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              <span>Maskot Resmi Banuarasa</span>
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight">
-              Kenalan dengan <span className="text-amber-400">BARA</span>
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Si Kerang Laut dari Kalimantan Timur yang cinta seni, budaya, dan kreativitas. Mengenakan pakaian tradisi masyarakat Berau yang menggabungkan unsur budaya <strong>Bajau, Banua, & Dayak</strong> dengan motif khas emas-hijau.
-            </p>
-          </div>
-
-          {/* Bara Traits List */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-1">
-              <div className="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
-                🐚
-              </div>
-              <h5 className="font-bold text-amber-300 text-xs">Simbol Kelautan</h5>
-              <p className="text-[11px] text-slate-300">Kekayaan alam maritim pesisir Berau Kaltim.</p>
-            </div>
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-1">
-              <div className="w-7 h-7 rounded-lg bg-emerald-400/20 text-emerald-400 flex items-center justify-center font-bold">
-                ✨
-              </div>
-              <h5 className="font-bold text-emerald-300 text-xs">Kearifan Lokal</h5>
-              <p className="text-[11px] text-slate-300">Motif etnik Banua, Bajau & Dayak.</p>
-            </div>
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-1">
-              <div className="w-7 h-7 rounded-lg bg-blue-400/20 text-blue-400 flex items-center justify-center font-bold">
-                🤝
-              </div>
-              <h5 className="font-bold text-blue-300 text-xs">Kolaborasi UMKM</h5>
-              <p className="text-[11px] text-slate-300">Mewakili kebersamaan & gotong royong.</p>
-            </div>
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 space-y-1">
-              <div className="w-7 h-7 rounded-lg bg-rose-400/20 text-rose-400 flex items-center justify-center font-bold">
-                💛
-              </div>
-              <h5 className="font-bold text-rose-300 text-xs">Sahabat Wisata</h5>
-              <p className="text-[11px] text-slate-300">Menyapa & memandu di setiap weekend.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Center/Right: Bara Image & 4 Pilar Gastronomi (7 Cols) */}
-        <div className="lg:col-span-7 bg-slate-900/90 border border-emerald-500/30 rounded-3xl p-6 sm:p-7 flex flex-col justify-between space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-            <div>
-              <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider">
-                Konsep Wisata Berbasis Pengalaman
-              </span>
-              <h4 className="text-lg sm:text-xl font-black text-white mt-0.5">
-                4 Elemen Gastronomi Banuarasa
-              </h4>
-            </div>
-
-            {/* UNWTO Badge */}
-            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-[10px] font-bold">
-              Standar Gastronomy Tourism UNWTO
-            </span>
-          </div>
-
-          {/* Interactive 4 Pillars Tabs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              onClick={() => setActiveGastronomyTab('FOOD')}
-              className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                activeGastronomyTab === 'FOOD'
-                  ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Utensils className="w-4 h-4 text-amber-300" />
-              <span className="text-xs font-black">1. Food</span>
-              <span className="text-[9px] opacity-80">Kuliner Khas</span>
-            </button>
-
-            <button
-              onClick={() => setActiveGastronomyTab('STORY')}
-              className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                activeGastronomyTab === 'STORY'
-                  ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <BookMarked className="w-4 h-4 text-amber-300" />
-              <span className="text-xs font-black">2. Story</span>
-              <span className="text-[9px] opacity-80">Narasi Budaya</span>
-            </button>
-
-            <button
-              onClick={() => setActiveGastronomyTab('PEOPLE')}
-              className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                activeGastronomyTab === 'PEOPLE'
-                  ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4 text-amber-300" />
-              <span className="text-xs font-black">3. People</span>
-              <span className="text-[9px] opacity-80">Pelaku UMKM</span>
-            </button>
-
-            <button
-              onClick={() => setActiveGastronomyTab('EXPERIENCE')}
-              className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                activeGastronomyTab === 'EXPERIENCE'
-                  ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Compass className="w-4 h-4 text-amber-300" />
-              <span className="text-xs font-black">4. Experience</span>
-              <span className="text-[9px] opacity-80">Interaksi Nyata</span>
-            </button>
-          </div>
-
-          {/* Pillar Content Description */}
-          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-2 text-xs">
-            {activeGastronomyTab === 'FOOD' && (
-              <div className="space-y-1.5 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm">
-                  <Utensils className="w-4 h-4" />
-                  <span>Food (Kuliner Autentik)</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  Makanan khas daerah yang menjadi representasi cita rasa lokal Kabupaten Berau. Menggunakan bahan alam lokal, rempah pesisir, serta teknik dan resep turun-temurun yang mencerminkan kearifan lokal. Kuliner sebagai daya tarik utama wisata.
-                </p>
-              </div>
-            )}
-
-            {activeGastronomyTab === 'STORY' && (
-              <div className="space-y-1.5 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm">
-                  <BookMarked className="w-4 h-4" />
-                  <span>Story (Narasi & Budaya)</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  Cerita di balik setiap hidangan: asal-usul, filosofi adat Banua, Bajau, & Dayak, hingga nilai sosial yang melekat. Wisatawan diajak memahami makna lebih dalam dari sekadar mencicipi makanan. Kuliner sebagai media narasi budaya.
-                </p>
-              </div>
-            )}
-
-            {activeGastronomyTab === 'PEOPLE' && (
-              <div className="space-y-1.5 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm">
-                  <Users className="w-4 h-4" />
-                  <span>People (Pelaku & Penjaga Identitas Rasa)</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  Pelaku utama di balik kuliner: UMKM, juru masak lokal, nelayan, petani, hingga tetua adat yang merawat dan mewariskan tradisi kuliner Berau. Seluruhnya terkoordinir dalam keanggotaan Koperasi Berau Melangkah Bersama.
-                </p>
-              </div>
-            )}
-
-            {activeGastronomyTab === 'EXPERIENCE' && (
-              <div className="space-y-1.5 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 text-amber-400 font-extrabold text-sm">
-                  <Compass className="w-4 h-4" />
-                  <span>Experience (Interaksi & Keterlibatan Langsung)</span>
-                </div>
-                <p className="text-slate-300 leading-relaxed">
-                  Keterlibatan langsung wisatawan: menyaksikan live cooking kuliner khas, food tasting, mini cooking class, meet the maker (berbincang dengan pelaku UMKM), hingga pertunjukan musik etnik tradisional di area 64 stand.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Wisata Gastronomi vs Wisata Kuliner Callout */}
-          <div className="bg-emerald-950/70 border border-emerald-700/50 rounded-2xl p-3.5 flex items-start gap-3 text-xs">
-            <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <p className="text-emerald-200/90 leading-relaxed">
-              <strong className="text-white">Perbedaan Utama:</strong> Jika wisata kuliner berhenti pada <em>"apa yang dimakan"</em>, maka wisata gastronomi Banuarasa melangkah lebih jauh ke <em>"mengapa, bagaimana, dan siapa di balik makanan tersebut."</em>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. INTERACTIVE 64-STAND LAYOUT PREVIEW */}
-      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+      {/* 2. FITUR DISPLAY PENDAFTARAN STAND (64 STAND BANUARASA WEEKEND MARKET) */}
+      <section id="fitur-display-pendaftaran-stand" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-extrabold text-xs tracking-wide shadow-xs flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5" />
+                Fitur Display Pendaftaran Stand
+              </span>
               <h3 className="text-xl font-black text-slate-900">
                 Denah Interaktif 64 Stand Banuarasa Weekend Market
               </h3>
@@ -737,7 +751,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Jadwal Pelaksanaan: <strong className="text-slate-800">{currentEvent.event_date}</strong> ({currentEvent.start_time} - {currentEvent.end_time} WITA) • Lokasi: <strong className="text-slate-800">{currentEvent.location}</strong>
+              Pendaftaran Stand Aktif • Jadwal Pelaksanaan: <strong className="text-slate-800">{currentEvent.event_date}</strong> ({currentEvent.start_time} - {currentEvent.end_time} WITA) • Lokasi: <strong className="text-slate-800">{currentEvent.location}</strong>
             </p>
           </div>
 
@@ -798,6 +812,129 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Kategori 3 (44-54) • Rp35k
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* 3 Kategori Stand Pricing & Benefit Summary Cards (Circular Icons & Short Titles) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Kategori 1 (VIP) */}
+          <div
+            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
+              activeStandFilter === 'VIP'
+                ? 'bg-emerald-50/90 border-emerald-500 shadow-md ring-2 ring-emerald-400/30'
+                : 'bg-slate-50/80 hover:bg-emerald-50/40 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                id="btn-circle-kat1"
+                onClick={() => openEditorial('stand-vip')}
+                className="w-12 h-12 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
+                title="Buka Redaksi Lengkap Kategori 1"
+              >
+                <Crown className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Kategori 1 (VIP)</span>
+                  <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    A - J
+                  </span>
+                </div>
+                <p className="text-[11px] font-extrabold text-emerald-700">Rp50.000 / Hari</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openEditorial('stand-vip')}
+              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              title="Ketuk untuk membaca rincian fasilitas"
+            >
+              <span>Rincian</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Kategori 2 */}
+          <div
+            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
+              activeStandFilter === 'KAT2'
+                ? 'bg-blue-50/90 border-blue-500 shadow-md ring-2 ring-blue-400/30'
+                : 'bg-slate-50/80 hover:bg-blue-50/40 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                id="btn-circle-kat2"
+                onClick={() => openEditorial('stand-kat2')}
+                className="w-12 h-12 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-800 border-2 border-blue-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
+                title="Buka Redaksi Lengkap Kategori 2"
+              >
+                <Store className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Kategori 2 (Reguler)</span>
+                  <span className="text-[10px] font-extrabold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
+                    1 - 43
+                  </span>
+                </div>
+                <p className="text-[11px] font-extrabold text-blue-700">Rp50.000 / Hari</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openEditorial('stand-kat2')}
+              className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-100/70 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              title="Ketuk untuk membaca rincian fasilitas"
+            >
+              <span>Rincian</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Kategori 3 */}
+          <div
+            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
+              activeStandFilter === 'KAT3'
+                ? 'bg-amber-50/90 border-amber-500 shadow-md ring-2 ring-amber-400/30'
+                : 'bg-slate-50/80 hover:bg-amber-50/40 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                id="btn-circle-kat3"
+                onClick={() => openEditorial('stand-kat3')}
+                className="w-12 h-12 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border-2 border-amber-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
+                title="Buka Redaksi Lengkap Kategori 3"
+              >
+                <Coffee className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Kategori 3 (Subsidi)</span>
+                  <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                    44 - 54
+                  </span>
+                </div>
+                <p className="text-[11px] font-extrabold text-amber-700">Rp35.000 / Hari</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openEditorial('stand-kat3')}
+              className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-100/70 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              title="Ketuk untuk membaca rincian fasilitas"
+            >
+              <span>Rincian</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -946,6 +1083,245 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <span>{currentUser ? 'Pesan Stand 64 Sekarang' : 'Masuk untuk Memesan Stand'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
+        </div>
+      </section>
+
+      {/* 3. MASKOT BARA & GASTRONOMI BERAU HIGHLIGHT SECTION (CIRCULAR ICONS & PROGRESSIVE DISCLOSURE) */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 lg:p-10 border border-emerald-800/40 shadow-xl overflow-hidden relative">
+        {/* Left: Bara Profile & Circular Traits (5 Cols) */}
+        <div className="lg:col-span-5 flex flex-col justify-between space-y-5">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-400/20 text-amber-300 rounded-full text-xs font-bold border border-amber-400/30">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span>Maskot Resmi Banuarasa</span>
+              </div>
+              {onOpenSplashIntro && (
+                <button
+                  onClick={onOpenSplashIntro}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                >
+                  Buka Sambutan
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 shrink-0 bg-emerald-950 shadow-md">
+                <img
+                  src={branding.mascotUrl || BARA_ASSETS.mascot}
+                  alt="Bara Maskot"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                  Kenalan dengan <span className="text-amber-400">BARA</span>
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Si Kerang Laut Kalimantan Timur. Ketuk ikon lingkaran untuk membaca filosofi:
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bara 4 Traits Circular Icon Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3">
+            <button
+              type="button"
+              id="btn-circle-bara-maritim"
+              onClick={() => openEditorial('bara-maritim')}
+              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
+              title="Ketuk untuk membaca rincian Simbol Kelautan"
+            >
+              <div className="w-10 h-10 rounded-full bg-amber-400/20 group-hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
+                🐚
+              </div>
+              <div className="min-w-0">
+                <h5 className="font-black text-white text-xs group-hover:text-amber-300 transition-colors truncate">
+                  Kelautan
+                </h5>
+                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="btn-circle-bara-etnik"
+              onClick={() => openEditorial('bara-etnik')}
+              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
+              title="Ketuk untuk membaca rincian Kearifan Lokal"
+            >
+              <div className="w-10 h-10 rounded-full bg-emerald-400/20 group-hover:bg-emerald-400/30 border border-emerald-400/40 text-emerald-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
+                ✨
+              </div>
+              <div className="min-w-0">
+                <h5 className="font-black text-white text-xs group-hover:text-emerald-300 transition-colors truncate">
+                  Kearifan Etnik
+                </h5>
+                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="btn-circle-bara-kolaborasi"
+              onClick={() => openEditorial('bara-kolaborasi')}
+              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
+              title="Ketuk untuk membaca rincian Kolaborasi UMKM"
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-400/20 group-hover:bg-blue-400/30 border border-blue-400/40 text-blue-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
+                🤝
+              </div>
+              <div className="min-w-0">
+                <h5 className="font-black text-white text-xs group-hover:text-blue-300 transition-colors truncate">
+                  Kolaborasi
+                </h5>
+                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="btn-circle-bara-sahabat"
+              onClick={() => openEditorial('bara-sahabat')}
+              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-rose-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
+              title="Ketuk untuk membaca rincian Sahabat Wisata"
+            >
+              <div className="w-10 h-10 rounded-full bg-rose-400/20 group-hover:bg-rose-400/30 border border-rose-400/40 text-rose-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
+                💛
+              </div>
+              <div className="min-w-0">
+                <h5 className="font-black text-white text-xs group-hover:text-rose-300 transition-colors truncate">
+                  Sahabat Wisata
+                </h5>
+                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Right: 4 Pilar Gastronomi Circular Icon Buttons (7 Cols) */}
+        <div className="lg:col-span-7 bg-slate-900/90 border border-emerald-500/30 rounded-3xl p-6 sm:p-7 flex flex-col justify-between space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider">
+                Konsep Berbasis Pengalaman
+              </span>
+              <h4 className="text-lg sm:text-xl font-black text-white mt-0.5">
+                4 Elemen Gastronomi Banuarasa
+              </h4>
+            </div>
+
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-[10px] font-bold">
+              Standar UNWTO
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300">
+            Ketuk ikon lingkaran pilar di bawah untuk membuka redaksi filosofi & rincian:
+          </p>
+
+          {/* 4 Pilar Circular Icon Buttons */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Pilar 1: Food */}
+            <button
+              type="button"
+              id="btn-circle-pilar-food"
+              onClick={() => openEditorial('pilar-food')}
+              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-amber-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
+              title="Ketuk untuk membaca redaksi lengkap Pilar Food"
+            >
+              <div className="w-12 h-12 rounded-full bg-amber-500/20 group-hover:bg-amber-500 border-2 border-amber-400/50 group-hover:border-amber-300 text-amber-300 group-hover:text-slate-950 flex items-center justify-center transition-all group-hover:scale-110">
+                <Utensils className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-black text-white group-hover:text-amber-300 transition-colors">
+                1. Food
+              </span>
+              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
+                Kuliner Autentik
+              </span>
+            </button>
+
+            {/* Pilar 2: Story */}
+            <button
+              type="button"
+              id="btn-circle-pilar-story"
+              onClick={() => openEditorial('pilar-story')}
+              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-emerald-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
+              title="Ketuk untuk membaca redaksi lengkap Pilar Story"
+            >
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500 border-2 border-emerald-400/50 group-hover:border-emerald-300 text-emerald-300 group-hover:text-slate-950 flex items-center justify-center transition-all group-hover:scale-110">
+                <BookMarked className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-black text-white group-hover:text-emerald-300 transition-colors">
+                2. Story
+              </span>
+              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
+                Narasi Budaya
+              </span>
+            </button>
+
+            {/* Pilar 3: People */}
+            <button
+              type="button"
+              id="btn-circle-pilar-people"
+              onClick={() => openEditorial('pilar-people')}
+              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-blue-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
+              title="Ketuk untuk membaca redaksi lengkap Pilar People"
+            >
+              <div className="w-12 h-12 rounded-full bg-blue-500/20 group-hover:bg-blue-500 border-2 border-blue-400/50 group-hover:border-blue-300 text-blue-300 group-hover:text-white flex items-center justify-center transition-all group-hover:scale-110">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-black text-white group-hover:text-blue-300 transition-colors">
+                3. People
+              </span>
+              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
+                Pelaku UMKM
+              </span>
+            </button>
+
+            {/* Pilar 4: Experience */}
+            <button
+              type="button"
+              id="btn-circle-pilar-experience"
+              onClick={() => openEditorial('pilar-experience')}
+              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-purple-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
+              title="Ketuk untuk membaca redaksi lengkap Pilar Experience"
+            >
+              <div className="w-12 h-12 rounded-full bg-purple-500/20 group-hover:bg-purple-500 border-2 border-purple-400/50 group-hover:border-purple-300 text-purple-300 group-hover:text-white flex items-center justify-center transition-all group-hover:scale-110">
+                <Compass className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-black text-white group-hover:text-purple-300 transition-colors">
+                4. Experience
+              </span>
+              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
+                Interaksi Nyata
+              </span>
+            </button>
+          </div>
+
+          {/* Wisata Gastronomi Quick Callout */}
+          <div className="bg-emerald-950/70 border border-emerald-700/50 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Info className="w-4 h-4" />
+              </div>
+              <p className="text-emerald-200/90 leading-relaxed text-[11px] sm:text-xs">
+                Wisata gastronomi menggali makna <em>"mengapa, bagaimana, dan siapa di balik kuliner Berau"</em>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openEditorial('wisata-gastronomi')}
+              className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline whitespace-nowrap cursor-pointer shrink-0"
+            >
+              Pelajari Konsep
+            </button>
+          </div>
         </div>
       </section>
 
@@ -1186,6 +1562,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Progressive Disclosure Editorial Detail Modal */}
+      <EditorialDetailModal
+        topic={activeEditorial}
+        onClose={() => setActiveEditorial(null)}
+        onAction={handleEditorialAction}
+      />
     </div>
   );
 };

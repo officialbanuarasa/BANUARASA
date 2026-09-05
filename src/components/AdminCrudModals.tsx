@@ -54,6 +54,7 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
     email: '',
     alamat_usaha: '',
     status_keanggotaan: 'ACTIVE' as MembershipStatus,
+    tipe_keanggotaan: 'KOPERASI' as 'KOPERASI' | 'PASAR_ONLY',
   });
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
         email: memberToEdit.email,
         alamat_usaha: memberToEdit.alamat_usaha || '',
         status_keanggotaan: memberToEdit.status_keanggotaan,
+        tipe_keanggotaan: memberToEdit.tipe_keanggotaan === 'PASAR_ONLY' ? 'PASAR_ONLY' : 'KOPERASI',
       });
     } else {
       setFormData({
@@ -78,6 +80,7 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
         email: '',
         alamat_usaha: '',
         status_keanggotaan: 'ACTIVE',
+        tipe_keanggotaan: 'KOPERASI',
       });
     }
   }, [memberToEdit, isOpen]);
@@ -86,8 +89,13 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      status_koperasi: (formData.tipe_keanggotaan === 'KOPERASI' ? 'AKTIF' : 'BELUM_AKTIF') as any,
+      is_cooperative_member: formData.tipe_keanggotaan === 'KOPERASI',
+    };
     if (memberToEdit) {
-      const ok = storage.updateMember(memberToEdit.member_id, formData, adminId);
+      const ok = storage.updateMember(memberToEdit.member_id, payload, adminId);
       if (ok) {
         onSaved(`Data anggota ${formData.nama_lengkap} berhasil diperbarui.`);
         onClose();
@@ -95,7 +103,7 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
     } else {
       const newM = storage.addMemberManual(
         {
-          ...formData,
+          ...payload,
           tempat_lahir: 'Berau',
           tanggal_lahir: '1995-01-01',
           jenis_kelamin: 'L',
@@ -221,6 +229,67 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
               <option value="INACTIVE">INACTIVE (Nonaktif)</option>
               <option value="SUSPENDED">SUSPENDED (Ditangguhkan)</option>
             </select>
+          </div>
+
+          <div className="sm:col-span-2 p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+            <label className="block font-black text-emerald-900 mb-1.5 text-xs">
+              Status Keanggotaan Koperasi (KBMB) *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label
+                className={`p-2.5 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                  formData.tipe_keanggotaan === 'KOPERASI'
+                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="tipe_keanggotaan"
+                  value="KOPERASI"
+                  checked={formData.tipe_keanggotaan === 'KOPERASI'}
+                  onChange={() => setFormData({ ...formData, tipe_keanggotaan: 'KOPERASI' })}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="font-black text-xs">Anggota Koperasi Penuh</p>
+                  <p
+                    className={`text-[10px] mt-0.5 ${
+                      formData.tipe_keanggotaan === 'KOPERASI' ? 'text-emerald-100' : 'text-slate-500'
+                    }`}
+                  >
+                    Wajib membayar Simpanan Pokok & Simpanan Wajib bulanan. Berhak atas SHU.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`p-2.5 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                  formData.tipe_keanggotaan === 'PASAR_ONLY'
+                    ? 'bg-slate-800 text-white border-slate-900 shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="tipe_keanggotaan"
+                  value="PASAR_ONLY"
+                  checked={formData.tipe_keanggotaan === 'PASAR_ONLY'}
+                  onChange={() => setFormData({ ...formData, tipe_keanggotaan: 'PASAR_ONLY' })}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="font-black text-xs">Bukan Anggota Koperasi</p>
+                  <p
+                    className={`text-[10px] mt-0.5 ${
+                      formData.tipe_keanggotaan === 'PASAR_ONLY' ? 'text-slate-300' : 'text-slate-500'
+                    }`}
+                  >
+                    Hanya tenant pasar Banuarasa. Bebas dari iuran simpanan pokok & wajib.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 

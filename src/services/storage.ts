@@ -21,6 +21,7 @@ import {
   MediaSourceType,
   MediaAssetCategory,
   MemberCardDesignConfig,
+  KoperasiConfig,
 } from '../types';
 import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
 import {
@@ -149,6 +150,20 @@ export const DEFAULT_MEMBER_CARD_DESIGN: MemberCardDesignConfig = {
   updated_by: 'SUPER_ADMIN',
 };
 
+export const DEFAULT_KOPERASI_CONFIG: KoperasiConfig = {
+  simpanan_pokok_nominal: 100000,
+  simpanan_pokok_cicilan_nominal: 20000,
+  simpanan_wajib_nominal: 25000,
+  nama_koperasi: 'Koperasi Berau Melangkah Bersama (KBMB)',
+  nama_bank: 'Bank Kaltimtara / BSI',
+  nomor_rekening: '001-2345-6789',
+  atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
+  nomor_wa_konfirmasi: '6281234567890',
+  catatan_iuran: 'Simpanan Pokok Rp100.000 (bisa dicicil). Simpanan Wajib Rp25.000 disetorkan setiap bulan.',
+  updated_at: '2026-08-01T00:00:00.000Z',
+  updated_by: 'SUPER_ADMIN',
+};
+
 const STORAGE_KEYS = {
   VERSION: 'kbm_data_version_v3',
   MEMBERS: 'kbm_v3_members',
@@ -168,6 +183,7 @@ const STORAGE_KEYS = {
   CURRENT_USER: 'kbm_v3_current_user_session',
   BRANDING: 'kbm_v3_branding_assets',
   CARD_DESIGN: 'kbm_v3_member_card_design',
+  KOPERASI_CONFIG: 'kbm_v3_koperasi_config',
   SUPER_ADMIN_CUSTOM_PASSWORD: 'kbm_v3_super_admin_custom_pass',
   SUPER_ADMIN_CUSTOM_HASH: 'kbm_v3_super_admin_custom_hash',
   IS_DUMMY_PURGED: 'kbm_v3_is_dummy_purged',
@@ -2190,29 +2206,53 @@ class StorageService {
 
   getMemberSavingsSummary(memberId: string) {
     const savings = this.getSavings(memberId);
-    const simpananPokok = savings
-      .filter((s) => s.saving_type === 'SIMPANAN_POKOK' && s.payment_status === 'PAID')
+    const config = this.getKoperasiConfig();
+    const member = this.getMemberById(memberId);
+    const isKoperasiMember =
+      member?.is_cooperative_member !== undefined
+        ? Boolean(member.is_cooperative_member)
+        : (member?.tipe_keanggotaan !== 'PASAR_ONLY' && member?.status_koperasi !== 'BELUM_AKTIF');
+
+    const paidSavings = savings.filter((s) => s.payment_status === 'PAID');
+
+    const simpananPokok = paidSavings
+      .filter((s) => s.saving_type === 'SIMPANAN_POKOK')
       .reduce((sum, s) => sum + s.amount, 0);
 
-    const simpananWajib = savings
-      .filter((s) => s.saving_type === 'SIMPANAN_WAJIB' && s.payment_status === 'PAID')
+    const simpananWajib = paidSavings
+      .filter((s) => s.saving_type === 'SIMPANAN_WAJIB')
       .reduce((sum, s) => sum + s.amount, 0);
 
-    const simpananSukarela = savings
-      .filter((s) => s.saving_type === 'SIMPANAN_SUKARELA' && s.payment_status === 'PAID')
+    const simpananSukarela = paidSavings
+      .filter((s) => s.saving_type === 'SIMPANAN_SUKARELA')
       .reduce((sum, s) => sum + s.amount, 0);
 
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const isWajibCurrentMonthPaid = savings.some(
-      (s) => s.saving_type === 'SIMPANAN_WAJIB' && s.period_month_year === currentMonth && s.payment_status === 'PAID'
+    const isWajibCurrentMonthPaid = paidSavings.some(
+      (s) => s.saving_type === 'SIMPANAN_WAJIB' && s.period_month_year === currentMonth
     );
 
+    const targetSimpananPokok = config.simpanan_pokok_nominal;
+    const sisaCicilanPokok = Math.max(0, targetSimpananPokok - simpananPokok);
+    const isPokokLunas = simpananPokok >= targetSimpananPokok;
+    const cicilanPokokCount = paidSavings.filter((s) => s.saving_type === 'SIMPANAN_POKOK').length;
+    const cicilanWajibCount = paidSavings.filter((s) => s.saving_type === 'SIMPANAN_WAJIB').length;
+
     return {
+      isKoperasiMember,
+      targetSimpananPokok,
       simpananPokok,
+      sisaCicilanPokok,
+      isPokokLunas,
+      cicilanPokokCount,
       simpananWajib,
+      simpananWajibNominalPerBulan: config.simpanan_wajib_nominal,
+      cicilanWajibCount,
       simpananSukarela,
       totalSimpanan: simpananPokok + simpananWajib + simpananSukarela,
       isWajibCurrentMonthPaid,
+      koperasiConfig: config,
+      history: savings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     };
   }
 
@@ -3257,6 +3297,104 @@ class StorageService {
     return {
       success: true,
       message: 'Biodata & Foto Profil berhasil disimpan dan disinkronkan!',
+      member: updatedMember,
+    };
+  }
+
+  // --- Koperasi Configuration & Membership Obligations ---
+  getKoperasiConfig(): KoperasiConfig {
+    return this.getItem<KoperasiConfig>(STORAGE_KEYS.KOPERASI_CONFIG, DEFAULT_KOPERASI_CONFIG);
+  }
+
+  updateKoperasiConfig(
+    updates: Partial<KoperasiConfig>,
+    adminUsername = 'SUPER_ADMIN'
+  ): KoperasiConfig {
+    const current = this.getKoperasiConfig();
+    const updated: KoperasiConfig = {
+      ...current,
+      ...updates,
+      updated_at: new Date().toISOString(),
+      updated_by: adminUsername,
+    };
+
+    this.setItem(STORAGE_KEYS.KOPERASI_CONFIG, updated);
+    this.notify();
+    this.persistToServer();
+
+    this.logAudit({
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
+      action: 'UPDATE_KOPERASI_CONFIG',
+      module: 'SAVING',
+      reference_id: 'KOPERASI-CONFIG',
+      description: `Pengaturan Simpanan Koperasi diubah: Simpanan Pokok Rp${updated.simpanan_pokok_nominal.toLocaleString(
+        'id-ID'
+      )}, Simpanan Wajib Rp${updated.simpanan_wajib_nominal.toLocaleString('id-ID')}/bulan.`,
+      result: 'SUCCESS',
+    });
+
+    this.addNotification({
+      title: 'Kebijakan Simpanan Koperasi Diperbarui',
+      message: `Nominal Simpanan Pokok ditetapkan Rp${updated.simpanan_pokok_nominal.toLocaleString(
+        'id-ID'
+      )} dan Simpanan Wajib Rp${updated.simpanan_wajib_nominal.toLocaleString('id-ID')}/bulan.`,
+      type: 'INFO',
+    });
+
+    return updated;
+  }
+
+  toggleMemberKoperasiStatus(
+    memberId: string,
+    isKoperasi: boolean,
+    adminUsername = 'SUPER_ADMIN'
+  ): { success: boolean; message: string; member?: Member } {
+    const members = this.getMembers();
+    const index = members.findIndex((m) => m.member_id === memberId);
+    if (index === -1) {
+      return { success: false, message: 'Data anggota tidak ditemukan.' };
+    }
+
+    const current = members[index];
+    const updatedMember: Member = {
+      ...current,
+      tipe_keanggotaan: isKoperasi ? 'KOPERASI' : 'PASAR_ONLY',
+      status_koperasi: isKoperasi ? 'AKTIF' : 'BELUM_AKTIF',
+      is_cooperative_member: isKoperasi,
+      updated_at: new Date().toISOString(),
+    };
+
+    members[index] = updatedMember;
+    this.setItem(STORAGE_KEYS.MEMBERS, members);
+    this.notify();
+    this.persistToServer();
+
+    const statusLabel = isKoperasi
+      ? 'Anggota Koperasi Penuh (Kewajiban Simpanan Pokok & Wajib Aktif)'
+      : 'Bukan Anggota Koperasi (Tenant Pasar Saja, Bebas Iuran)';
+
+    this.logAudit({
+      user_id: adminUsername,
+      user_role: 'SUPER_ADMIN',
+      action: 'SET_MEMBER_KOPERASI_STATUS',
+      module: 'MEMBERS',
+      reference_id: memberId,
+      description: `Menetapkan status keanggotaan ${current.nama_lengkap} (${memberId}) menjadi ${statusLabel}`,
+      result: 'SUCCESS',
+    });
+
+    this.addNotification({
+      title: 'Status Keanggotaan Koperasi Diperbarui',
+      message: `Status keanggotaan ${current.nama_lengkap} ditetapkan sebagai: ${statusLabel}.`,
+      type: isKoperasi ? 'SUCCESS' : 'INFO',
+    });
+
+    return {
+      success: true,
+      message: `Status keanggotaan ${current.nama_lengkap} berhasil ditetapkan sebagai ${
+        isKoperasi ? 'Anggota Koperasi' : 'Bukan Anggota Koperasi'
+      }.`,
       member: updatedMember,
     };
   }

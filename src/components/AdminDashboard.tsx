@@ -112,6 +112,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [docRejectReason, setDocRejectReason] = useState('');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
+  // Cooperative Configuration State (Admin Form)
+  const initialCoopConfig = storage.getKoperasiConfig();
+  const [coopPokok, setCoopPokok] = useState<number>(initialCoopConfig.simpanan_pokok_nominal);
+  const [coopPokokCicilan, setCoopPokokCicilan] = useState<number>(
+    initialCoopConfig.simpanan_pokok_cicilan_nominal || 20000
+  );
+  const [coopWajib, setCoopWajib] = useState<number>(initialCoopConfig.simpanan_wajib_nominal);
+  const [coopBank, setCoopBank] = useState<string>(initialCoopConfig.nama_bank);
+  const [coopRek, setCoopRek] = useState<string>(initialCoopConfig.nomor_rekening);
+  const [coopAtasNama, setCoopAtasNama] = useState<string>(initialCoopConfig.atas_nama_rekening);
+  const [coopWa, setCoopWa] = useState<string>(initialCoopConfig.nomor_wa_konfirmasi);
+  const [coopCatatan, setCoopCatatan] = useState<string>(initialCoopConfig.catatan_iuran || '');
+  const [coopNotice, setCoopNotice] = useState<string | null>(null);
+
   // Subscribe to storage updates
   useEffect(() => {
     const unsub = storage.subscribe(() => {
@@ -119,6 +133,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    const fresh = storage.getKoperasiConfig();
+    setCoopPokok(fresh.simpanan_pokok_nominal);
+    setCoopPokokCicilan(fresh.simpanan_pokok_cicilan_nominal || 20000);
+    setCoopWajib(fresh.simpanan_wajib_nominal);
+    setCoopBank(fresh.nama_bank);
+    setCoopRek(fresh.nomor_rekening);
+    setCoopAtasNama(fresh.atas_nama_rekening);
+    setCoopWa(fresh.nomor_wa_konfirmasi);
+    setCoopCatatan(fresh.catatan_iuran || '');
+  }, [version]);
+
+  const handleSaveCoopConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    storage.updateKoperasiConfig(
+      {
+        simpanan_pokok_nominal: Number(coopPokok),
+        simpanan_pokok_cicilan_nominal: Number(coopPokokCicilan),
+        simpanan_wajib_nominal: Number(coopWajib),
+        nama_bank: coopBank,
+        nomor_rekening: coopRek,
+        atas_nama_rekening: coopAtasNama,
+        nomor_wa_konfirmasi: coopWa,
+        catatan_iuran: coopCatatan,
+      },
+      adminId
+    );
+    setCoopNotice('Pengaturan besaran simpanan pokok dan wajib berhasil disimpan!');
+    setTimeout(() => setCoopNotice(null), 4000);
+  };
+
+  const handleToggleMemberKoperasi = (memberId: string, currentIsCoop: boolean) => {
+    const nextVal = !currentIsCoop;
+    const res = storage.toggleMemberKoperasiStatus(memberId, nextVal, adminId);
+    setActionNotice(res.message);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
 
   // Data from Storage
   const stats = storage.getAggregatedStats();
@@ -653,7 +705,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </table>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* STANDS TAB */}
       {activeAdminTab === 'STANDS' && (
@@ -884,19 +937,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <th className="p-3">Nama Usaha / Brand</th>
                     <th className="p-3">Kategori</th>
                     <th className="p-3">No. WhatsApp</th>
-                    <th className="p-3">Status</th>
+                    <th className="p-3">Status Akun</th>
+                    <th className="p-3">Status Koperasi (KBMB)</th>
                     <th className="p-3 text-right">Aksi Super Admin</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {members.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
                         Tidak ada anggota terdaftar. Klik 'Tambah Anggota' di atas.
                       </td>
                     </tr>
                   ) : (
-                    members.map((m) => (
+                    members.map((m) => {
+                      const isCoop =
+                        m.is_cooperative_member !== undefined
+                          ? Boolean(m.is_cooperative_member)
+                          : (m.tipe_keanggotaan !== 'PASAR_ONLY' && m.status_koperasi !== 'BELUM_AKTIF');
+
+                      return (
                       <tr key={m.member_id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-3 font-mono font-bold text-emerald-700">{m.nomor_anggota}</td>
                         <td className="p-3">
@@ -911,7 +971,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {m.status_keanggotaan}
                           </span>
                         </td>
-                        <td className="p-3 text-right space-x-1.5">
+                        <td className="p-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                                isCoop
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}
+                            >
+                              <Building2 className="w-2.5 h-2.5" />
+                              <span>{isCoop ? 'Anggota Koperasi' : 'Bukan Anggota'}</span>
+                            </span>
+                            <span className="text-[9px] text-slate-400">
+                              {isCoop ? 'Wajib Simpanan Pokok & Wajib' : 'Hanya Stand Pasar (Bebas Iuran)'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                          {/* Quick Toggle Status Koperasi Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMemberKoperasi(m.member_id, isCoop)}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer border ${
+                              isCoop
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                            }`}
+                            title={
+                              isCoop
+                                ? 'Ubah menjadi Bukan Anggota Koperasi (Bebas Iuran)'
+                                : 'Tetapkan sebagai Anggota Koperasi Penuh (Kewajiban Iuran Aktif)'
+                            }
+                          >
+                            <Building2 className="w-3 h-3 text-amber-600" />
+                            <span>{isCoop ? 'Ubah ke Non-Koperasi' : 'Jadikan Anggota'}</span>
+                          </button>
                           <a
                             href={`https://wa.me/${String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '')}`}
                             target="_blank"
@@ -966,8 +1061,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </button>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
@@ -1072,33 +1168,186 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* SAVINGS TAB */}
       {activeAdminTab === 'SAVINGS' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">Buku Kas Simpanan Anggota</h3>
-              <p className="text-xs text-slate-500">
-                Pencatatan Simpanan Pokok, Simpanan Wajib bulanan, dan Simpanan Sukarela.
-              </p>
+        <div className="space-y-6">
+          {/* Form Pengaturan Besaran Simpanan Pokok & Wajib oleh Admin */}
+          <div className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-6 sm:p-7 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Pengaturan Kewajiban Simpanan Koperasi (Form Admin)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Tentukan jumlah simpanan pokok (bisa dicicil) dan simpanan wajib bulanan untuk seluruh anggota koperasi.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 self-start sm:self-center">
+                Berlaku untuk Anggota Koperasi
+              </span>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setSavingToEdit(null);
-                  setIsAddSavingOpen(true);
-                }}
-                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Setoran Simpanan</span>
-              </button>
-              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-right">
-                <p className="text-[10px] font-bold text-emerald-800 uppercase">Total Kas Simpanan</p>
-                <p className="text-lg font-black text-emerald-950">
-                  Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}
+
+            {coopNotice && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-900 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{coopNotice}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCoopConfig} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Total Simpanan Pokok (Rp) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    required
+                    value={coopPokok}
+                    onChange={(e) => setCoopPokok(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Dibayar sekali saat awal bergabung (bisa dicicil).</p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Nominal Cicilan Pokok / Transaksi (Rp)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    required
+                    value={coopPokokCicilan}
+                    onChange={(e) => setCoopPokokCicilan(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Rekomendasi cicilan: {Math.ceil(coopPokok / (coopPokokCicilan || 1))}x setoran.
                 </p>
               </div>
-            </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Simpanan Wajib per Bulan (Rp) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    required
+                    value={coopWajib}
+                    onChange={(e) => setCoopWajib(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Kewajiban rutin bulanan seluruh anggota aktif.</p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">Nama Bank & Rekening</label>
+                <input
+                  type="text"
+                  required
+                  value={coopBank}
+                  onChange={(e) => setCoopBank(e.target.value)}
+                  placeholder="Bank Kaltimtara / BSI"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
+                />
+                <input
+                  type="text"
+                  required
+                  value={coopRek}
+                  onChange={(e) => setCoopRek(e.target.value)}
+                  placeholder="Nomor Rekening"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">Atas Nama Rekening & Kontak WA</label>
+                <input
+                  type="text"
+                  required
+                  value={coopAtasNama}
+                  onChange={(e) => setCoopAtasNama(e.target.value)}
+                  placeholder="Koperasi Berau Melangkah Bersama"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
+                />
+                <input
+                  type="text"
+                  value={coopWa}
+                  onChange={(e) => setCoopWa(e.target.value)}
+                  placeholder="6281234567890 (WA Konfirmasi)"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1">Catatan Tambahan untuk Anggota</label>
+                  <input
+                    type="text"
+                    value={coopCatatan}
+                    onChange={(e) => setCoopCatatan(e.target.value)}
+                    placeholder="Contoh: Simpanan Pokok dapat dicicil maksimal 5 kali..."
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                  />
+                </div>
+                <div className="mt-3 text-right">
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>SIMPAN PENGATURAN SIMPANAN</span>
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Buku Kas Simpanan Anggota</h3>
+                <p className="text-xs text-slate-500">
+                  Pencatatan Simpanan Pokok, Simpanan Wajib bulanan, dan Simpanan Sukarela.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSavingToEdit(null);
+                    setIsAddSavingOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Setoran Simpanan</span>
+                </button>
+                <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-right">
+                  <p className="text-[10px] font-bold text-emerald-800 uppercase">Total Kas Simpanan</p>
+                  <p className="text-lg font-black text-emerald-950">
+                    Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}
+                  </p>
+                </div>
+              </div>
+            </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -1166,6 +1415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </table>
           </div>
         </div>
+      </div>
       )}
 
       {/* SALES REPORTS TAB */}
