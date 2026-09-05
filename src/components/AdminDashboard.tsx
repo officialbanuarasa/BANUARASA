@@ -87,14 +87,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const safeArticles: EditorialArticle[] = Array.isArray(storage.getArticles?.()) ? storage.getArticles() : [];
   const safeStands: MasterStand[] = Array.isArray(storage.getStands?.()) ? storage.getStands() : [];
 
-  // Filter Khusus Laporan Penjualan Mingguan
+  // Filter Penjualan Mingguan
   const [filterEventTitle, setFilterEventTitle] = useState<string>('ALL');
   const [filterStandCode, setFilterStandCode] = useState<string>('ALL');
 
-  // Modal States
+  // Modal Verifikasi Bayar
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Modal Lihat Detail & Edit Profil Anggota (Superadmin)
+  const [viewingProfileMember, setViewingProfileMember] = useState<Member | null>(null);
+  const [isEditingInProfileModal, setIsEditingInProfileModal] = useState(false);
+
+  // Modal Studio KTA Anggota (Superadmin)
+  const [selectedMemberForKTA, setSelectedMemberForKTA] = useState<Member | null>(null);
+  const [ktaDesignConfig, setKtaDesignConfig] = useState<KTADesignConfig>(DEFAULT_KTA_CONFIG);
+  const [ktaActiveControlTab, setKtaActiveControlTab] = useState<'background' | 'barcode' | 'elements' | 'profile'>('background');
+  const [ktaSaveAlert, setKtaSaveAlert] = useState<string>('');
+
+  // Modal CRUD Member Biasa
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [memberForm, setMemberForm] = useState({
@@ -106,6 +117,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alamat: ''
   });
 
+  // Modal Event
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [eventForm, setEventForm] = useState({
@@ -119,6 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     total_stands: 64
   });
 
+  // Modal Stand
   const [isStandModalOpen, setIsStandModalOpen] = useState(false);
   const [editingStand, setEditingStand] = useState<MasterStand | null>(null);
   const [standForm, setStandForm] = useState({
@@ -128,6 +141,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     base_price: 150000
   });
 
+  // Modal Assist Booking Tenant
   const [isAssistBookingOpen, setIsAssistBookingOpen] = useState(false);
   const [assistForm, setAssistForm] = useState({
     member_id: '',
@@ -136,6 +150,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     instant_confirm: true
   });
 
+  // Modal Simpanan Manual
   const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
   const [savingForm, setSavingForm] = useState({
     member_id: '',
@@ -143,6 +158,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     amount: 50000
   });
 
+  // Modal Berita
   const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<EditorialArticle | null>(null);
   const [articleForm, setArticleForm] = useState({
@@ -155,28 +171,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     status: 'PUBLISHED' as 'PUBLISHED' | 'DRAFT'
   });
 
-  const [selectedMemberForKTA, setSelectedMemberForKTA] = useState<Member | null>(null);
-  const [ktaDesignConfig, setKtaDesignConfig] = useState<KTADesignConfig>(DEFAULT_KTA_CONFIG);
-  const [ktaActiveControlTab, setKtaActiveControlTab] = useState<'background' | 'barcode' | 'elements' | 'profile'>('background');
-  const [ktaSaveAlert, setKtaSaveAlert] = useState<string>('');
-
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN';
 
-  // ----------------------------------------------------
-  // REKAP ANALITIK SUPERADMIN: SIMPANAN POKOK, WAJIB & OMZET
-  // ----------------------------------------------------
+  // Rekap Metrik Keuangan Simpanan
   const stats = useMemo(() => {
-    // 1. Total Pemasukan Simpanan Pokok
     const totalSimpananPokok = safeSavings
       .filter(s => s?.saving_type === 'SIMPANAN_POKOK')
       .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
 
-    // 2. Total Pemasukan Simpanan Wajib
     const totalSimpananWajib = safeSavings
       .filter(s => s?.saving_type === 'SIMPANAN_WAJIB')
       .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
 
-    // 3. Total Simpanan Sukarela / Lainnya
     const totalSimpananSukarela = safeSavings
       .filter(s => s?.saving_type === 'SIMPANAN_SUKARELA')
       .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
@@ -198,7 +204,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, [safeMembers, safeEvents, safeRegistrations, safePayments, safeSavings, safeSalesReports]);
 
-  // Filter Data Laporan Penjualan Mingguan
+  // Filter Laporan Penjualan
   const filteredSalesReports = useMemo(() => {
     return safeSalesReports.filter(report => {
       const matchEvent = filterEventTitle === 'ALL' || report.event_title === filterEventTitle;
@@ -207,7 +213,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [safeSalesReports, filterEventTitle, filterStandCode]);
 
-  // Daftar unik Event & Stand untuk filter dropdown
   const uniqueEventsList = useMemo(() => {
     return Array.from(new Set(safeSalesReports.map(r => r.event_title).filter(Boolean)));
   }, [safeSalesReports]);
@@ -216,7 +221,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return Array.from(new Set(safeSalesReports.map(r => r.stand_code).filter(Boolean)));
   }, [safeSalesReports]);
 
-  // Handlers KTA Studio
+  // ----------------------------------------------------
+  // HANDLERS PROFIL ANGGOTA (LIHAT & EDIT OLEH SUPERADMIN)
+  // ----------------------------------------------------
+  const handleOpenViewProfile = (m: Member) => {
+    setViewingProfileMember({ ...m });
+    setIsEditingInProfileModal(false);
+  };
+
+  const handleSaveProfileFromModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingProfileMember) return;
+    storage.saveMember(viewingProfileMember);
+    storage.logActivity('SUPERADMIN_UPDATE_PROFILE', 'MEMBER', `Superadmin memperbarui profil anggota ${viewingProfileMember.nama_lengkap} (${viewingProfileMember.member_id})`, viewingProfileMember.member_id);
+    alert('Data profil anggota berhasil diperbarui!');
+    setIsEditingInProfileModal(false);
+    onDataUpdated();
+  };
+
+  // ----------------------------------------------------
+  // HANDLERS EDITING KTA ANGGOTA
+  // ----------------------------------------------------
   const handleOpenKTAStudio = (m: Member) => {
     setSelectedMemberForKTA({ ...m });
     setKtaDesignConfig(DEFAULT_KTA_CONFIG);
@@ -288,7 +313,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveKTAStudio = () => {
     if (!selectedMemberForKTA) return;
     storage.saveMember(selectedMemberForKTA);
-    setKtaSaveAlert('Desain KTA & Profil Anggota Berhasil Disimpan!');
+    storage.logActivity('SUPERADMIN_EDIT_KTA', 'MEMBER', `Superadmin mengubah desain KTA anggota ${selectedMemberForKTA.nama_lengkap}`, selectedMemberForKTA.member_id);
+    setKtaSaveAlert('Desain KTA & Data Anggota Berhasil Disimpan!');
     onDataUpdated();
     setTimeout(() => {
       setKtaSaveAlert('');
@@ -328,6 +354,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Ukuran gambar maksimal 2MB.');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         setArticleForm(prev => ({ ...prev, cover_image: reader.result as string }));
@@ -361,7 +391,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onDataUpdated();
   };
 
-  // Handlers Stand
+  // Handlers Stand & Booking
   const handleOpenAddStand = () => {
     setEditingStand(null);
     setStandForm({
@@ -468,7 +498,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onDataUpdated();
   };
 
-  // Handlers Anggota
+  // Handlers CRUD Member Form Biasa
   const handleOpenAddMember = () => {
     setEditingMember(null);
     setMemberForm({
@@ -673,9 +703,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex overflow-x-auto gap-2 mt-6 pt-2 border-t border-slate-800 text-sm">
             {[
               { id: 'overview', label: 'Ringkasan Eksekutif' },
+              { id: 'members', label: `Anggota & KTA (${safeMembers.length})` },
               { id: 'savings', label: 'Keuangan Simpanan (Pokok & Wajib)' },
               { id: 'reports', label: 'Rekap Penjualan Stand & Event' },
-              { id: 'members', label: `Anggota & KTA (${safeMembers.length})` },
               { id: 'stands', label: `Stand & Booking Tenant` },
               { id: 'payments', label: `Verifikasi Bayar (${safePayments.length})` },
               { id: 'editorials', label: `Kabar Berita (${safeArticles.length})` },
@@ -701,10 +731,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Konten Tab */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         
-        {/* TAB 1: OVERVIEW EKSEKUTIF */}
+        {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            {/* Widget Metrik Keuangan Koperasi & Penjualan */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
                 <span className="text-xs font-bold text-slate-500">Simpanan Pokok</span>
@@ -744,7 +773,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Antrean Cepat Verifikasi */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h2 className="text-base font-bold text-slate-800">Menunggu Verifikasi Pembayaran & Bukti Transfer</h2>
@@ -790,33 +818,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: KEUANGAN SIMPANAN POKOK & WAJIB (SUPERADMIN VIEW) */}
+        {/* TAB 2: MEMBERS (DILENGKAPI TOMBOL LIHAT PROFIL & EDIT KTA) */}
+        {activeTab === 'members' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Manajemen Anggota UMKM</h2>
+                <p className="text-xs text-slate-400">Superadmin dapat melihat profil lengkap serta mendesain ulang KTA anggota</p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <input
+                  type="text"
+                  placeholder="Cari anggota / usaha / ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-emerald-500 w-full sm:w-64"
+                />
+                {isSuperAdmin && (
+                  <button
+                    onClick={handleOpenAddMember}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition whitespace-nowrap"
+                  >
+                    + Tambah Anggota
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">ID Anggota</th>
+                    <th className="px-4 py-3">Nama Anggota</th>
+                    <th className="px-4 py-3">Nama Usaha UMKM</th>
+                    <th className="px-4 py-3">Kategori</th>
+                    <th className="px-4 py-3">Kontak HP/WA</th>
+                    <th className="px-4 py-3">Status</th>
+                    {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi Superadmin</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {safeMembers
+                    .filter(m => 
+                      (m?.nama_lengkap || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (m?.nama_usaha || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (m?.member_id || '').toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .map(m => (
+                      <tr key={m.member_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">
+                          {m.member_id}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">{m.nama_lengkap}</td>
+                        <td className="px-4 py-3">{m.nama_usaha}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                            {m.kategori_usaha}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <div>{m.nomor_hp}</div>
+                          <div className="text-slate-400">{m.email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            m.status_keanggotaan === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {m.status_keanggotaan}
+                          </span>
+                        </td>
+                        {isSuperAdmin && (
+                          <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                            {/* Tombol Lihat Profil Anggota */}
+                            <button
+                              onClick={() => handleOpenViewProfile(m)}
+                              className="px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
+                              title="Lihat Profil Lengkap & Riwayat Anggota"
+                            >
+                              👤 Profil
+                            </button>
+                            {/* Tombol Editing KTA Anggota */}
+                            <button
+                              onClick={() => handleOpenKTAStudio(m)}
+                              className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
+                              title="Edit Tampilan & Desain KTA Anggota"
+                            >
+                              🎴 Edit KTA
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMember(m.member_id, m.nama_lengkap)}
+                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: KEUANGAN SIMPANAN */}
         {activeTab === 'savings' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pemasukan Simpanan Pokok</span>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Simpanan Pokok</span>
                 <p className="text-2xl font-black text-indigo-700 mt-1">Rp {stats.totalSimpananPokok.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Simpanan awal wajib saat anggota baru bergabung</p>
+                <p className="text-[11px] text-slate-500 mt-1">Simpanan awal wajib anggota</p>
               </div>
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pemasukan Simpanan Wajib</span>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Simpanan Wajib</span>
                 <p className="text-2xl font-black text-indigo-600 mt-1">Rp {stats.totalSimpananWajib.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Iuran berkala bulanan seluruh anggota UMKM</p>
+                <p className="text-[11px] text-slate-500 mt-1">Iuran berkala bulanan seluruh anggota</p>
               </div>
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Kas Dana Koperasi</span>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Kas Koperasi</span>
                 <p className="text-2xl font-black text-emerald-700 mt-1">Rp {stats.grandTotalSimpanan.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Gabungan Simpanan Pokok, Wajib, dan Sukarela</p>
+                <p className="text-[11px] text-slate-500 mt-1">Akumulasi total simpanan anggota</p>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">Rincian Transaksi Simpanan Anggota</h2>
-                  <p className="text-xs text-slate-400">Seluruh pencatatan simpanan pokok dan simpanan wajib</p>
-                </div>
+                <h2 className="text-base font-bold text-slate-800">Rincian Transaksi Simpanan Anggota</h2>
                 {isSuperAdmin && (
                   <button
                     onClick={() => setIsSavingModalOpen(true)}
@@ -834,7 +964,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="px-4 py-3">Nama Anggota</th>
                       <th className="px-4 py-3">Jenis Simpanan</th>
                       <th className="px-4 py-3">Jumlah Masuk</th>
-                      <th className="px-4 py-3">Tanggal Pencatatan</th>
+                      <th className="px-4 py-3">Waktu Pencatatan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -844,13 +974,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                            s.saving_type === 'SIMPANAN_POKOK'
-                              ? 'bg-blue-100 text-blue-800'
-                              : s.saving_type === 'SIMPANAN_WAJIB'
-                              ? 'bg-indigo-100 text-indigo-800'
-                              : 'bg-slate-100 text-slate-700'
+                            s.saving_type === 'SIMPANAN_POKOK' ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'
                           }`}>
-                            {s.saving_type === 'SIMPANAN_POKOK' ? 'SIMPANAN POKOK' : s.saving_type === 'SIMPANAN_WAJIB' ? 'SIMPANAN WAJIB' : 'SUKARELA'}
+                            {s.saving_type === 'SIMPANAN_POKOK' ? 'SIMPANAN POKOK' : 'SIMPANAN WAJIB'}
                           </span>
                         </td>
                         <td className="px-4 py-3 font-black text-indigo-700">Rp {(s.amount || 0).toLocaleString('id-ID')}</td>
@@ -866,17 +992,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: REKAP LAPORAN PENJUALAN MINGGUAN (STAND & EVENT) */}
+        {/* TAB 4: REKAP PENJUALAN MINGGUAN */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800">Rekapitulasi Penjualan Berdasarkan Stand & Event Mingguan</h2>
-                  <p className="text-xs text-slate-500">Pantau omzet kumulatif dan performa penjualan mingguan UMKM</p>
+                  <h2 className="text-base font-bold text-slate-800">Laporan Penjualan Berdasarkan Stand & Event Mingguan</h2>
+                  <p className="text-xs text-slate-500">Omzet kumulatif dan performa penjualan mingguan UMKM</p>
                 </div>
 
-                {/* Filter Dropdown Stand & Event */}
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={filterEventTitle}
@@ -902,7 +1027,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Tabel Penjualan Terfilter */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
@@ -944,105 +1068,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 4: MEMBERS & KTA STUDIO */}
-        {activeTab === 'members' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
-              <input
-                type="text"
-                placeholder="Cari nama anggota / usaha / ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-emerald-500 w-full sm:w-80"
-              />
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                {isSuperAdmin && (
-                  <button
-                    onClick={handleOpenAddMember}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                  >
-                    + Tambah Anggota
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                  <tr>
-                    <th className="px-4 py-3">ID Anggota</th>
-                    <th className="px-4 py-3">Nama Lengkap</th>
-                    <th className="px-4 py-3">Nama Usaha UMKM</th>
-                    <th className="px-4 py-3">Kategori</th>
-                    <th className="px-4 py-3">Kontak HP/Email</th>
-                    <th className="px-4 py-3">Status</th>
-                    {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi & Desain KTA</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {safeMembers
-                    .filter(m => 
-                      (m?.nama_lengkap || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (m?.nama_usaha || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (m?.member_id || '').toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map(m => (
-                      <tr key={m.member_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">
-                          {m.member_id}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{m.nama_lengkap}</td>
-                        <td className="px-4 py-3">{m.nama_usaha}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
-                            {m.kategori_usaha}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div>{m.nomor_hp}</div>
-                          <div className="text-slate-400">{m.email}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            m.status_keanggotaan === 'ACTIVE'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {m.status_keanggotaan}
-                          </span>
-                        </td>
-                        {isSuperAdmin && (
-                          <td className="px-4 py-3 text-right space-x-2">
-                            <button
-                              onClick={() => handleOpenKTAStudio(m)}
-                              className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                              title="Buka Studio Desain KTA & Edit Profil"
-                            >
-                              🎴 Desain KTA
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditMember(m)}
-                              className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMember(m.member_id, m.nama_lengkap)}
-                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
-                            >
-                              Hapus
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: STANDS & BOOKING */}
+        {/* TAB 5: STANDS */}
         {activeTab === 'stands' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
@@ -1335,16 +1361,206 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
       </div>
 
-      {/* MODAL STUDIO KTA */}
+      {/* -------------------------------------------------- */}
+      {/* MODAL 1: LIHAT & EDIT PROFIL ANGGOTA (SUPERADMIN)   */}
+      {/* -------------------------------------------------- */}
+      {viewingProfileMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl my-6 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Profil Anggota UMKM</h3>
+                <p className="text-xs text-slate-400 font-mono">ID: {viewingProfileMember.member_id}</p>
+              </div>
+              <button
+                onClick={() => setViewingProfileMember(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!isEditingInProfileModal ? (
+              // TAMPILAN INSPEKSI DETAIL PROFIL
+              <div className="space-y-4 text-xs">
+                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="w-16 h-16 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-2xl font-black flex-shrink-0 overflow-hidden">
+                    {viewingProfileMember.avatar_url ? (
+                      <img src={viewingProfileMember.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      (viewingProfileMember.nama_lengkap || 'M').charAt(0)
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-slate-900">{viewingProfileMember.nama_lengkap}</h4>
+                    <p className="text-xs font-bold text-emerald-700">{viewingProfileMember.nama_usaha}</p>
+                    <span className="mt-1 inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      {viewingProfileMember.status_keanggotaan}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 bg-white p-4 rounded-2xl border border-slate-200">
+                  <div>
+                    <span className="text-slate-400 block">Kategori Usaha</span>
+                    <strong className="text-slate-800 text-sm">{viewingProfileMember.kategori_usaha}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">No. WhatsApp / HP</span>
+                    <strong className="text-slate-800 text-sm font-mono">{viewingProfileMember.nomor_hp}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Email Terdaftar</span>
+                    <strong className="text-slate-800 text-sm">{viewingProfileMember.email || '-'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Domisili di Berau</span>
+                    <strong className="text-slate-800 text-sm">{viewingProfileMember.alamat || '-'}</strong>
+                  </div>
+                  <div className="col-span-2 pt-2 border-t border-slate-100">
+                    <span className="text-slate-400 block">Waktu Registrasi Akun</span>
+                    <span className="text-slate-600 font-mono">
+                      {viewingProfileMember.created_at ? new Date(viewingProfileMember.created_at).toLocaleString('id-ID') : '-'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setIsEditingInProfileModal(true)}
+                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition"
+                  >
+                    ✏️ Edit Data Profil
+                  </button>
+                  <button
+                    onClick={() => {
+                      const target = viewingProfileMember;
+                      setViewingProfileMember(null);
+                      handleOpenKTAStudio(target);
+                    }}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition"
+                  >
+                    🎴 Buka Studio KTA
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // FORM EDIT DATA PROFIL ANGGOTA
+              <form onSubmit={handleSaveProfileFromModal} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap Pemilik</label>
+                  <input
+                    type="text"
+                    required
+                    value={viewingProfileMember.nama_lengkap}
+                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, nama_lengkap: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Nama Usaha UMKM</label>
+                  <input
+                    type="text"
+                    required
+                    value={viewingProfileMember.nama_usaha}
+                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, nama_usaha: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Kategori Produk</label>
+                    <select
+                      value={viewingProfileMember.kategori_usaha}
+                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, kategori_usaha: e.target.value as StandCategory })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
+                    >
+                      <option value="KULINER">KULINER</option>
+                      <option value="KERAJINAN">KERAJINAN</option>
+                      <option value="FASHION">FASHION</option>
+                      <option value="JASA">JASA</option>
+                      <option value="UMUM">UMUM</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Status Keanggotaan</label>
+                    <select
+                      value={viewingProfileMember.status_keanggotaan}
+                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, status_keanggotaan: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
+                    >
+                      <option value="ACTIVE">ACTIVE (Aktif)</option>
+                      <option value="PENDING_VERIFICATION">PENDING_VERIFICATION</option>
+                      <option value="SUSPENDED">SUSPENDED (Ditangguhkan)</option>
+                      <option value="INACTIVE">INACTIVE (Non-Aktif)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">No. WhatsApp / HP</label>
+                    <input
+                      type="text"
+                      required
+                      value={viewingProfileMember.nomor_hp}
+                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, nomor_hp: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={viewingProfileMember.email}
+                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, email: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Alamat di Berau</label>
+                  <input
+                    type="text"
+                    value={viewingProfileMember.alamat}
+                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, alamat: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingInProfileModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-xs"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL 2: EDITING KTA ANGGOTA (KTA STUDIO)          */}
+      {/* -------------------------------------------------- */}
       {selectedMemberForKTA && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden my-6 border border-slate-200 flex flex-col lg:flex-row max-h-[92vh]">
-            {/* Preview KTA */}
+            
+            {/* PANEL KIRI: PREVIEW KTA */}
             <div className="lg:w-7/12 p-6 sm:p-8 bg-slate-100/80 border-r border-slate-200 flex flex-col justify-between overflow-y-auto">
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-                    KTA Studio Preview
+                    KTA Studio Editor
                   </span>
                   <button onClick={() => window.print()} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl shadow-2xs">
                     🖨️ Cetak Kartu
@@ -1394,7 +1610,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative z-10 mt-4 flex items-center gap-5">
+                  <div className={`relative z-10 mt-4 flex items-center gap-5 ${
+                    ktaDesignConfig.barcodePos === 'LEFT_PANEL' ? 'flex-row-reverse' : ''
+                  }`}>
+                    {/* Foto KTA */}
                     <div className="w-20 h-24 rounded-xl border-2 border-current/30 overflow-hidden bg-slate-800/40 flex items-center justify-center flex-shrink-0">
                       {selectedMemberForKTA.avatar_url ? (
                         <img src={selectedMemberForKTA.avatar_url} alt="Foto" className="w-full h-full object-cover" />
@@ -1416,17 +1635,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex-shrink-0 bg-white p-1.5 rounded-xl shadow-md flex flex-col items-center">
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
-                          JSON.stringify({ id: selectedMemberForKTA.member_id, nama: selectedMemberForKTA.nama_lengkap, usaha: selectedMemberForKTA.nama_usaha, app: 'BANUARASA' })
-                        )}`} 
-                        alt="QR Code" 
-                        className="w-16 h-16 object-contain" 
-                      />
-                      <span className="text-[7px] font-mono text-slate-800 font-bold mt-0.5">SCAN KTA</span>
-                    </div>
+                    {/* Barcode KTA */}
+                    {(ktaDesignConfig.barcodePos === 'BOTTOM_RIGHT' || ktaDesignConfig.barcodePos === 'LEFT_PANEL') && (
+                      <div className={`flex-shrink-0 bg-white p-1.5 shadow-md flex flex-col items-center ${
+                        ktaDesignConfig.barcodeShape === 'ROUNDED' 
+                          ? 'rounded-2xl border-2 border-emerald-500' 
+                          : ktaDesignConfig.barcodeShape === 'MINIMAL'
+                          ? 'rounded-none border-b-2 border-slate-900'
+                          : 'rounded-xl'
+                      }`}>
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+                            JSON.stringify({ id: selectedMemberForKTA.member_id, nama: selectedMemberForKTA.nama_lengkap, usaha: selectedMemberForKTA.nama_usaha, app: 'BANUARASA' })
+                          )}`} 
+                          alt="QR Code" 
+                          className="w-16 h-16 object-contain" 
+                        />
+                        <span className="text-[7px] font-mono text-slate-800 font-bold mt-0.5">SCAN KTA</span>
+                      </div>
+                    )}
                   </div>
+
+                  {ktaDesignConfig.barcodePos === 'TOP_RIGHT' && (
+                    <div className="absolute top-14 right-6 z-20 bg-white p-1 rounded-lg shadow-md">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(selectedMemberForKTA.member_id)}`} 
+                        alt="QR Code" 
+                        className="w-14 h-14" 
+                      />
+                    </div>
+                  )}
 
                   <div className="relative z-10 mt-4 pt-2 border-t border-current/15 flex items-center justify-between text-[8px] opacity-70">
                     <span>Kabupaten Berau • Kalimantan Timur</span>
@@ -1451,7 +1689,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Panel Kontrol KTA */}
+            {/* PANEL KANAN: PENGATURAN KTA STUDIO */}
             <div className="lg:w-5/12 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
               <div>
                 <h3 className="text-base font-black text-slate-800 mb-4">Pengaturan Studio KTA</h3>
@@ -1474,6 +1712,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ))}
                 </div>
 
+                {/* Tab Latar Belakang & Opacity */}
                 {ktaActiveControlTab === 'background' && (
                   <div className="space-y-4 text-xs">
                     <div>
@@ -1513,14 +1752,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
+                {/* Tab Barcode */}
+                {ktaActiveControlTab === 'barcode' && (
+                  <div className="space-y-4 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1.5">Posisi Barcode</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: 'BOTTOM_RIGHT', label: '↘ Kanan Bawah' },
+                          { id: 'TOP_RIGHT', label: '↗ Kanan Atas' },
+                          { id: 'LEFT_PANEL', label: '↙ Kiri Bawah' },
+                        ].map(pos => (
+                          <button
+                            key={pos.id}
+                            type="button"
+                            onClick={() => setKtaDesignConfig({ ...ktaDesignConfig, barcodePos: pos.id as any })}
+                            className={`p-2.5 rounded-xl border font-semibold ${ktaDesignConfig.barcodePos === pos.id ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold' : 'border-slate-200'}`}
+                          >
+                            {pos.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1.5">Bentuk Barcode</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'SQUARE', label: 'Persegi' },
+                          { id: 'ROUNDED', label: 'Rounded' },
+                          { id: 'MINIMAL', label: 'Minimal' },
+                        ].map(shape => (
+                          <button
+                            key={shape.id}
+                            type="button"
+                            onClick={() => setKtaDesignConfig({ ...ktaDesignConfig, barcodeShape: shape.id as any })}
+                            className={`p-2 rounded-xl border text-center font-semibold ${ktaDesignConfig.barcodeShape === shape.id ? 'border-emerald-500 bg-emerald-50 font-bold' : 'border-slate-200'}`}
+                          >
+                            {shape.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Elemen KTA */}
+                {ktaActiveControlTab === 'elements' && (
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Judul Sub-Header KTA</label>
+                      <input
+                        type="text"
+                        value={ktaDesignConfig.customTitle}
+                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, customTitle: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-xl font-semibold"
+                      />
+                    </div>
+                    <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 cursor-pointer">
+                      <span>Tampilkan Kategori Usaha</span>
+                      <input
+                        type="checkbox"
+                        checked={ktaDesignConfig.showCategory}
+                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, showCategory: e.target.checked })}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 cursor-pointer">
+                      <span>Tampilkan Alamat Domisili</span>
+                      <input
+                        type="checkbox"
+                        checked={ktaDesignConfig.showAddress}
+                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, showAddress: e.target.checked })}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {/* Tab Data Anggota di KTA */}
                 {ktaActiveControlTab === 'profile' && (
                   <div className="space-y-3 text-xs">
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Ganti Foto Profil Anggota</label>
+                      <label className="block font-bold text-slate-700 mb-1">Ganti Foto Profil Anggota di KTA</label>
                       <input type="file" accept="image/*" onChange={handleKtaMemberPhotoUpload} className="w-full text-xs" />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                      <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap (Tercetak di KTA)</label>
                       <input
                         type="text"
                         value={selectedMemberForKTA.nama_lengkap || ''}
@@ -1529,7 +1845,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-600 mb-1">Nama Usaha UMKM</label>
+                      <label className="block font-semibold text-slate-600 mb-1">Nama Usaha (Tercetak di KTA)</label>
                       <input
                         type="text"
                         value={selectedMemberForKTA.nama_usaha || ''}
@@ -1567,6 +1883,492 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'REJECTED')} className="flex-1 py-2 bg-red-600 text-white text-xs font-bold rounded-xl">Tolak</button>
               <button onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'VERIFIED')} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl">Setujui</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EVENT */}
+      {isEventModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingEvent ? 'Edit Acara' : 'Tambah Acara Baru'}
+            </h3>
+            <form onSubmit={handleSaveEvent} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Judul Event</label>
+                <input
+                  type="text"
+                  required
+                  value={eventForm.title}
+                  onChange={e => setEventForm({ ...eventForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Tanggal Event</label>
+                <input
+                  type="date"
+                  required
+                  value={eventForm.event_date}
+                  onChange={e => setEventForm({ ...eventForm, event_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEventModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold"
+                >
+                  Simpan Acara
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SIMPANAN MANUAL */}
+      {isSavingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">Catat Simpanan Anggota</h3>
+            <form onSubmit={handleSaveSaving} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Pilih Anggota</label>
+                <select
+                  required
+                  value={savingForm.member_id}
+                  onChange={e => setSavingForm({ ...savingForm, member_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="">-- Pilih Anggota --</option>
+                  {safeMembers.map(m => (
+                    <option key={m.member_id} value={m.member_id}>
+                      {m.nama_lengkap} ({m.member_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Jenis Simpanan</label>
+                <select
+                  value={savingForm.saving_type}
+                  onChange={e => setSavingForm({ ...savingForm, saving_type: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="SIMPANAN_POKOK">Simpanan Pokok</option>
+                  <option value="SIMPANAN_WAJIB">Simpanan Wajib</option>
+                  <option value="SIMPANAN_SUKARELA">Simpanan Sukarela</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={savingForm.amount}
+                  onChange={e => setSavingForm({ ...savingForm, amount: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSavingModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold"
+                >
+                  Simpan Transaksi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL BERITA */}
+      {isArticleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-2xl bg-white rounded-2xl p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {editingArticle ? 'Edit Kabar & Editorial' : 'Buat Berita / Artikel Baru'}
+                </h3>
+                <p className="text-xs text-slate-500">Standar tata letak berita, upload gambar cover, dan publikasi</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsArticleModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveArticle} className="mt-4 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Judul Berita</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Semarak Festival Kuliner Tradisional di Tepian Sambaliung"
+                  value={articleForm.title}
+                  onChange={e => setArticleForm({ ...articleForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 text-sm font-semibold border border-slate-200 rounded-xl focus:outline-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Kategori / Tag</label>
+                  <select
+                    value={articleForm.tag}
+                    onChange={e => setArticleForm({ ...articleForm, tag: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="Budaya & Kuliner">Budaya & Kuliner</option>
+                    <option value="Ekonomi UMKM">Ekonomi UMKM</option>
+                    <option value="Panduan Usaha">Panduan Usaha</option>
+                    <option value="Info Komunitas">Info Komunitas</option>
+                    <option value="Pengumuman Resmi">Pengumuman Resmi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Penulis / Sumber</label>
+                  <input
+                    type="text"
+                    required
+                    value={articleForm.author}
+                    onChange={e => setArticleForm({ ...articleForm, author: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Gambar Cover Berita</label>
+                <div className="flex flex-col sm:flex-row gap-4 items-start">
+                  <div className="flex-1 w-full space-y-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-600 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-100 file:text-emerald-800"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Atau masukkan tautan URL gambar..."
+                      value={articleForm.cover_image}
+                      onChange={e => setArticleForm({ ...articleForm, cover_image: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  {articleForm.cover_image && (
+                    <div className="w-28 h-20 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 flex-shrink-0">
+                      <img src={articleForm.cover_image} alt="Preview Cover" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Ringkasan / Subjudul Berita</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Tulis ringkasan singkat berita..."
+                  value={articleForm.excerpt}
+                  onChange={e => setArticleForm({ ...articleForm, excerpt: e.target.value })}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500"
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Isi Lengkap Berita (Layout Standar)</label>
+                <textarea
+                  rows={8}
+                  required
+                  placeholder="Tuliskan berita lengkap di sini. Gunakan tombol Enter untuk memisahkan paragraf..."
+                  value={articleForm.content}
+                  onChange={e => setArticleForm({ ...articleForm, content: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-emerald-500 leading-relaxed font-sans"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsArticleModalOpen(false)}
+                  className="flex-1 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs transition"
+                >
+                  Simpan & Publikasikan Berita
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ASSIST BOOKING TENANT */}
+      {isAssistBookingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 text-amber-600">
+              <span className="text-xl">⚡</span>
+              <h3 className="text-lg font-bold text-slate-900">Bantu Booking Stand Tenant</h3>
+            </div>
+            <form onSubmit={handleAssistBooking} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Pilih Tenant / Anggota</label>
+                <select
+                  required
+                  value={assistForm.member_id}
+                  onChange={e => setAssistForm({ ...assistForm, member_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="">-- Pilih Tenant --</option>
+                  {safeMembers.map(m => (
+                    <option key={m.member_id} value={m.member_id}>
+                      {m.nama_lengkap} — {m.nama_usaha} ({m.member_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Pilih Stand</label>
+                <select
+                  required
+                  value={assistForm.stand_id}
+                  onChange={e => setAssistForm({ ...assistForm, stand_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="">-- Pilih Stand --</option>
+                  {safeStands.map(s => (
+                    <option key={s.stand_id} value={s.stand_id}>
+                      Stand {s.stand_code} ({s.zone} - Rp {(s.base_price || 0).toLocaleString('id-ID')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Event Tujuan</label>
+                <select
+                  value={assistForm.event_id}
+                  onChange={e => setAssistForm({ ...assistForm, event_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  {safeEvents.map(ev => (
+                    <option key={ev.event_id} value={ev.event_id}>
+                      {ev.title} ({ev.event_date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                  <input
+                    type="checkbox"
+                    checked={assistForm.instant_confirm}
+                    onChange={e => setAssistForm({ ...assistForm, instant_confirm: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-slate-800 font-semibold text-[11px]">
+                    Langsung Konfirmasi Penuh (Tandai Lunas)
+                  </span>
+                </label>
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAssistBookingOpen(false)}
+                  className="flex-1 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl font-black"
+                >
+                  Pesan Stand Sekarang
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MASTER STAND */}
+      {isStandModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingStand ? 'Atur Nama & Harga Stand' : 'Tambah Master Stand Baru'}
+            </h3>
+            <form onSubmit={handleSaveStand} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama / Kode Stand</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: A-01, B-12"
+                  value={standForm.stand_code}
+                  onChange={e => setStandForm({ ...standForm, stand_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold uppercase"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Zona Stand</label>
+                <select
+                  value={standForm.zone}
+                  onChange={e => setStandForm({ ...standForm, zone: e.target.value as StandZone })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="ZONA_A">ZONA_A (Utama)</option>
+                  <option value="ZONA_B">ZONA_B (Kuliner Pesisir)</option>
+                  <option value="ZONA_C">ZONA_C (Kriya & Fashion)</option>
+                  <option value="TENGAH">TENGAH (Atrium / Panggung)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Harga Sewa Stand (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={standForm.base_price}
+                  onChange={e => setStandForm({ ...standForm, base_price: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-emerald-600"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsStandModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Stand
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH ANGGOTA BARU */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingMember ? 'Edit Data Anggota' : 'Tambah Anggota Baru'}
+            </h3>
+            <form onSubmit={handleSaveMember} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  value={memberForm.nama_lengkap}
+                  onChange={e => setMemberForm({ ...memberForm, nama_lengkap: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama Usaha</label>
+                <input
+                  type="text"
+                  required
+                  value={memberForm.nama_usaha}
+                  onChange={e => setMemberForm({ ...memberForm, nama_usaha: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Kategori Usaha</label>
+                  <select
+                    value={memberForm.kategori_usaha}
+                    onChange={e => setMemberForm({ ...memberForm, kategori_usaha: e.target.value as StandCategory })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="KULINER">KULINER</option>
+                    <option value="KERAJINAN">KERAJINAN</option>
+                    <option value="FASHION">FASHION</option>
+                    <option value="JASA">JASA</option>
+                    <option value="UMUM">UMUM</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Nomor HP</label>
+                  <input
+                    type="text"
+                    required
+                    value={memberForm.nomor_hp}
+                    onChange={e => setMemberForm({ ...memberForm, nomor_hp: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={memberForm.email}
+                  onChange={e => setMemberForm({ ...memberForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Alamat</label>
+                <input
+                  type="text"
+                  required
+                  value={memberForm.alamat}
+                  onChange={e => setMemberForm({ ...memberForm, alamat: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold"
+                >
+                  Simpan Data
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
