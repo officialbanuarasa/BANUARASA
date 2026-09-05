@@ -17,16 +17,13 @@ import {
 } from '../types';
 import { storage } from '../services/storage';
 
-// --------------------------------------------------------
-// TIPE DATA & KONFIGURASI STUDIO DESAIN KTA (INLINE)
-// --------------------------------------------------------
 export type BarcodePosition = 'BOTTOM_RIGHT' | 'TOP_RIGHT' | 'BOTTOM_CENTER' | 'LEFT_PANEL';
 export type BarcodeShape = 'SQUARE' | 'ROUNDED' | 'MINIMAL';
 
 export interface KTADesignConfig {
   themePreset: 'EMERALD' | 'BERAU_HERITAGE' | 'DARK_VIP' | 'SLATE_CLEAN' | 'CUSTOM';
   bgImageUrl: string;
-  bgOpacity: number; // 0 - 100
+  bgOpacity: number;
   overlayColor: 'DARK' | 'LIGHT' | 'EMERALD';
   barcodePos: BarcodePosition;
   barcodeShape: BarcodeShape;
@@ -53,39 +50,49 @@ const DEFAULT_KTA_CONFIG: KTADesignConfig = {
 
 interface AdminDashboardProps {
   session: AuthSession;
-  members: Member[];
-  events: EventItem[];
-  registrations: Registration[];
-  payments: Payment[];
-  savings: Saving[];
-  salesReports: SalesReport[];
-  documents: DocumentRecord[];
-  auditLogs: AuditLog[];
+  members?: Member[];
+  events?: EventItem[];
+  registrations?: Registration[];
+  payments?: Payment[];
+  savings?: Saving[];
+  salesReports?: SalesReport[];
+  documents?: DocumentRecord[];
+  auditLogs?: AuditLog[];
   onDataUpdated: () => void;
   onOpenScanner?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   session,
-  members,
-  events,
-  registrations,
-  payments,
-  savings,
-  salesReports,
-  documents,
-  auditLogs,
+  members = [],
+  events = [],
+  registrations = [],
+  payments = [],
+  savings = [],
+  salesReports = [],
+  documents = [],
+  auditLogs = [],
   onDataUpdated,
   onOpenScanner
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'events' | 'stands' | 'payments' | 'savings' | 'reports' | 'editorials' | 'audit'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Modal Verifikasi Pembayaran
+  // Safe Array Fallbacks
+  const safeMembers = Array.isArray(members) ? members : [];
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safeRegistrations = Array.isArray(registrations) ? registrations : [];
+  const safePayments = Array.isArray(payments) ? payments : [];
+  const safeSavings = Array.isArray(savings) ? savings : [];
+  const safeSalesReports = Array.isArray(salesReports) ? salesReports : [];
+  const safeAuditLogs = Array.isArray(auditLogs) ? auditLogs : [];
+  const safeArticles: EditorialArticle[] = Array.isArray(storage.getArticles?.()) ? storage.getArticles() : [];
+  const safeStands: MasterStand[] = Array.isArray(storage.getStands?.()) ? storage.getStands() : [];
+
+  // Modal States
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Modal CRUD: Member
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [memberForm, setMemberForm] = useState({
@@ -98,7 +105,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alamat: ''
   });
 
-  // Modal CRUD: Event
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [eventForm, setEventForm] = useState({
@@ -112,7 +118,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     total_stands: 64
   });
 
-  // Modal CRUD: Stand Baru / Edit Stand
   const [isStandModalOpen, setIsStandModalOpen] = useState(false);
   const [editingStand, setEditingStand] = useState<MasterStand | null>(null);
   const [standForm, setStandForm] = useState({
@@ -122,16 +127,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     base_price: 150000
   });
 
-  // Modal Khusus: Bookingkan Stand untuk Tenant
   const [isAssistBookingOpen, setIsAssistBookingOpen] = useState(false);
   const [assistForm, setAssistForm] = useState({
     member_id: '',
     stand_id: '',
-    event_id: events[0]?.event_id || 'EVT-2026-001',
+    event_id: safeEvents[0]?.event_id || 'EVT-2026-001',
     instant_confirm: true
   });
 
-  // Modal CRUD: Tambah Simpanan Manual
   const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
   const [savingForm, setSavingForm] = useState({
     member_id: '',
@@ -139,7 +142,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     amount: 50000
   });
 
-  // Modal CRUD: Berita & Editorial
   const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<EditorialArticle | null>(null);
   const [articleForm, setArticleForm] = useState({
@@ -148,40 +150,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     excerpt: '',
     content: '',
     cover_image: '',
-    author: session.user.nama_lengkap || 'Redaksi Banuarasa',
+    author: session?.user?.nama_lengkap || 'Redaksi Banuarasa',
     status: 'PUBLISHED' as 'PUBLISHED' | 'DRAFT'
   });
 
-  // ----------------------------------------------------
-  // STATE: STUDIO DESAIN & INSPEKSI KTA ANGGOTA
-  // ----------------------------------------------------
   const [selectedMemberForKTA, setSelectedMemberForKTA] = useState<Member | null>(null);
   const [ktaDesignConfig, setKtaDesignConfig] = useState<KTADesignConfig>(DEFAULT_KTA_CONFIG);
   const [ktaActiveControlTab, setKtaActiveControlTab] = useState<'background' | 'barcode' | 'elements' | 'profile'>('background');
   const [ktaSaveAlert, setKtaSaveAlert] = useState<string>('');
 
-  const isSuperAdmin = session.user.role === 'SUPER_ADMIN';
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN';
 
-  // Ringkasan Statistik
+  // Ringkasan Statistik dengan Null-Safety
   const stats = useMemo(() => {
-    const totalOmzet = salesReports.reduce((sum, r) => sum + (r.total_turnover || 0), 0);
-    const totalSimpanan = savings.reduce((sum, s) => sum + (s.amount || 0), 0);
-    const pendingPayments = payments.filter(p => p.verification_status === 'PENDING').length;
-    const confirmedStands = registrations.filter(r => r.status === 'CONFIRMED').length;
+    const totalOmzet = safeSalesReports.reduce((sum, r) => sum + (Number(r?.total_turnover) || 0), 0);
+    const totalSimpanan = safeSavings.reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
+    const pendingPayments = safePayments.filter(p => p?.verification_status === 'PENDING').length;
+    const confirmedStands = safeRegistrations.filter(r => r?.status === 'CONFIRMED').length;
 
     return {
-      totalMembers: members.length,
-      totalEvents: events.length,
+      totalMembers: safeMembers.length,
+      totalEvents: safeEvents.length,
       confirmedStands,
       pendingPayments,
       totalSimpanan,
       totalOmzet
     };
-  }, [members, events, registrations, payments, savings, salesReports]);
+  }, [safeMembers, safeEvents, safeRegistrations, safePayments, safeSavings, safeSalesReports]);
 
-  // ----------------------------------------------------
-  // HANDLER STUDIO DESAIN KTA
-  // ----------------------------------------------------
+  // Handlers KTA Studio
   const handleOpenKTAStudio = (m: Member) => {
     setSelectedMemberForKTA({ ...m });
     setKtaDesignConfig(DEFAULT_KTA_CONFIG);
@@ -253,12 +250,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveKTAStudio = () => {
     if (!selectedMemberForKTA) return;
     storage.saveMember(selectedMemberForKTA);
-    storage.logActivity(
-      'SUPERADMIN_KTA_EDIT',
-      'MEMBER',
-      `Superadmin mendesain ulang KTA & memperbarui data profil anggota ${selectedMemberForKTA.nama_lengkap} (${selectedMemberForKTA.member_id})`,
-      selectedMemberForKTA.member_id
-    );
     setKtaSaveAlert('Desain KTA & Data Anggota Berhasil Disimpan!');
     onDataUpdated();
     setTimeout(() => {
@@ -267,9 +258,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, 1200);
   };
 
-  // ----------------------------------------------------
-  // HANDLER BERITA & EDITORIAL
-  // ----------------------------------------------------
+  // Handlers Berita
   const handleOpenAddArticle = () => {
     setEditingArticle(null);
     setArticleForm({
@@ -278,7 +267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       excerpt: '',
       content: '',
       cover_image: '',
-      author: session.user.nama_lengkap || 'Redaksi Banuarasa',
+      author: session?.user?.nama_lengkap || 'Redaksi Banuarasa',
       status: 'PUBLISHED'
     });
     setIsArticleModalOpen(true);
@@ -287,13 +276,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenEditArticle = (art: EditorialArticle) => {
     setEditingArticle(art);
     setArticleForm({
-      title: art.title,
-      tag: art.tag,
-      excerpt: art.excerpt,
-      content: art.content,
+      title: art.title || '',
+      tag: art.tag || 'Budaya & Kuliner',
+      excerpt: art.excerpt || '',
+      content: art.content || '',
       cover_image: art.cover_image || '',
-      author: art.author,
-      status: art.status
+      author: art.author || '',
+      status: art.status || 'PUBLISHED'
     });
     setIsArticleModalOpen(true);
   };
@@ -338,9 +327,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onDataUpdated();
   };
 
-  // ----------------------------------------------------
-  // HANDLER LAINNYA (STAND, MEMBER, EVENT, PAYMENT)
-  // ----------------------------------------------------
+  // Handlers Stand & Booking
   const handleOpenAddStand = () => {
     setEditingStand(null);
     setStandForm({
@@ -377,7 +364,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           zone: standForm.zone,
           base_price: Number(standForm.base_price) || 150000
         };
-        storage.logActivity('UPDATE_STAND', 'STAND', `Super Admin mengubah nama/harga stand ${standForm.stand_code.toUpperCase()}`);
       }
     } else {
       const newNumber = allStands.length + 1;
@@ -391,7 +377,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         status: 'ACTIVE'
       };
       allStands.push(newStand);
-      storage.logActivity('CREATE_STAND', 'STAND', `Super Admin menambah master stand ${newStand.stand_code}`);
     }
 
     setIsStandModalOpen(false);
@@ -404,7 +389,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const idx = allStands.findIndex(s => s.stand_id === standId);
     if (idx >= 0) {
       allStands.splice(idx, 1);
-      storage.logActivity('DELETE_STAND', 'STAND', `Menghapus stand ${code}`, standId);
       onDataUpdated();
     }
   };
@@ -417,20 +401,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (currentStatus === 'CONFIRMED' || currentStatus === 'RESERVED') {
       if (window.confirm(`Lepaskan stand ${standCode}? Stand ini akan kembali TERSEDIA untuk umum.`)) {
         reg.status = 'AVAILABLE';
-        storage.logActivity('RELEASE_STAND', 'STAND', `Superadmin melepaskan booking stand ${standCode}`, registrationId);
       }
     } else {
       reg.status = 'CONFIRMED';
-      storage.logActivity('FORCE_CONFIRM_STAND', 'STAND', `Superadmin mengonfirmasi langsung stand ${standCode}`, registrationId);
     }
     onDataUpdated();
   };
 
   const handleAssistBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetMember = members.find(m => m.member_id === assistForm.member_id);
-    const targetStand = storage.getStands().find(s => s.stand_id === assistForm.stand_id);
-    const targetEvent = events.find(ev => ev.event_id === assistForm.event_id) || events[0];
+    const targetMember = safeMembers.find(m => m.member_id === assistForm.member_id);
+    const targetStand = safeStands.find(s => s.stand_id === assistForm.stand_id);
+    const targetEvent = safeEvents.find(ev => ev.event_id === assistForm.event_id) || safeEvents[0];
 
     if (!targetMember || !targetStand || !targetEvent) {
       alert('Pilih member, stand, dan event secara lengkap.');
@@ -445,12 +427,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     if (assistForm.instant_confirm && bookingResult.registration) {
       bookingResult.registration.status = 'CONFIRMED';
-      storage.logActivity(
-        'ASSISTED_BOOKING_CONFIRMED', 
-        'STAND', 
-        `Superadmin memesankan Stand ${targetStand.stand_code} untuk tenant ${targetMember.nama_lengkap}`, 
-        bookingResult.registration.registration_id
-      );
     }
 
     alert(`Stand ${targetStand.stand_code} berhasil dipesankan untuk ${targetMember.nama_lengkap}!`);
@@ -458,6 +434,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onDataUpdated();
   };
 
+  // Handlers Anggota
   const handleOpenAddMember = () => {
     setEditingMember(null);
     setMemberForm({
@@ -475,13 +452,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenEditMember = (m: Member) => {
     setEditingMember(m);
     setMemberForm({
-      nik: m.nik,
-      nama_lengkap: m.nama_lengkap,
-      nama_usaha: m.nama_usaha,
-      kategori_usaha: m.kategori_usaha,
-      nomor_hp: m.nomor_hp,
-      email: m.email,
-      alamat: m.alamat
+      nik: m.nik || '',
+      nama_lengkap: m.nama_lengkap || '',
+      nama_usaha: m.nama_usaha || '',
+      kategori_usaha: m.kategori_usaha || 'KULINER',
+      nomor_hp: m.nomor_hp || '',
+      email: m.email || '',
+      alamat: m.alamat || ''
     });
     setIsMemberModalOpen(true);
   };
@@ -494,7 +471,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ...memberForm
       });
     } else {
-      const newId = `MBR-${String(members.length + 1).padStart(4, '0')}`;
+      const newId = `MBR-${String(safeMembers.length + 1).padStart(4, '0')}`;
       storage.saveMember({
         member_id: newId,
         ...memberForm,
@@ -513,11 +490,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const idx = allMembers.findIndex(m => m.member_id === memberId);
     if (idx >= 0) {
       allMembers.splice(idx, 1);
-      storage.logActivity('DELETE_MEMBER', 'MEMBER', `Menghapus anggota ${name}`, memberId);
       onDataUpdated();
     }
   };
 
+  // Handlers Event
   const handleOpenAddEvent = () => {
     setEditingEvent(null);
     setEventForm({
@@ -536,14 +513,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenEditEvent = (ev: EventItem) => {
     setEditingEvent(ev);
     setEventForm({
-      title: ev.title,
-      description: ev.description,
-      event_date: ev.event_date,
-      start_time: ev.start_time,
-      end_time: ev.end_time,
-      location: ev.location,
-      status: ev.status,
-      total_stands: ev.total_stands
+      title: ev.title || '',
+      description: ev.description || '',
+      event_date: ev.event_date || '',
+      start_time: ev.start_time || '06:00',
+      end_time: ev.end_time || '12:00',
+      location: ev.location || '',
+      status: ev.status || 'UPCOMING',
+      total_stands: ev.total_stands || 64
     });
     setIsEventModalOpen(true);
   };
@@ -555,7 +532,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const idx = allEvents.findIndex(ev => ev.event_id === editingEvent.event_id);
       if (idx >= 0) {
         allEvents[idx] = { ...allEvents[idx], ...eventForm };
-        storage.logActivity('UPDATE_EVENT', 'EVENT', `Mengedit event ${eventForm.title}`, editingEvent.event_id);
       }
     } else {
       const newEvent: EventItem = {
@@ -565,7 +541,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         created_at: new Date().toISOString()
       };
       allEvents.push(newEvent);
-      storage.logActivity('CREATE_EVENT', 'EVENT', `Membuat event baru ${newEvent.title}`, newEvent.event_id);
     }
     setIsEventModalOpen(false);
     onDataUpdated();
@@ -577,14 +552,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const idx = allEvents.findIndex(ev => ev.event_id === eventId);
     if (idx >= 0) {
       allEvents.splice(idx, 1);
-      storage.logActivity('DELETE_EVENT', 'EVENT', `Menghapus event ${title}`, eventId);
       onDataUpdated();
     }
   };
 
   const handleSaveSaving = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetMember = members.find(m => m.member_id === savingForm.member_id);
+    const targetMember = safeMembers.find(m => m.member_id === savingForm.member_id);
     if (!targetMember) return;
 
     storage.addSaving({
@@ -600,7 +574,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleVerifyPayment = (paymentId: string, status: 'VERIFIED' | 'REJECTED') => {
     storage.verifyPayment(
       paymentId, 
-      session.user.nama_lengkap || session.user.username, 
+      session?.user?.nama_lengkap || session?.user?.username || 'Admin', 
       status, 
       status === 'REJECTED' ? rejectReason : undefined
     );
@@ -618,7 +592,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {session.user.role}
+                  {session?.user?.role || 'ADMIN'}
                 </span>
                 <span className="text-slate-400 text-xs">• WITA (Berau)</span>
               </div>
@@ -626,7 +600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Pusat Kendali Operasional Banuarasa
               </h1>
               <p className="text-sm text-slate-400">
-                Pengelola: <strong className="text-slate-200">{session.user.nama_lengkap || session.user.username}</strong>
+                Pengelola: <strong className="text-slate-200">{session?.user?.nama_lengkap || session?.user?.username || 'Super Admin'}</strong>
               </p>
             </div>
 
@@ -638,7 +612,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="px-4 py-2.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
                   >
                     <span>📰</span>
-                    <span>Tulis Kabar & Berita</span>
+                    <span>Tulis Berita</span>
                   </button>
                   <button
                     onClick={() => setIsAssistBookingOpen(true)}
@@ -665,11 +639,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex overflow-x-auto gap-2 mt-6 pt-2 border-t border-slate-800 text-sm">
             {[
               { id: 'overview', label: 'Ringkasan' },
-              { id: 'members', label: `Anggota & KTA (${members.length})` },
-              { id: 'editorials', label: `Kabar & Berita (${storage.getArticles().length})` },
-              { id: 'events', label: `Kelola Event (${events.length})` },
+              { id: 'members', label: `Anggota & KTA (${safeMembers.length})` },
+              { id: 'editorials', label: `Kabar & Berita (${safeArticles.length})` },
+              { id: 'events', label: `Kelola Event (${safeEvents.length})` },
               { id: 'stands', label: `Stand & Booking Tenant` },
-              { id: 'payments', label: `Pembayaran (${payments.length})` },
+              { id: 'payments', label: `Pembayaran (${safePayments.length})` },
               { id: 'savings', label: 'Simpanan Koperasi' },
               { id: 'reports', label: 'Laporan Omzet' },
               { id: 'audit', label: 'Audit Trail' },
@@ -693,7 +667,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Konten Tab */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         
-        {/* TAB 1: MEMBERS (DILENGKAPI TOMBOL DESAIN KTA) */}
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Anggota</span>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalMembers}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Stand Terisi</span>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.confirmedStands}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Verifikasi Tertunda</span>
+                <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingPayments}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Event</span>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalEvents}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Dana Simpanan</span>
+                <p className="text-lg font-bold text-indigo-600 mt-1">
+                  Rp {(stats.totalSimpanan / 1000).toLocaleString('id-ID')}k
+                </p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Omzet UMKM</span>
+                <p className="text-lg font-bold text-slate-800 mt-1">
+                  Rp {(stats.totalOmzet / 1000).toLocaleString('id-ID')}k
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 className="text-base font-bold text-slate-800">Menunggu Verifikasi Pembayaran</h2>
+                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
+                  {safePayments.filter(p => p?.verification_status === 'PENDING').length} Antrean
+                </span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {safePayments.filter(p => p?.verification_status === 'PENDING').length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-500">Tidak ada bukti transfer yang perlu diverifikasi saat ini.</p>
+                ) : (
+                  safePayments.filter(p => p?.verification_status === 'PENDING').map(pay => (
+                    <div key={pay.payment_id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800">{pay.member_name}</span>
+                          <span className="text-xs text-slate-400">({pay.payment_id})</span>
+                        </div>
+                        <p className="text-sm text-slate-600 mt-0.5">
+                          Tipe: <strong className="text-slate-800">{pay.payment_type}</strong> — Rp {(pay.amount || 0).toLocaleString('id-ID')} via {pay.payment_method}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">Tanggal: {pay.payment_date}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedPayment(pay)}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                        >
+                          Lihat Bukti
+                        </button>
+                        <button
+                          onClick={() => handleVerifyPayment(pay.payment_id, 'VERIFIED')}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+                        >
+                          Setujui
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: MEMBERS & KTA STUDIO */}
         {activeTab === 'members' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
@@ -729,11 +782,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {members
+                  {safeMembers
                     .filter(m => 
-                      m.nama_lengkap.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      m.nama_usaha.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      m.nik.includes(searchQuery)
+                      (m?.nama_lengkap || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (m?.nama_usaha || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (m?.nik || '').includes(searchQuery)
                     )
                     .map(m => (
                       <tr key={m.member_id} className="hover:bg-slate-50">
@@ -766,7 +819,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               onClick={() => handleOpenKTAStudio(m)}
                               className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                              title="Buka Studio Desain KTA & Edit Data Profil"
+                              title="Buka Studio Desain KTA & Edit Profil"
                             >
                               🎴 Desain KTA
                             </button>
@@ -792,7 +845,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: KABAR & EDITORIAL */}
+        {/* TAB 3: KABAR & BERITA */}
         {activeTab === 'editorials' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
@@ -813,12 +866,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="divide-y divide-slate-100">
-                {storage.getArticles().length === 0 ? (
+                {safeArticles.length === 0 ? (
                   <div className="p-12 text-center text-slate-400 text-sm">
                     Belum ada artikel yang diterbitkan.
                   </div>
                 ) : (
-                  storage.getArticles().map(art => (
+                  safeArticles.map(art => (
                     <div key={art.article_id} className="p-5 sm:p-6 flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between hover:bg-slate-50/60 transition">
                       <div className="flex gap-4 items-start">
                         <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -875,85 +928,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Total Anggota</span>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalMembers}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Stand Terisi</span>
-                <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.confirmedStands}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Verifikasi Tertunda</span>
-                <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingPayments}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Total Event</span>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalEvents}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Dana Simpanan</span>
-                <p className="text-lg font-bold text-indigo-600 mt-1">
-                  Rp {(stats.totalSimpanan / 1000).toLocaleString('id-ID')}k
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-medium text-slate-500">Total Omzet UMKM</span>
-                <p className="text-lg font-bold text-slate-800 mt-1">
-                  Rp {(stats.totalOmzet / 1000).toLocaleString('id-ID')}k
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-base font-bold text-slate-800">Menunggu Verifikasi Pembayaran</h2>
-                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
-                  {payments.filter(p => p.verification_status === 'PENDING').length} Antrean
-                </span>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {payments.filter(p => p.verification_status === 'PENDING').length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-500">Tidak ada bukti transfer yang perlu diverifikasi saat ini.</p>
-                ) : (
-                  payments.filter(p => p.verification_status === 'PENDING').map(pay => (
-                    <div key={pay.payment_id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{pay.member_name}</span>
-                          <span className="text-xs text-slate-400">({pay.payment_id})</span>
-                        </div>
-                        <p className="text-sm text-slate-600 mt-0.5">
-                          Tipe: <strong className="text-slate-800">{pay.payment_type}</strong> — Rp {pay.amount.toLocaleString('id-ID')} via {pay.payment_method}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">Tanggal: {pay.payment_date}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedPayment(pay)}
-                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                        >
-                          Lihat Bukti
-                        </button>
-                        <button
-                          onClick={() => handleVerifyPayment(pay.payment_id, 'VERIFIED')}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
-                        >
-                          Setujui
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* TAB 4: EVENTS */}
         {activeTab === 'events' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
@@ -981,7 +955,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {events.map(ev => (
+                  {safeEvents.map(ev => (
                     <tr key={ev.event_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <div className="font-bold text-slate-800">{ev.title}</div>
@@ -1063,13 +1037,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {storage.getStands().map(s => (
+                    {safeStands.map(s => (
                       <tr key={s.stand_id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-bold text-slate-900 text-base">{s.stand_code}</td>
                         <td className="px-4 py-3 text-xs">{s.zone}</td>
                         <td className="px-4 py-3 text-xs">{s.category}</td>
                         <td className="px-4 py-3 font-bold text-emerald-600 text-sm">
-                          Rp {s.base_price.toLocaleString('id-ID')}
+                          Rp {(s.base_price || 0).toLocaleString('id-ID')}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{s.status}</span>
@@ -1115,12 +1089,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {registrations.length === 0 ? (
+                    {safeRegistrations.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center py-8 text-slate-400">Belum ada tenant yang memesan stand.</td>
                       </tr>
                     ) : (
-                      registrations.map(r => (
+                      safeRegistrations.map(r => (
                         <tr key={r.registration_id} className="hover:bg-slate-50">
                           <td className="px-4 py-3 font-bold text-emerald-600 text-base">{r.stand_code}</td>
                           <td className="px-4 py-3">
@@ -1128,7 +1102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="text-xs text-slate-400">{r.nama_usaha}</div>
                           </td>
                           <td className="px-4 py-3 text-xs">{r.event_title}</td>
-                          <td className="px-4 py-3 font-medium">Rp {r.total_fee.toLocaleString('id-ID')}</td>
+                          <td className="px-4 py-3 font-medium">Rp {(r.total_fee || 0).toLocaleString('id-ID')}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                               r.status === 'CONFIRMED'
@@ -1189,12 +1163,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {payments.map(p => (
+                  {safePayments.map(p => (
                     <tr key={p.payment_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-xs">{p.payment_id}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{p.member_name}</td>
                       <td className="px-4 py-3 text-xs">{p.payment_type}</td>
-                      <td className="px-4 py-3 font-bold text-slate-800">Rp {p.amount.toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 font-bold text-slate-800">Rp {(p.amount || 0).toLocaleString('id-ID')}</td>
                       <td className="px-4 py-3 text-xs">{p.payment_method}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -1245,13 +1219,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {savings.map(s => (
+                  {safeSavings.map(s => (
                     <tr key={s.saving_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-xs">{s.saving_id}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
                       <td className="px-4 py-3 text-xs">{s.saving_type}</td>
-                      <td className="px-4 py-3 font-bold text-indigo-600">Rp {s.amount.toLocaleString('id-ID')}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{new Date(s.created_at).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 font-bold text-indigo-600">Rp {(s.amount || 0).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">
+                        {s.created_at ? new Date(s.created_at).toLocaleString('id-ID') : '-'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1278,13 +1254,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {salesReports.map(rep => (
+                  {safeSalesReports.map(rep => (
                     <tr key={rep.sales_report_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-bold text-emerald-600">{rep.stand_code}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{rep.member_name}</td>
                       <td className="px-4 py-3 text-xs">{rep.event_title}</td>
                       <td className="px-4 py-3 text-xs">{rep.report_date}</td>
-                      <td className="px-4 py-3 font-bold text-slate-800">Rp {rep.total_turnover.toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 font-bold text-slate-800">Rp {(rep.total_turnover || 0).toLocaleString('id-ID')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1311,7 +1287,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-xs">
-                  {auditLogs.map(log => (
+                  {safeAuditLogs.map(log => (
                     <tr key={log.log_id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{log.timestamp_wita}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800 font-sans">{log.actor_name}</td>
@@ -1329,14 +1305,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
       </div>
 
-      {/* -------------------------------------------------- */}
-      {/* MODAL STUDIO KTA: EDIT PROFIL, BACKGROUND & BARCODE */}
-      {/* -------------------------------------------------- */}
+      {/* MODAL STUDIO KTA */}
       {selectedMemberForKTA && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden my-6 border border-slate-200 flex flex-col lg:flex-row max-h-[92vh]">
             
-            {/* PANEL KIRI: PREVIEW FISIK KTA LANGSUNG */}
+            {/* PANEL PREVIEW KTA */}
             <div className="lg:w-7/12 p-6 sm:p-8 bg-slate-100/80 border-r border-slate-200 flex flex-col justify-between overflow-y-auto">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -1356,7 +1330,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
 
-                {/* KANVAS KARTU KTA */}
                 <div 
                   id="kta-canvas-preview"
                   style={{
@@ -1373,7 +1346,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ktaDesignConfig.themePreset === 'SLATE_CLEAN' ? 'text-slate-900 border-slate-300' : 'text-white border-white/15'
                   }`}
                 >
-                  {/* Layer Background Image dengan Kontrol Opacity */}
                   {ktaDesignConfig.bgImageUrl && (
                     <div 
                       className="absolute inset-0 bg-cover bg-center pointer-events-none transition-opacity duration-200"
@@ -1384,7 +1356,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   )}
 
-                  {/* Layer Tint Gelap/Terang */}
                   <div 
                     className={`absolute inset-0 pointer-events-none ${
                       ktaDesignConfig.overlayColor === 'DARK'
@@ -1395,7 +1366,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }`}
                   />
 
-                  {/* Header Kartu */}
                   <div className="relative z-10 flex items-center justify-between border-b border-current/15 pb-3">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center font-black text-slate-950 text-sm shadow-xs">
@@ -1423,24 +1393,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Body Kartu: Foto, Biodata, & Barcode */}
                   <div className={`relative z-10 mt-4 flex items-center gap-5 ${
                     ktaDesignConfig.barcodePos === 'LEFT_PANEL' ? 'flex-row-reverse' : ''
                   }`}>
-                    {/* Foto Profil Anggota */}
                     <div className="relative flex-shrink-0">
                       <div className="w-20 h-24 rounded-xl border-2 border-current/30 overflow-hidden bg-slate-800/40 shadow-md flex items-center justify-center">
                         {selectedMemberForKTA.avatar_url ? (
                           <img src={selectedMemberForKTA.avatar_url} alt="Foto Profil" className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-2xl font-black opacity-40">
-                            {selectedMemberForKTA.nama_lengkap.charAt(0)}
+                            {(selectedMemberForKTA.nama_lengkap || 'M').charAt(0)}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Identitas Anggota */}
                     <div className="flex-1 space-y-1">
                       <h4 className="text-base font-black leading-snug">
                         {selectedMemberForKTA.nama_lengkap}
@@ -1468,7 +1435,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Barcode / QR Code Dinamis */}
                     {(ktaDesignConfig.barcodePos === 'BOTTOM_RIGHT' || ktaDesignConfig.barcodePos === 'LEFT_PANEL') && (
                       <div className={`flex-shrink-0 bg-white p-1.5 shadow-md flex flex-col items-center ${
                         ktaDesignConfig.barcodeShape === 'ROUNDED' 
@@ -1496,7 +1462,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* Posisi Barcode Alternatif: Top Right */}
                   {ktaDesignConfig.barcodePos === 'TOP_RIGHT' && (
                     <div className="absolute top-14 right-6 z-20 bg-white p-1 rounded-lg shadow-md">
                       <img 
@@ -1507,7 +1472,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   )}
 
-                  {/* Footer KTA */}
                   <div className="relative z-10 mt-4 pt-2 border-t border-current/15 flex items-center justify-between text-[8px] opacity-70">
                     <span>Kabupaten Berau • Kalimantan Timur</span>
                     <span>Pindai barcode untuk memeriksa keaslian data di Google Spreadsheet</span>
@@ -1537,7 +1501,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* PANEL KANAN: KONTROL SUPER ADMIN LENGKAP */}
+            {/* PANEL KONTROL STUDIO */}
             <div className="lg:w-5/12 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
               <div>
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
@@ -1550,7 +1514,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </span>
                 </div>
 
-                {/* Navigasi Tab Pengaturan Studio */}
                 <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl text-[11px] font-bold text-slate-600 mb-5">
                   {[
                     { id: 'background', label: '🎨 Latar' },
@@ -1570,7 +1533,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ))}
                 </div>
 
-                {/* KONTROL 1: LATAR BELAKANG & TRANSPARANSI */}
                 {ktaActiveControlTab === 'background' && (
                   <div className="space-y-4 text-xs">
                     <div>
@@ -1598,7 +1560,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Slider Transparansi Layer Background (0-100%) */}
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                       <div className="flex justify-between items-center">
                         <label className="font-bold text-slate-700">Transparansi Latar Belakang</label>
@@ -1640,7 +1601,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* KONTROL 2: POSISI & BENTUK BARCODE */}
                 {ktaActiveControlTab === 'barcode' && (
                   <div className="space-y-4 text-xs">
                     <div>
@@ -1693,7 +1653,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* KONTROL 3: VISIBILITAS ELEMEN */}
                 {ktaActiveControlTab === 'elements' && (
                   <div className="space-y-3 text-xs">
                     <div>
@@ -1752,7 +1711,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* KONTROL 4: EDIT DATA PROFIL ANGGOTA */}
                 {ktaActiveControlTab === 'profile' && (
                   <div className="space-y-3 text-xs">
                     <div>
@@ -1769,7 +1727,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap</label>
                       <input
                         type="text"
-                        value={selectedMemberForKTA.nama_lengkap}
+                        value={selectedMemberForKTA.nama_lengkap || ''}
                         onChange={(e) => setSelectedMemberForKTA({ ...selectedMemberForKTA, nama_lengkap: e.target.value })}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
                       />
@@ -1779,7 +1737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <label className="block font-semibold text-slate-600 mb-1">Nama Usaha UMKM</label>
                       <input
                         type="text"
-                        value={selectedMemberForKTA.nama_usaha}
+                        value={selectedMemberForKTA.nama_usaha || ''}
                         onChange={(e) => setSelectedMemberForKTA({ ...selectedMemberForKTA, nama_usaha: e.target.value })}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                       />
@@ -1789,7 +1747,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <label className="block font-semibold text-slate-600 mb-1">Nomor Induk Kependudukan (NIK)</label>
                       <input
                         type="text"
-                        value={selectedMemberForKTA.nik}
+                        value={selectedMemberForKTA.nik || ''}
                         onChange={(e) => setSelectedMemberForKTA({ ...selectedMemberForKTA, nik: e.target.value })}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
                       />
@@ -1798,7 +1756,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <label className="block font-semibold text-slate-600 mb-1">Status Keanggotaan</label>
                       <select
-                        value={selectedMemberForKTA.status_keanggotaan}
+                        value={selectedMemberForKTA.status_keanggotaan || 'ACTIVE'}
                         onChange={(e) => setSelectedMemberForKTA({ ...selectedMemberForKTA, status_keanggotaan: e.target.value as any })}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
                       >
@@ -1817,9 +1775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* -------------------------------------------------- */}
-      {/* MODAL PENULISAN BERITA & EDITORIAL BANUARASA       */}
-      {/* -------------------------------------------------- */}
+      {/* MODAL BERITA */}
       {isArticleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-2xl bg-white rounded-2xl p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
@@ -1949,7 +1905,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: BANTU BOOKING STAND TENANT */}
+      {/* MODAL BANTU BOOKING TENANT */}
       {isAssistBookingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
@@ -1967,7 +1923,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 >
                   <option value="">-- Pilih Tenant --</option>
-                  {members.map(m => (
+                  {safeMembers.map(m => (
                     <option key={m.member_id} value={m.member_id}>
                       {m.nama_lengkap} — {m.nama_usaha} ({m.member_id})
                     </option>
@@ -1983,9 +1939,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 >
                   <option value="">-- Pilih Stand --</option>
-                  {storage.getStands().map(s => (
+                  {safeStands.map(s => (
                     <option key={s.stand_id} value={s.stand_id}>
-                      Stand {s.stand_code} ({s.zone} - Rp {s.base_price.toLocaleString('id-ID')})
+                      Stand {s.stand_code} ({s.zone} - Rp {(s.base_price || 0).toLocaleString('id-ID')})
                     </option>
                   ))}
                 </select>
@@ -1997,7 +1953,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={e => setAssistForm({ ...assistForm, event_id: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 >
-                  {events.map(ev => (
+                  {safeEvents.map(ev => (
                     <option key={ev.event_id} value={ev.event_id}>
                       {ev.title} ({ev.event_date})
                     </option>
@@ -2037,7 +1993,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: STAND */}
+      {/* MODAL MASTER STAND */}
       {isStandModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
@@ -2113,7 +2069,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: MEMBER */}
+      {/* MODAL TAMBAH / EDIT ANGGOTA */}
       {isMemberModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
@@ -2217,7 +2173,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: EVENT */}
+      {/* MODAL EVENT */}
       {isEventModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
@@ -2307,7 +2263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: SAVING */}
+      {/* MODAL SIMPANAN */}
       {isSavingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
@@ -2322,7 +2278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 >
                   <option value="">-- Pilih Anggota --</option>
-                  {members.map(m => (
+                  {safeMembers.map(m => (
                     <option key={m.member_id} value={m.member_id}>
                       {m.nama_lengkap} ({m.member_id})
                     </option>
@@ -2371,14 +2327,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: VERIFIKASI PEMBAYARAN */}
+      {/* MODAL VERIFIKASI PEMBAYARAN */}
       {selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl">
             <h3 className="text-lg font-bold text-slate-800">Verifikasi Pembayaran</h3>
             <div className="mt-4 space-y-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
               <p>Anggota: <strong className="text-slate-800">{selectedPayment.member_name}</strong></p>
-              <p>Jumlah: <strong className="text-slate-800">Rp {selectedPayment.amount.toLocaleString('id-ID')}</strong></p>
+              <p>Jumlah: <strong className="text-slate-800">Rp {(selectedPayment.amount || 0).toLocaleString('id-ID')}</strong></p>
               <p>Tipe: <strong className="text-slate-800">{selectedPayment.payment_type}</strong></p>
             </div>
             {selectedPayment.proof_url && (
