@@ -23,19 +23,15 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Barcode / QR Code dinamis berbasis ID Anggota & Spreadsheet Verification
-  const barcodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-    JSON.stringify({
-      id: member.member_id,
-      nik: member.nik,
-      nama: member.nama_lengkap,
-      usaha: member.nama_usaha,
-      status: member.status_keanggotaan,
-      app: 'BANUARASA_WEEKEND_MARKET'
-    })
-  )}`;
+  // -------------------------------------------------------------------------
+  // URL PROFIL ANGGOTA RESMI DI WEBSITE (DIPINDAI DARI BARCODE SMARTPHONE)
+  // -------------------------------------------------------------------------
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://banuarasa.vercel.app';
+  const memberPublicUrl = `${currentOrigin}/?view=member-profile&id=${encodeURIComponent(member.member_id)}`;
 
-  // Handler Upload Foto dari Perangkat (Galeri / Kamera)
+  // Barcode / QR Code dinamis beresolusi tinggi yang menghubungkan langsung ke profil website
+  const barcodeApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=${encodeURIComponent(memberPublicUrl)}`;
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -47,13 +43,11 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
 
     const reader = new FileReader();
     reader.onload = () => {
-      const base64Photo = reader.result as string;
-      saveUpdatedAvatar(base64Photo);
+      saveUpdatedAvatar(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
 
-  // Handler Simpan Foto via Input Link URL
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!photoUrlInput.trim()) return;
@@ -61,7 +55,6 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
     setPhotoUrlInput('');
   };
 
-  // Fungsi Simpan ke Storage & Update State
   const saveUpdatedAvatar = (avatarUrl: string) => {
     const updated: Member = {
       ...member,
@@ -80,20 +73,42 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
     }
   };
 
-  // Cetak / Download KTA
   const handlePrintCard = () => {
     window.print();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl overflow-hidden my-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs overflow-y-auto">
+      {/* Style cetak presisi standar ID-1: 85,6 mm x 53,98 mm */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #print-area-kta, #print-area-kta * {
+            visibility: visible;
+          }
+          #print-area-kta {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 85.6mm !important;
+            height: 53.98mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
+
+      <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl overflow-hidden my-6 border border-slate-100">
         
-        {/* Modal Header */}
+        {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div>
-            <h2 className="text-lg font-black text-slate-800">Kartu Tanda Anggota (KTA) Digital</h2>
-            <p className="text-xs text-slate-500">Koperasi & Komunitas Banuarasa Weekend Market</p>
+            <h2 className="text-lg font-black text-slate-800">KTA Digital Standar ISO/IEC 7810</h2>
+            <p className="text-xs text-slate-500">Ukuran Standar ID-1: <strong>85,6 mm × 53,98 mm</strong></p>
           </div>
           <button
             onClick={onClose}
@@ -109,106 +124,110 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
           </div>
         )}
 
-        {/* -------------------------------------------------- */}
-        {/* DESAIN FISIK KTA DIGITAL BANUARASA                 */}
-        {/* -------------------------------------------------- */}
-        <div 
-          id="digital-kta-card"
-          className="relative w-full rounded-2xl bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 text-white p-6 shadow-xl border border-emerald-500/30 overflow-hidden"
-        >
-          {/* Aksen Motif Background */}
-          <div className="absolute top-0 right-0 w-44 h-44 bg-emerald-500/10 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none"></div>
-          <div className="absolute bottom-0 left-0 w-36 h-36 bg-teal-400/10 rounded-full blur-xl -ml-12 -mb-12 pointer-events-none"></div>
+        {/* ----------------------------------------------------------------- */}
+        {/* KARTU KTA STANDAR: 85,6 mm × 53,98 mm (Aspect Ratio: 1.5857)     */}
+        {/* ----------------------------------------------------------------- */}
+        <div className="flex justify-center items-center py-2">
+          <div 
+            id="print-area-kta"
+            style={{
+              width: '100%',
+              maxWidth: '380px',
+              aspectRatio: '85.6 / 53.98'
+            }}
+            className="relative rounded-2xl bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white p-3.5 sm:p-4 shadow-xl border border-emerald-500/30 overflow-hidden flex flex-col justify-between select-none"
+          >
+            {/* Latar Belakang Motif Ornamen */}
+            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl -mr-12 -mt-12 pointer-events-none"></div>
+            <div className="absolute bottom-0 left-0 w-28 h-28 bg-teal-400/10 rounded-full blur-xl -ml-8 -mb-8 pointer-events-none"></div>
 
-          {/* Header Kartu */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center font-black text-slate-950 text-base shadow-sm">
-                B
-              </div>
-              <div>
-                <span className="text-xs font-black tracking-wider uppercase text-white block">
-                  BANUARASA
-                </span>
-                <span className="text-[9px] text-emerald-300 font-semibold block tracking-wide">
-                  KARTU TANDA ANGGOTA UMKM
-                </span>
-              </div>
-            </div>
-            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
-              {member.status_keanggotaan || 'ACTIVE'}
-            </span>
-          </div>
-
-          {/* Konten Identitas Anggota & Barcode */}
-          <div className="mt-5 flex flex-col sm:flex-row items-center sm:items-start gap-5">
-            {/* Foto Profil KTA */}
-            <div className="relative group flex-shrink-0">
-              <div className="w-24 h-28 rounded-xl bg-slate-800 border-2 border-emerald-400/50 overflow-hidden shadow-md flex items-center justify-center">
-                {currentPhoto ? (
-                  <img src={currentPhoto} alt={member.nama_lengkap} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-3xl font-black text-slate-400">
-                    {member.nama_lengkap.charAt(0)}
+            {/* Header KTA */}
+            <div className="relative z-10 flex items-center justify-between border-b border-white/15 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center font-black text-slate-950 text-xs shadow-xs">
+                  B
+                </div>
+                <div>
+                  <span className="text-[11px] font-black tracking-wider uppercase text-white block leading-tight">
+                    BANUARASA
                   </span>
-                )}
+                  <span className="text-[7.5px] text-emerald-300 font-bold block tracking-wider">
+                    KARTU TANDA ANGGOTA UMKM
+                  </span>
+                </div>
               </div>
-              <button
-                onClick={() => setIsEditingPhoto(!isEditingPhoto)}
-                className="absolute -bottom-2 -right-2 p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg text-[10px] font-bold transition border border-white/40"
-                title="Ganti Foto KTA"
-              >
-                📷
-              </button>
-            </div>
-
-            {/* Biodata Anggota */}
-            <div className="flex-1 text-center sm:text-left space-y-1">
-              <span className="text-[10px] text-emerald-400 font-mono block tracking-wider">
-                NO. REG: {member.member_id}
-              </span>
-              <h3 className="text-base font-black text-white leading-snug">
-                {member.nama_lengkap}
-              </h3>
-              <p className="text-xs font-semibold text-slate-200">
-                {member.nama_usaha}
-              </p>
-              <div className="pt-1 flex flex-wrap justify-center sm:justify-start gap-1.5 text-[10px] text-slate-300">
-                <span className="bg-white/10 px-2 py-0.5 rounded-md">
-                  🏷️ {member.kategori_usaha || 'KULINER'}
+              <div className="text-right">
+                <span className="px-2 py-0.5 rounded-full text-[7.5px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                  {member.status_keanggotaan || 'ACTIVE'}
                 </span>
-                <span className="bg-white/10 px-2 py-0.5 rounded-md">
-                  📍 Berau
+                <span className="block text-[7.5px] font-mono text-slate-300 mt-0.5">
+                  {member.member_id}
                 </span>
               </div>
             </div>
 
-            {/* Barcode / QR Code untuk Verifikasi Spreadsheet */}
-            <div className="flex-shrink-0 flex flex-col items-center bg-white p-2 rounded-xl shadow-md">
-              <img src={barcodeUrl} alt="QR Verifikasi" className="w-20 h-20" />
-              <span className="text-[8px] font-mono text-slate-700 mt-1 font-bold">SCAN VERIFIKASI</span>
-            </div>
-          </div>
+            {/* Konten KTA: Foto, Identitas, & Barcode Terintegrasi */}
+            <div className="relative z-10 my-auto flex items-center gap-3">
+              {/* Foto Profil KTA */}
+              <div className="relative flex-shrink-0">
+                <div className="w-16 h-20 sm:w-18 sm:h-22 rounded-xl bg-slate-800 border-2 border-emerald-400/50 overflow-hidden shadow-md flex items-center justify-center">
+                  {currentPhoto ? (
+                    <img src={currentPhoto} alt={member.nama_lengkap} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl font-black text-slate-400">
+                      {(member.nama_lengkap || 'M').charAt(0)}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIsEditingPhoto(!isEditingPhoto)}
+                  className="absolute -bottom-1.5 -right-1.5 p-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-md text-[9px] font-bold transition border border-white/40"
+                  title="Ganti Foto KTA"
+                >
+                  📷
+                </button>
+              </div>
 
-          {/* Footer Kartu */}
-          <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[9px] text-slate-400">
-            <span>Berau, Kalimantan Timur</span>
-            <span>Scan barcode untuk periksa keabsahan</span>
+              {/* Biodata Anggota */}
+              <div className="flex-1 space-y-0.5 min-w-0">
+                <h3 className="text-xs sm:text-sm font-black text-white leading-snug truncate">
+                  {member.nama_lengkap}
+                </h3>
+                <p className="text-[10px] font-bold text-emerald-300 truncate">
+                  {member.nama_usaha}
+                </p>
+                <div className="flex flex-wrap gap-1 pt-1 text-[8px] text-slate-300">
+                  <span className="bg-white/10 px-1.5 py-0.5 rounded">
+                    🏷️ {member.kategori_usaha || 'KULINER'}
+                  </span>
+                  <span className="bg-white/10 px-1.5 py-0.5 rounded truncate max-w-[110px]">
+                    📍 {member.alamat || 'Berau'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Barcode / QR Code Terintegrasi ke Halaman Profil Website */}
+              <div className="flex-shrink-0 flex flex-col items-center bg-white p-1 rounded-xl shadow-md border border-slate-200">
+                <img src={barcodeApiUrl} alt="QR Profil Website" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+                <span className="text-[6.5px] font-mono text-slate-900 font-extrabold mt-0.5 tracking-tighter">
+                  SCAN PROFIL
+                </span>
+              </div>
+            </div>
+
+            {/* Footer KTA */}
+            <div className="relative z-10 pt-1.5 border-t border-white/15 flex items-center justify-between text-[7.5px] text-slate-400">
+              <span>Standard ISO 85,6 × 53,98 mm</span>
+              <span>Scan QR untuk membuka profil resmi di website</span>
+            </div>
           </div>
         </div>
 
-        {/* -------------------------------------------------- */}
-        {/* PANEL PENGATURAN FOTO (UPLOAD / INPUT URL)          */}
-        {/* -------------------------------------------------- */}
+        {/* Panel Ganti Foto (Upload / Link URL) */}
         {isEditingPhoto && (
-          <div className="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
-            <h4 className="font-bold text-slate-800 text-sm">Ganti Foto Profil KTA</h4>
-            <p className="text-slate-500 text-[11px]">
-              Pilih foto langsung dari galeri/kamera perangkat Anda atau masukkan tautan link gambar web.
-            </p>
-
-            <div className="space-y-3 pt-1">
-              {/* Opsi 1: Upload File Gambar */}
+          <div className="mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+            <h4 className="font-bold text-slate-800 text-xs">Ganti Foto Profil KTA</h4>
+            <div className="space-y-2">
               <div>
                 <input
                   type="file"
@@ -220,7 +239,7 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-2"
+                  className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 text-xs"
                 >
                   <span>📁</span>
                   <span>Upload Foto dari Galeri / Kamera</span>
@@ -229,22 +248,21 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
 
               <div className="flex items-center gap-2 text-slate-400 text-[10px]">
                 <div className="h-px flex-1 bg-slate-200"></div>
-                <span>ATAU GUNAKAN LINK URL</span>
+                <span>ATAU TEMPELKAN LINK URL FOTO</span>
                 <div className="h-px flex-1 bg-slate-200"></div>
               </div>
 
-              {/* Opsi 2: Input URL Gambar */}
               <form onSubmit={handleUrlSubmit} className="flex gap-2">
                 <input
                   type="url"
-                  placeholder="https://example.com/foto-saya.jpg"
+                  placeholder="https://domain.com/foto.jpg"
                   value={photoUrlInput}
                   onChange={(e) => setPhotoUrlInput(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-xl focus:outline-emerald-500 bg-white"
+                  className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:outline-emerald-500 bg-white"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition"
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition"
                 >
                   Terapkan
                 </button>
@@ -253,13 +271,23 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
           </div>
         )}
 
+        {/* Petunjuk Integrasi Barcode */}
+        <div className="mt-4 p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl text-[11px] text-emerald-900 space-y-1">
+          <p className="font-bold flex items-center gap-1">
+            <span>🔗</span> Integrasi Web Aktif:
+          </p>
+          <p className="text-slate-600 text-[10px] break-all">
+            Barcode di atas terhubung ke: <span className="font-mono text-emerald-800 font-bold">{memberPublicUrl}</span>
+          </p>
+        </div>
+
         {/* Tombol Aksi Modal */}
-        <div className="mt-6 flex items-center justify-between pt-3 border-t border-slate-100">
+        <div className="mt-5 flex items-center justify-between pt-3 border-t border-slate-100">
           <button
             onClick={() => setIsEditingPhoto(!isEditingPhoto)}
-            className="px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+            className="px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
           >
-            {isEditingPhoto ? 'Tutup Pengaturan Foto' : '📷 Ganti Foto KTA'}
+            {isEditingPhoto ? 'Tutup Pengaturan Foto' : '📷 Ganti Foto'}
           </button>
 
           <div className="flex gap-2">
@@ -271,10 +299,10 @@ export const DigitalMemberCardModal: React.FC<DigitalMemberCardModalProps> = ({
             </button>
             <button
               onClick={handlePrintCard}
-              className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition flex items-center gap-1.5"
+              className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition flex items-center gap-1.5"
             >
               <span>🖨️</span>
-              <span>Cetak / Simpan KTA</span>
+              <span>Cetak Ukuran 85,6 × 53,98 mm</span>
             </button>
           </div>
         </div>
