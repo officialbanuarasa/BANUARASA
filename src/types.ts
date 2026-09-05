@@ -1,6 +1,5 @@
 // ========================================================
 // BANUARASA WEEKEND MARKET - DATA CONTRACT & TYPES v2
-// Single Source of Truth Types
 // ========================================================
 
 export type Role = 
@@ -32,6 +31,7 @@ export interface UserAccount {
   user_id: string;
   member_id?: string;
   username: string;
+  password_hash: string;
   role: Role;
   status: 'ACTIVE' | 'INACTIVE';
   last_login?: string;
@@ -49,6 +49,7 @@ export interface Member {
   nomor_hp: string;
   whatsapp: string;
   email: string;
+  password?: string; // Kata sandi personal anggota
   status_keanggotaan: MemberStatus;
   avatar_url?: string;
   avatar_file_id?: string;
@@ -180,9 +181,6 @@ export interface DocumentRecord {
   created_at: string;
 }
 
-// --------------------------------------------------------
-// KABAR & EDITORIAL BANUARASA SCHEMA
-// --------------------------------------------------------
 export interface EditorialArticle {
   article_id: string;
   title: string;
