@@ -17,19 +17,50 @@ import {
   AuthSession,
   MasterStand,
   EventStand,
-  Role
+  Role,
+  StandCategory,
+  StandZone
 } from '../types';
 
 import {
   INITIAL_MEMBERS,
   INITIAL_EVENTS,
-  INITIAL_STANDS,
-  INITIAL_PRODUCTS,
-  INITIAL_EDITORIALS
+  INITIAL_PRODUCTS
 } from '../data/initialData';
 
 const SESSION_KEY = 'banuarasa_auth_session';
 const APP_CACHE_KEY = 'banuarasa_app_cache_v2';
+
+// Generator Master 64 Stand Banuarasa
+const generateDefaultMasterStands = (): MasterStand[] => {
+  return Array.from({ length: 64 }, (_, i) => {
+    const standNumber = i + 1;
+    const standCode = `A-${String(standNumber).padStart(2, '0')}`;
+    let zone: StandZone = 'ZONA_A';
+    let category: StandCategory = 'KULINER';
+
+    if (standNumber > 20 && standNumber <= 40) {
+      zone = 'ZONA_B';
+      category = 'KERAJINAN';
+    } else if (standNumber > 40 && standNumber <= 54) {
+      zone = 'ZONA_C';
+      category = 'FASHION';
+    } else if (standNumber > 54) {
+      zone = 'TENGAH';
+      category = 'UMUM';
+    }
+
+    return {
+      stand_id: `STD-${String(standNumber).padStart(2, '0')}`,
+      stand_code: standCode,
+      stand_number: standNumber,
+      category,
+      zone,
+      base_price: 150000,
+      status: 'ACTIVE'
+    };
+  });
+};
 
 export interface AppStateData {
   members: Member[];
@@ -57,17 +88,20 @@ class StorageService {
     try {
       const cached = localStorage.getItem(APP_CACHE_KEY);
       if (cached) {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (!parsed.stands || parsed.stands.length === 0) {
+          parsed.stands = generateDefaultMasterStands();
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Gagal membaca cache lokal, memuat data default.', e);
     }
 
-    // Default Seed Data awal jika belum ada data sama sekali
     return {
       members: (INITIAL_MEMBERS || []) as Member[],
       events: (INITIAL_EVENTS || []) as EventItem[],
-      stands: (INITIAL_STANDS || []) as MasterStand[],
+      stands: generateDefaultMasterStands(),
       event_stands: [],
       registrations: [],
       payments: [],
@@ -89,7 +123,7 @@ class StorageService {
   }
 
   // --------------------------------------------------------
-  // SESSION & AUTH (Client-side Token Storage)
+  // SESSION & AUTH
   // --------------------------------------------------------
 
   public getSession(): AuthSession | null {
@@ -110,7 +144,7 @@ class StorageService {
   }
 
   // --------------------------------------------------------
-  // AUDIT LOGGING (Append-Only)
+  // AUDIT LOGGING
   // --------------------------------------------------------
 
   public logActivity(
@@ -122,7 +156,6 @@ class StorageService {
   ): void {
     const session = this.getSession();
     const now = new Date();
-    // Menggunakan timezone WITA (Berau: UTC+8)
     const timestampWita = new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'Asia/Makassar',
       dateStyle: 'short',
@@ -192,7 +225,6 @@ class StorageService {
       return { success: false, message: 'Stand tidak ditemukan dalam sistem.' };
     }
 
-    // Cek apakah stand sedang di-lock atau sudah terisi
     const existingBooking = this.memoryCache.event_stands.find(
       es => es.event_id === eventId && es.stand_id === standId
     );
@@ -205,7 +237,6 @@ class StorageService {
       }
     }
 
-    // Buat kunci reservasi 15 menit
     const lockExpiresAt = new Date(now + 15 * 60 * 1000).toISOString();
     const eventStandRecord: EventStand = {
       event_stand_id: existingBooking?.event_stand_id || `ES-${Date.now()}`,
@@ -275,7 +306,6 @@ class StorageService {
 
     this.memoryCache.payments.push(newPayment);
 
-    // Update status registrasi menjadi menunggu verifikasi
     if (newPayment.registration_id) {
       const reg = this.memoryCache.registrations.find(r => r.registration_id === newPayment.registration_id);
       if (reg) {
@@ -322,7 +352,7 @@ class StorageService {
   }
 
   // --------------------------------------------------------
-  // SAVINGS (Koperasi)
+  // SAVINGS
   // --------------------------------------------------------
 
   public getSavings(): Saving[] {
@@ -342,7 +372,7 @@ class StorageService {
   }
 
   // --------------------------------------------------------
-  // SALES REPORTS (Omzet)
+  // SALES REPORTS
   // --------------------------------------------------------
 
   public getSalesReports(): SalesReport[] {
