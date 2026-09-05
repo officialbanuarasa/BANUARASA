@@ -77,13 +77,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     total_stands: 64
   });
 
-  // Modal CRUD: Stand Baru
+  // Modal CRUD: Stand Baru / Edit Stand
   const [isStandModalOpen, setIsStandModalOpen] = useState(false);
+  const [editingStand, setEditingStand] = useState<MasterStand | null>(null);
   const [standForm, setStandForm] = useState({
     stand_code: '',
     category: 'KULINER' as StandCategory,
     zone: 'ZONA_A' as StandZone,
     base_price: 150000
+  });
+
+  // Modal Khusus: Bookingkan Stand untuk Tenant yang Terkendala
+  const [isAssistBookingOpen, setIsAssistBookingOpen] = useState(false);
+  const [assistForm, setAssistForm] = useState({
+    member_id: '',
+    stand_id: '',
+    event_id: events[0]?.event_id || 'EVT-2026-001',
+    instant_confirm: true
   });
 
   // Modal CRUD: Tambah Simpanan Manual
@@ -112,6 +122,131 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       totalOmzet
     };
   }, [members, events, registrations, payments, savings, salesReports]);
+
+  // ----------------------------------------------------
+  // HANDLER STAND: TAMBAH, EDIT HARGA/NAMA, & OVERRIDE STATUS
+  // ----------------------------------------------------
+  const handleOpenAddStand = () => {
+    setEditingStand(null);
+    setStandForm({
+      stand_code: '',
+      category: 'KULINER',
+      zone: 'ZONA_A',
+      base_price: 150000
+    });
+    setIsStandModalOpen(true);
+  };
+
+  const handleOpenEditStand = (stand: MasterStand) => {
+    setEditingStand(stand);
+    setStandForm({
+      stand_code: stand.stand_code,
+      category: stand.category,
+      zone: stand.zone,
+      base_price: stand.base_price
+    });
+    setIsStandModalOpen(true);
+  };
+
+  const handleSaveStand = (e: React.FormEvent) => {
+    e.preventDefault();
+    const allStands = storage.getStands();
+
+    if (editingStand) {
+      const idx = allStands.findIndex(s => s.stand_id === editingStand.stand_id);
+      if (idx >= 0) {
+        allStands[idx] = {
+          ...allStands[idx],
+          stand_code: standForm.stand_code.toUpperCase(),
+          category: standForm.category,
+          zone: standForm.zone,
+          base_price: Number(standForm.base_price) || 150000
+        };
+        storage.logActivity('UPDATE_STAND', 'STAND', `Super Admin mengubah nama/harga stand ${standForm.stand_code.toUpperCase()} (Rp ${standForm.base_price})`, editingStand.stand_id);
+      }
+    } else {
+      const newNumber = allStands.length + 1;
+      const newStand: MasterStand = {
+        stand_id: `STD-${String(newNumber).padStart(2, '0')}`,
+        stand_code: standForm.stand_code.toUpperCase(),
+        stand_number: newNumber,
+        category: standForm.category,
+        zone: standForm.zone,
+        base_price: Number(standForm.base_price) || 150000,
+        status: 'ACTIVE'
+      };
+      allStands.push(newStand);
+      storage.logActivity('CREATE_STAND', 'STAND', `Super Admin menambah master stand ${newStand.stand_code} seharga Rp ${newStand.base_price}`);
+    }
+
+    setIsStandModalOpen(false);
+    onDataUpdated();
+  };
+
+  const handleDeleteStand = (standId: string, code: string) => {
+    if (!window.confirm(`Hapus master stand ${code}?`)) return;
+    const allStands = storage.getStands();
+    const idx = allStands.findIndex(s => s.stand_id === standId);
+    if (idx >= 0) {
+      allStands.splice(idx, 1);
+      storage.logActivity('DELETE_STAND', 'STAND', `Menghapus stand ${code}`, standId);
+      onDataUpdated();
+    }
+  };
+
+  // Lepaskan Booking (Jadikan Available) atau Kunci Stand Langsung
+  const handleToggleStandBookingStatus = (registrationId: string, currentStatus: string, standCode: string) => {
+    const allRegistrations = storage.getRegistrations();
+    const reg = allRegistrations.find(r => r.registration_id === registrationId);
+    if (!reg) return;
+
+    if (currentStatus === 'CONFIRMED' || currentStatus === 'RESERVED') {
+      if (window.confirm(`Lepaskan stand ${standCode}? Stand ini akan kembali TERSEDIA untuk umum.`)) {
+        reg.status = 'AVAILABLE';
+        storage.logActivity('RELEASE_STAND', 'STAND', `Superadmin melepaskan booking stand ${standCode}`, registrationId);
+      }
+    } else {
+      reg.status = 'CONFIRMED';
+      storage.logActivity('FORCE_CONFIRM_STAND', 'STAND', `Superadmin mengonfirmasi langsung stand ${standCode}`, registrationId);
+    }
+    onDataUpdated();
+  };
+
+  // ----------------------------------------------------
+  // HANDLER: MEMESANKAN STAND UNTUK TENANT YANG TERKENDALA
+  // ----------------------------------------------------
+  const handleAssistBooking = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetMember = members.find(m => m.member_id === assistForm.member_id);
+    const targetStand = storage.getStands().find(s => s.stand_id === assistForm.stand_id);
+    const targetEvent = events.find(ev => ev.event_id === assistForm.event_id) || events[0];
+
+    if (!targetMember || !targetStand || !targetEvent) {
+      alert('Pilih member, stand, dan event secara lengkap.');
+      return;
+    }
+
+    const bookingResult = storage.bookStand(targetEvent.event_id, targetStand.stand_id, targetMember);
+    if (!bookingResult.success) {
+      alert(bookingResult.message);
+      return;
+    }
+
+    // Jika Super Admin memilih langsung konfirmasi tanpa perlu tenant transfer
+    if (assistForm.instant_confirm && bookingResult.registration) {
+      bookingResult.registration.status = 'CONFIRMED';
+      storage.logActivity(
+        'ASSISTED_BOOKING_CONFIRMED', 
+        'STAND', 
+        `Superadmin memesankan dan mengonfirmasi Stand ${targetStand.stand_code} untuk tenant ${targetMember.nama_lengkap} (${targetMember.nama_usaha})`, 
+        bookingResult.registration.registration_id
+      );
+    }
+
+    alert(`Stand ${targetStand.stand_code} berhasil dipesankan untuk ${targetMember.nama_lengkap}!`);
+    setIsAssistBookingOpen(false);
+    onDataUpdated();
+  };
 
   // ----------------------------------------------------
   // HANDLER CRUD MEMBER
@@ -243,39 +378,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // ----------------------------------------------------
-  // HANDLER STAND & SIMPANAN
-  // ----------------------------------------------------
-  const handleSaveStand = (e: React.FormEvent) => {
-    e.preventDefault();
-    const allStands = storage.getStands();
-    const newNumber = allStands.length + 1;
-    const newStand: MasterStand = {
-      stand_id: `STD-${String(newNumber).padStart(2, '0')}`,
-      stand_code: standForm.stand_code.toUpperCase(),
-      stand_number: newNumber,
-      category: standForm.category,
-      zone: standForm.zone,
-      base_price: Number(standForm.base_price) || 150000,
-      status: 'ACTIVE'
-    };
-    allStands.push(newStand);
-    storage.logActivity('CREATE_STAND', 'STAND', `Menambah master stand ${newStand.stand_code}`);
-    setIsStandModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleDeleteStand = (standId: string, code: string) => {
-    if (!window.confirm(`Hapus master stand ${code}?`)) return;
-    const allStands = storage.getStands();
-    const idx = allStands.findIndex(s => s.stand_id === standId);
-    if (idx >= 0) {
-      allStands.splice(idx, 1);
-      storage.logActivity('DELETE_STAND', 'STAND', `Menghapus stand ${code}`, standId);
-      onDataUpdated();
-    }
-  };
-
   const handleSaveSaving = (e: React.FormEvent) => {
     e.preventDefault();
     const targetMember = members.find(m => m.member_id === savingForm.member_id);
@@ -291,7 +393,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onDataUpdated();
   };
 
-  // Handler Verifikasi Pembayaran
   const handleVerifyPayment = (paymentId: string, status: 'VERIFIED' | 'REJECTED') => {
     storage.verifyPayment(
       paymentId, 
@@ -325,11 +426,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setIsAssistBookingOpen(true)}
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5"
+                >
+                  <span>⚡</span>
+                  <span>Pesan Stand untuk Tenant</span>
+                </button>
+              )}
+
               {onOpenScanner && (
                 <button
                   onClick={onOpenScanner}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-xs transition"
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
                 >
                   📷 Scan Barcode
                 </button>
@@ -343,7 +454,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'overview', label: 'Ringkasan' },
               { id: 'members', label: `Anggota (${members.length})` },
               { id: 'events', label: `Kelola Event (${events.length})` },
-              { id: 'stands', label: `Master & Booking Stand` },
+              { id: 'stands', label: `Stand & Booking Tenant` },
               { id: 'payments', label: `Pembayaran (${payments.length})` },
               { id: 'savings', label: 'Simpanan Koperasi' },
               { id: 'reports', label: 'Laporan Omzet' },
@@ -448,7 +559,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: MEMBERS (CRUD) */}
+        {/* TAB 2: MEMBERS */}
         {activeTab === 'members' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
@@ -540,7 +651,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: KELOLA EVENT (CRUD) */}
+        {/* TAB 3: EVENTS */}
         {activeTab === 'events' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -608,48 +719,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 4: MASTER & BOOKING STAND */}
+        {/* TAB 4: STANDS & BOOKING MANAGEMENT (FITUR SUPERADMIN LENGKAP) */}
         {activeTab === 'stands' && (
           <div className="space-y-6">
+            
+            {/* 1. MASTER STAND: EDIT NAMA & TENTUKAN HARGA STAND */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50">
                 <div>
-                  <h2 className="text-base font-bold text-slate-800">Master Stand Fisik Banuarasa</h2>
-                  <p className="text-xs text-slate-400">Daftar slot nomor stand yang tersedia</p>
+                  <h2 className="text-base font-bold text-slate-800">Master Pengaturan Stand & Harga Sewa</h2>
+                  <p className="text-xs text-slate-500">Super Admin dapat memberi nama, mengatur zona, dan menentukan harga tiap stand</p>
                 </div>
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => setIsStandModalOpen(true)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                  >
-                    + Tambah Stand Baru
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {isSuperAdmin && (
+                    <>
+                      <button
+                        onClick={() => setIsAssistBookingOpen(true)}
+                        className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-xs transition"
+                      >
+                        ⚡ Bookingkan untuk Tenant
+                      </button>
+                      <button
+                        onClick={handleOpenAddStand}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                      >
+                        + Tambah Stand Baru
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[380px]">
                 <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3">Kode Stand</th>
+                      <th className="px-4 py-3">Nama / Kode Stand</th>
                       <th className="px-4 py-3">Zona</th>
                       <th className="px-4 py-3">Kategori</th>
-                      <th className="px-4 py-3">Harga Pokok</th>
+                      <th className="px-4 py-3">Harga Sewa Stand</th>
                       <th className="px-4 py-3">Status</th>
-                      {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi</th>}
+                      {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi Superadmin</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {storage.getStands().map(s => (
                       <tr key={s.stand_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-bold text-slate-800">{s.stand_code}</td>
+                        <td className="px-4 py-3 font-bold text-slate-900 text-base">{s.stand_code}</td>
                         <td className="px-4 py-3 text-xs">{s.zone}</td>
                         <td className="px-4 py-3 text-xs">{s.category}</td>
-                        <td className="px-4 py-3 font-semibold text-emerald-600">Rp {s.base_price.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 font-bold text-emerald-600 text-sm">
+                          Rp {s.base_price.toLocaleString('id-ID')}
+                        </td>
                         <td className="px-4 py-3 text-xs">
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{s.status}</span>
                         </td>
                         {isSuperAdmin && (
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3 text-right space-x-2">
+                            <button
+                              onClick={() => handleOpenEditStand(s)}
+                              className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                              title="Ubah nama atau tentukan harga stand ini"
+                            >
+                              ✏️ Atur Nama & Harga
+                            </button>
                             <button
                               onClick={() => handleDeleteStand(s.stand_id, s.stand_code)}
                               className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
@@ -665,53 +797,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Riwayat Reservasi Stand */}
+            {/* 2. OVERRIDE STATUS: TENTUKAN SUDAH DIBOOKING / DILEPASKAN */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                <h2 className="text-base font-bold text-slate-800">Riwayat Reservasi & Pendaftaran Stand</h2>
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Status Booking Stand Tenant</h2>
+                  <p className="text-xs text-slate-500">Super Admin dapat mengonfirmasi stand langsung atau melepaskannya kembali ke publik</p>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600">
                   <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
                     <tr>
-                      <th className="px-4 py-3">Kode Stand</th>
-                      <th className="px-4 py-3">Peserta / Usaha</th>
+                      <th className="px-4 py-3">Stand</th>
+                      <th className="px-4 py-3">Nama Tenant / Usaha</th>
                       <th className="px-4 py-3">Event</th>
                       <th className="px-4 py-3">Biaya</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Waktu Daftar</th>
+                      <th className="px-4 py-3">Status Saat Ini</th>
+                      {isSuperAdmin && <th className="px-4 py-3 text-right">Kontrol Status (Super Admin)</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {registrations.map(r => (
-                      <tr key={r.registration_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-bold text-emerald-600">{r.stand_code}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-800">{r.member_name}</div>
-                          <div className="text-xs text-slate-400">{r.nama_usaha}</div>
-                        </td>
-                        <td className="px-4 py-3 text-xs">{r.event_title}</td>
-                        <td className="px-4 py-3 font-medium">Rp {r.total_fee.toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            r.status === 'CONFIRMED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : r.status === 'RESERVED'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {r.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
-                          {new Date(r.created_at).toLocaleString('id-ID')}
-                        </td>
+                    {registrations.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-slate-400">Belum ada tenant yang memesan stand.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      registrations.map(r => (
+                        <tr key={r.registration_id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-bold text-emerald-600 text-base">{r.stand_code}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-slate-800">{r.member_name}</div>
+                            <div className="text-xs text-slate-400">{r.nama_usaha}</div>
+                          </td>
+                          <td className="px-4 py-3 text-xs">{r.event_title}</td>
+                          <td className="px-4 py-3 font-medium">Rp {r.total_fee.toLocaleString('id-ID')}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                              r.status === 'CONFIRMED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : r.status === 'RESERVED'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {r.status === 'CONFIRMED' ? 'DIBOOKING (PAID)' : r.status === 'RESERVED' ? 'LOCK SEMENTARA' : r.status}
+                            </span>
+                          </td>
+                          {isSuperAdmin && (
+                            <td className="px-4 py-3 text-right">
+                              {r.status === 'CONFIRMED' || r.status === 'RESERVED' ? (
+                                <button
+                                  onClick={() => handleToggleStandBookingStatus(r.registration_id, r.status, r.stand_code)}
+                                  className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition"
+                                  title="Batalkan dan bebaskan stand ini"
+                                >
+                                  Lepaskan Stand (Bebaskan)
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleToggleStandBookingStatus(r.registration_id, r.status, r.stand_code)}
+                                  className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
+                                >
+                                  Set Terkonfirmasi (Booking)
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
           </div>
         )}
 
@@ -762,7 +921,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 6: SAVINGS (KOPERASI CRUD) */}
+        {/* TAB 6: SAVINGS */}
         {activeTab === 'savings' && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -873,11 +1032,195 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
-
       </div>
 
       {/* -------------------------------------------------- */}
-      {/* MODAL: TAMBAH / EDIT MEMBER */}
+      {/* MODAL: PESAN STAND UNTUK TENANT YANG TERKENDALA     */}
+      {/* -------------------------------------------------- */}
+      {isAssistBookingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 text-amber-600">
+              <span className="text-xl">⚡</span>
+              <h3 className="text-lg font-bold text-slate-900">Bantu Booking Stand Tenant</h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Gunakan fitur ini untuk membantu peserta/tenant yang kesulitan memesan mandiri di website.
+            </p>
+
+            <form onSubmit={handleAssistBooking} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Pilih Tenant / Anggota UMKM</label>
+                <select
+                  required
+                  value={assistForm.member_id}
+                  onChange={e => setAssistForm({ ...assistForm, member_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500"
+                >
+                  <option value="">-- Pilih Tenant --</option>
+                  {members.map(m => (
+                    <option key={m.member_id} value={m.member_id}>
+                      {m.nama_lengkap} — {m.nama_usaha} ({m.member_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Pilih Stand yang Ingin Diberikan</label>
+                <select
+                  required
+                  value={assistForm.stand_id}
+                  onChange={e => setAssistForm({ ...assistForm, stand_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500"
+                >
+                  <option value="">-- Pilih Stand --</option>
+                  {storage.getStands().map(s => (
+                    <option key={s.stand_id} value={s.stand_id}>
+                      Stand {s.stand_code} ({s.zone} - Rp {s.base_price.toLocaleString('id-ID')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Event Tujuan</label>
+                <select
+                  value={assistForm.event_id}
+                  onChange={e => setAssistForm({ ...assistForm, event_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500"
+                >
+                  {events.map(ev => (
+                    <option key={ev.event_id} value={ev.event_id}>
+                      {ev.title} ({ev.event_date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                  <input
+                    type="checkbox"
+                    checked={assistForm.instant_confirm}
+                    onChange={e => setAssistForm({ ...assistForm, instant_confirm: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-slate-800 font-semibold text-[11px]">
+                    Langsung Konfirmasi Penuh (Tandai Lunas/Disetujui)
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAssistBookingOpen(false)}
+                  className="flex-1 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl font-black shadow-xs transition"
+                >
+                  Pesan Stand Sekarang
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH / ATUR NAMA & HARGA STAND            */}
+      {/* -------------------------------------------------- */}
+      {isStandModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-slate-800">
+              {editingStand ? 'Atur Nama & Harga Stand' : 'Tambah Master Stand Baru'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Tentukan penamaan kode stand dan nominal harga sewa resminya.
+            </p>
+
+            <form onSubmit={handleSaveStand} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nama / Kode Stand</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: A-01, B-12, KULINER-05"
+                  value={standForm.stand_code}
+                  onChange={e => setStandForm({ ...standForm, stand_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold uppercase focus:outline-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Zona Stand</label>
+                <select
+                  value={standForm.zone}
+                  onChange={e => setStandForm({ ...standForm, zone: e.target.value as StandZone })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500"
+                >
+                  <option value="ZONA_A">ZONA_A (Utama)</option>
+                  <option value="ZONA_B">ZONA_B (Kuliner Pesisir)</option>
+                  <option value="ZONA_C">ZONA_C (Kriya & Fashion)</option>
+                  <option value="TENGAH">TENGAH (Atrium / Panggung)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Kategori Stand</label>
+                <select
+                  value={standForm.category}
+                  onChange={e => setStandForm({ ...standForm, category: e.target.value as StandCategory })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500"
+                >
+                  <option value="KULINER">KULINER</option>
+                  <option value="KERAJINAN">KERAJINAN</option>
+                  <option value="FASHION">FASHION</option>
+                  <option value="JASA">JASA</option>
+                  <option value="UMUM">UMUM</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Tentukan Harga Sewa Stand (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="150000"
+                  value={standForm.base_price}
+                  onChange={e => setStandForm({ ...standForm, base_price: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-emerald-600 text-sm focus:outline-emerald-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsStandModalOpen(false)}
+                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
+                >
+                  Simpan Stand
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* MODAL: TAMBAH / EDIT MEMBER                        */}
       {/* -------------------------------------------------- */}
       {isMemberModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -990,7 +1333,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* -------------------------------------------------- */}
-      {/* MODAL: TAMBAH / EDIT EVENT */}
+      {/* MODAL: TAMBAH / EDIT EVENT                         */}
       {/* -------------------------------------------------- */}
       {isEventModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1109,83 +1452,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* -------------------------------------------------- */}
-      {/* MODAL: TAMBAH STAND BARU */}
-      {/* -------------------------------------------------- */}
-      {isStandModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-800">Tambah Master Stand</h3>
-            <form onSubmit={handleSaveStand} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Kode Stand</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: B-15 atau K-01"
-                  value={standForm.stand_code}
-                  onChange={e => setStandForm({ ...standForm, stand_code: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Zona Stand</label>
-                <select
-                  value={standForm.zone}
-                  onChange={e => setStandForm({ ...standForm, zone: e.target.value as StandZone })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="ZONA_A">ZONA_A (Utama)</option>
-                  <option value="ZONA_B">ZONA_B (Kuliner)</option>
-                  <option value="ZONA_C">ZONA_C (Kriya & Fashion)</option>
-                  <option value="TENGAH">TENGAH (Atrium)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Kategori Stand</label>
-                <select
-                  value={standForm.category}
-                  onChange={e => setStandForm({ ...standForm, category: e.target.value as StandCategory })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="KULINER">KULINER</option>
-                  <option value="KERAJINAN">KERAJINAN</option>
-                  <option value="FASHION">FASHION</option>
-                  <option value="UMUM">UMUM</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Harga Sewa Stand (Rp)</label>
-                <input
-                  type="number"
-                  required
-                  value={standForm.base_price}
-                  onChange={e => setStandForm({ ...standForm, base_price: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsStandModalOpen(false)}
-                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
-                >
-                  Simpan Stand
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* -------------------------------------------------- */}
-      {/* MODAL: TAMBAH SIMPANAN KOPERASI MANUAL */}
+      {/* MODAL: TAMBAH SIMPANAN MANUAL                      */}
       {/* -------------------------------------------------- */}
       {isSavingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -1252,7 +1519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* -------------------------------------------------- */}
-      {/* MODAL: VERIFIKASI PEMBAYARAN */}
+      {/* MODAL: VERIFIKASI PEMBAYARAN                       */}
       {/* -------------------------------------------------- */}
       {selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
