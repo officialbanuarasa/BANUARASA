@@ -1,1574 +1,227 @@
-import React, { useState, useEffect } from 'react';
-import { storage } from '../services/storage';
-import { getStandPrice, getStandCategory } from '../services/standEngine';
-import { BANUARASA_ASSETS, BARA_ASSETS } from '../assets/baraAssets';
-import { AuthUser, Member, EventItem } from '../types';
-import {
-  Sparkles,
-  Store,
-  Calendar,
-  MapPin,
-  Clock,
-  ShieldCheck,
-  CheckCircle2,
-  Users,
-  ChevronRight,
-  ArrowRight,
-  Cloud,
-  FileSpreadsheet,
-  HardDrive,
-  Award,
-  BookOpen,
-  DollarSign,
-  Coffee,
-  ShoppingBag,
-  ExternalLink,
-  Info,
-  HelpCircle,
-  Phone,
-  Mail,
-  Heart,
-  Star,
-  Zap,
-  Lock,
-  Utensils,
-  BookMarked,
-  Layers,
-  Compass,
-  Smile,
-  Check,
-  Palette,
-  RefreshCw,
-  Crown,
-} from 'lucide-react';
-import { EDITORIAL_TOPICS, EditorialTopic } from '../data/editorialTopics';
-import { EditorialDetailModal } from './EditorialDetailModal';
+import React, { useState } from 'react';
+import { EventItem, Product } from '../types';
 
 interface LandingPageProps {
-  onOpenAuthModal: (mode: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
-  onOpenGoogleModal: () => void;
-  onOpenSplashIntro?: () => void;
-  onSelectProduct?: (product: any) => void;
-  onRefresh?: () => void;
-  isRefreshing?: boolean;
-  currentUser?: AuthUser | null;
-  currentMember?: Member | null;
-  onOpenStandMap?: (event: EventItem) => void;
-  onNavigateTab?: (tab: string) => void;
-  onOpenBarcodeModal?: (member?: Member | null) => void;
+  events: EventItem[];
+  products: Product[];
+  onOpenStandMap: () => void;
+  onSelectProduct: (product: Product) => void;
+  onSelectEditorial: (id: string) => void;
+  onOpenRegisterMember: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
-  onOpenAuthModal,
-  onOpenGoogleModal,
-  onOpenSplashIntro,
-  onSelectProduct,
-  onRefresh,
-  isRefreshing,
-  currentUser,
-  currentMember,
+  events,
+  products,
   onOpenStandMap,
-  onNavigateTab,
-  onOpenBarcodeModal,
+  onSelectProduct,
+  onSelectEditorial,
+  onOpenRegisterMember,
 }) => {
-  const [activeStandFilter, setActiveStandFilter] = useState<'ALL' | 'VIP' | 'KAT2' | 'KAT3'>('ALL');
-  const [hoveredStand, setHoveredStand] = useState<string | null>(null);
-  const [activeGastronomyTab, setActiveGastronomyTab] = useState<'FOOD' | 'STORY' | 'PEOPLE' | 'EXPERIENCE'>('FOOD');
-  const [bannerTheme, setBannerTheme] = useState<'EMERALD' | 'GOLD' | 'TERATAI' | 'MARITIME'>('EMERALD');
-  const [activeEditorial, setActiveEditorial] = useState<EditorialTopic | null>(null);
-  const [version, setVersion] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
-  const openEditorial = (topicId: string) => {
-    const topic = EDITORIAL_TOPICS[topicId];
-    if (topic) {
-      setActiveEditorial(topic);
-    }
-  };
+  const filteredProducts = products.filter(p => 
+    selectedCategory === 'ALL' ? true : p.category === selectedCategory
+  );
 
-  const handleEditorialAction = (actionType?: string) => {
-    switch (actionType) {
-      case 'SCROLL_STAND':
-        scrollToStandDisplay();
-        break;
-      case 'AUTH_LOGIN':
-        onOpenAuthModal('MEMBER_LOGIN');
-        break;
-      case 'AUTH_REGISTER':
-        onOpenAuthModal('REGISTER');
-        break;
-      case 'OPEN_GOOGLE':
-        onOpenGoogleModal();
-        break;
-      case 'SPLASH_BARA':
-        if (onOpenSplashIntro) onOpenSplashIntro();
-        break;
-      default:
-        break;
-    }
-  };
-
-  useEffect(() => {
-    const unsub = storage.subscribe(() => {
-      setVersion((v) => v + 1);
-    });
-    return unsub;
-  }, []);
-
-  const members = storage.getMembers();
-  const events = storage.getEvents();
-  const products = storage.getProducts();
-  const registrations = storage.getRegistrations();
-  const branding = storage.getBrandingConfig();
-  const currentEvent: EventItem = events[0] || {
-    event_id: 'BWM-2026-001',
-    event_number: 24,
-    event_name: 'Banuarasa Weekend Market Edisi #24',
-    event_date: '2026-09-05',
-    start_time: '06:00',
-    end_time: '12:00',
-    location: 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau',
-    description: 'Pengalaman wisata gastronomi autentik yang menggabungkan cita rasa tradisional khas Berau, narasi budaya, interaksi langsung dengan pelaku UMKM, serta sistem reservasi 64 stand berbasis digital dan sinkronisasi Google Workspace.',
-    banner_url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80',
-    registration_open: '2026-09-01T00:00:00.000Z',
-    registration_close: '2026-09-05T06:00:00.000Z',
-    event_status: 'OPEN_REGISTRATION',
-    created_at: '2026-08-01T00:00:00.000Z',
-    updated_at: '2026-08-01T00:00:00.000Z',
-  };
-
-  // 64 Stands Definition
-  const vipStands = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-  const kat2Stands = Array.from({ length: 43 }, (_, i) => (i + 1).toString());
-  const kat3Stands = Array.from({ length: 11 }, (_, i) => (i + 44).toString());
-
-  const getStandOccupancy = (standCode: string) => {
-    const targetCode = String(standCode || '').trim().toUpperCase();
-    const reg = registrations.find(
-      (r) =>
-        r.event_id === currentEvent.event_id &&
-        String(r.stand_code || '').trim().toUpperCase() === targetCode &&
-        ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(r.registration_status)
-    );
-    if (!reg) return { status: 'AVAILABLE', reg: null };
-    return {
-      status: reg.registration_status === 'CONFIRMED' ? 'CONFIRMED' : 'RESERVED',
-      reg,
-    };
-  };
-
-  const totalBooked = registrations.filter(
-    (r) =>
-      r.event_id === currentEvent.event_id &&
-      ['RESERVED', 'WAITING_PAYMENT', 'PAYMENT_VERIFICATION', 'CONFIRMED'].includes(r.registration_status)
-  ).length;
-
-  const totalAvailable = 64 - totalBooked;
-
-  const handleBookingClick = (preferredStand?: string) => {
-    if (currentUser && (currentUser.role === 'MEMBER' || currentUser.role === 'SUPER_ADMIN' || currentMember)) {
-      if (onOpenStandMap) {
-        onOpenStandMap(currentEvent);
-      } else if (onNavigateTab) {
-        onNavigateTab(currentUser.role === 'SUPER_ADMIN' ? 'admin-dashboard' : 'member-dashboard');
-      }
-    } else {
-      onOpenAuthModal('MEMBER_LOGIN');
-    }
-  };
-
-  const scrollToStandDisplay = () => {
-    const el = document.getElementById('fitur-display-pendaftaran-stand');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      handleBookingClick();
-    }
-  };
-
-  const handleStandClick = (standCode: string) => {
-    handleBookingClick(standCode);
-  };
-
-  // Banner theme styling presets
-  const getBannerThemeClasses = () => {
-    switch (bannerTheme) {
-      case 'GOLD':
-        return {
-          wrapper: 'bg-gradient-to-br from-amber-950 via-slate-900 to-amber-900 border-amber-500/40',
-          titleGradient: 'from-amber-200 via-yellow-300 to-amber-400',
-          badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-          glow1: 'bg-amber-500/25',
-          glow2: 'bg-yellow-400/20',
-        };
-      case 'TERATAI':
-        return {
-          wrapper: 'bg-gradient-to-br from-purple-950 via-slate-950 to-slate-900 border-purple-500/40',
-          titleGradient: 'from-fuchsia-300 via-purple-300 to-teal-300',
-          badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-          glow1: 'bg-purple-600/25',
-          glow2: 'bg-teal-400/20',
-        };
-      case 'MARITIME':
-        return {
-          wrapper: 'bg-gradient-to-br from-sky-950 via-slate-950 to-blue-900 border-sky-500/40',
-          titleGradient: 'from-sky-300 via-cyan-300 to-emerald-300',
-          badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-          glow1: 'bg-sky-600/25',
-          glow2: 'bg-emerald-400/20',
-        };
-      case 'EMERALD':
-      default:
-        return {
-          wrapper: 'bg-radial from-slate-900 via-slate-900 to-slate-950 border-slate-800',
-          titleGradient: 'from-amber-300 via-emerald-400 to-teal-300',
-          badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-          glow1: 'bg-emerald-600/20',
-          glow2: 'bg-amber-500/15',
-        };
-    }
-  };
-
-  const currentTheme = getBannerThemeClasses();
+  const activeEvent = events.find(e => e.status === 'UPCOMING' || e.status === 'ONGOING') || events[0];
 
   return (
-    <div className="space-y-12 pb-16">
-      {/* 1. BENTO GRID HERO SECTION — EMPHASIZING BANUARASA WEEKEND MARKET */}
-      <section className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
-        {/* Main Bento Hero Banner (7 Cols) */}
-        <div className={`md:col-span-7 ${currentTheme.wrapper} text-white rounded-3xl p-6 sm:p-8 lg:p-10 flex flex-col justify-between relative overflow-hidden shadow-xl border transition-all duration-300`}>
-          <div className={`absolute top-0 right-0 w-80 h-80 ${currentTheme.glow1} rounded-full blur-3xl pointer-events-none`}></div>
-          <div className={`absolute bottom-0 left-0 w-60 h-60 ${currentTheme.glow2} rounded-full blur-2xl pointer-events-none`}></div>
-
-          {/* Floating Mascot Watermark Ornament in Background */}
-          <div className="absolute -right-8 -bottom-8 w-52 h-52 sm:w-64 sm:h-64 opacity-15 pointer-events-none select-none">
-            <img
-              src={branding.mascotUrl || BARA_ASSETS.shot2}
-              alt="Bara Watermark"
-              className="w-full h-full object-contain filter drop-shadow-2xl"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = BARA_ASSETS.shot2;
-              }}
-            />
+    <div className="space-y-16 pb-20">
+      {/* Hero Section */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-emerald-900 via-slate-900 to-slate-950 text-white py-20 px-4 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        
+        <div className="relative max-w-5xl mx-auto text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 backdrop-blur-xs">
+            <span>✨</span>
+            <span>Pasar Akhir Pekan Kuliner & Kreatif Terbesar di Berau</span>
           </div>
 
-          <div className="space-y-5 relative z-10">
-            {/* Top Badges & Banner Style Switcher */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Official Logo Badge */}
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950/80 border border-amber-400/50 shadow-md">
-                  <div className="w-5 h-5 rounded-full overflow-hidden bg-slate-900 shrink-0 border border-amber-400">
-                    <img
-                      src={branding.logoUrl || BANUARASA_ASSETS.logo}
-                      alt={branding.logoAlt || 'Logo Resmi'}
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
-                      }}
-                    />
-                  </div>
-                  <span className="text-[11px] font-black text-amber-300">Wisata Gastronomi Berau</span>
-                </div>
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${currentTheme.badgeBg} text-[11px] font-bold tracking-wide border`}>
-                  <Sparkles className="w-3 h-3 text-emerald-400" />
-                  <span>Koperasi Berau Melangkah Bersama</span>
-                </div>
-              </div>
-
-              {/* Banner Theme Variation Picker & Splash Button */}
-              <div className="flex items-center gap-1.5">
-                {onOpenSplashIntro && (
-                  <button
-                    onClick={onOpenSplashIntro}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-xl shadow-xs transition-colors cursor-pointer"
-                    title="Buka Sambutan Maskot Bara"
-                  >
-                    <Smile className="w-3 h-3" />
-                    <span>Sambutan Bara</span>
-                  </button>
-                )}
-
-                <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-700/60 backdrop-blur-xs">
-                  <span className="text-[10px] font-bold text-slate-400 px-1.5 flex items-center gap-1">
-                    <Palette className="w-3 h-3 text-amber-400" />
-                    <span>Gaya:</span>
-                  </span>
-                  <button
-                    onClick={() => setBannerTheme('EMERALD')}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                      bannerTheme === 'EMERALD'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Tema Zamrud Pesisir"
-                  >
-                    Zamrud
-                  </button>
-                  <button
-                    onClick={() => setBannerTheme('GOLD')}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                      bannerTheme === 'GOLD'
-                        ? 'bg-amber-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Tema Keraton Emas"
-                  >
-                    Emas
-                  </button>
-                  <button
-                    onClick={() => setBannerTheme('TERATAI')}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                      bannerTheme === 'TERATAI'
-                        ? 'bg-purple-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Tema Pasar Malam Teratai"
-                  >
-                    Teratai
-                  </button>
-                  <button
-                    onClick={() => setBannerTheme('MARITIME')}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                      bannerTheme === 'MARITIME'
-                        ? 'bg-sky-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Tema Bahari Kalimantan"
-                  >
-                    Bahari
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Ucapan Selamat Datang di Wisata Gastronomi Kabupaten Berau */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-teal-500/20 border border-amber-400/50 text-amber-300 text-xs sm:text-sm font-black shadow-sm">
-              <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-              <span>Selamat Datang di Wisata Gastronomi Kabupaten Berau</span>
-            </div>
-
-            {/* Headline with Logo Banuarasa & Tagline: Rasa Lokal Cerita Global */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3.5 sm:gap-4">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-xl shadow-amber-500/20 flex items-center justify-center">
-                  <img
-                    src={branding.logoUrl || BANUARASA_ASSETS.logo}
-                    alt={branding.logoAlt || 'Logo Resmi Banuarasa Weekend Market'}
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
-                    }}
-                  />
-                </div>
-                <div>
-                  <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-none text-white">
-                    {branding.heroBannerTitle || 'BANUARASA'} <br />
-                    <span className={`text-transparent bg-clip-text bg-gradient-to-r ${currentTheme.titleGradient}`}>
-                      {branding.heroBannerSubtitle || 'WEEKEND MARKET'}
-                    </span>
-                  </h2>
-                </div>
-              </div>
-
-              {/* Tagline: Rasa Lokal Cerita Global */}
-              <div className="flex items-center flex-wrap gap-2 pt-0.5">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-emerald-500/20 border border-amber-400/50 rounded-xl shadow-xs">
-                  <span className="text-xs font-bold text-slate-300">Tagline:</span>
-                  <span className="text-amber-300 font-black text-sm sm:text-base tracking-wide">
-                    "{branding.tagline || 'Rasa Lokal, Cerita Global'}"
-                  </span>
-                </div>
-                <span className="text-slate-500 hidden sm:inline">•</span>
-                <span className="text-slate-300 text-xs sm:text-sm font-medium">
-                  {branding.subTagline || 'Ekosistem 64 Stand Kuliner, Seni & Budaya'}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Helper Subtitle */}
-            <p className="text-slate-300 text-xs sm:text-sm font-medium">
-              Pasar mingguan 64 stand kuliner autentik & kriya khas Berau. Ketuk tombol ikon lingkaran di bawah untuk membuka panduan & redaksi lengkap:
-            </p>
-
-            {/* PUSAT MENU IKON LINGKARAN (DOMINAN CIRCULAR ICONS & SHORT TITLES FOR BEGINNERS) */}
-            <div className="bg-slate-950/70 border border-slate-700/80 rounded-3xl p-4 sm:p-5 backdrop-blur-md shadow-2xl space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-                  Pusat Informasi Cepat
-                </span>
-                <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700">
-                  Ketuk Ikon untuk Membaca
-                </span>
-              </div>
-
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3">
-                {/* 1. Pesan Stand */}
-                <button
-                  type="button"
-                  id="btn-circle-pesan-stand"
-                  onClick={() => openEditorial('pesan-stand')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Panduan Pendaftaran Stand"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500 border-2 border-emerald-400/60 group-hover:border-emerald-300 text-emerald-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-emerald-500/30 transition-all">
-                    <Store className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Pesan Stand
-                  </span>
-                </button>
-
-                {/* 2. Gastronomi */}
-                <button
-                  type="button"
-                  id="btn-circle-gastronomi"
-                  onClick={() => openEditorial('wisata-gastronomi')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Makna Wisata Gastronomi"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-amber-500/20 group-hover:bg-amber-500 border-2 border-amber-400/60 group-hover:border-amber-300 text-amber-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-amber-500/30 transition-all">
-                    <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Gastronomi
-                  </span>
-                </button>
-
-                {/* 3. Maskot Bara */}
-                <button
-                  type="button"
-                  id="btn-circle-maskot-bara"
-                  onClick={() => openEditorial('maskot-bara')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Cerita Maskot BARA"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-rose-500/20 group-hover:bg-rose-500 border-2 border-rose-400/60 group-hover:border-rose-300 text-rose-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-rose-500/30 transition-all">
-                    <Smile className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Maskot Bara
-                  </span>
-                </button>
-
-                {/* 4. Koperasi */}
-                <button
-                  type="button"
-                  id="btn-circle-koperasi"
-                  onClick={() => openEditorial('koperasi-berau')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Koperasi Berau Melangkah Bersama"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500/20 group-hover:bg-blue-500 border-2 border-blue-400/60 group-hover:border-blue-300 text-blue-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-blue-500/30 transition-all">
-                    <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Koperasi
-                  </span>
-                </button>
-
-                {/* 5. Jadwal & Rute */}
-                <button
-                  type="button"
-                  id="btn-circle-jadwal"
-                  onClick={() => openEditorial('jadwal-lokasi')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Jadwal & Panduan Rute"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-purple-500/20 group-hover:bg-purple-500 border-2 border-purple-400/60 group-hover:border-purple-300 text-purple-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-purple-500/30 transition-all">
-                    <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Jadwal
-                  </span>
-                </button>
-
-                {/* 6. Google Cloud */}
-                <button
-                  type="button"
-                  id="btn-circle-google-cloud"
-                  onClick={() => openEditorial('google-cloud')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Integrasi Google Cloud & Spreadsheet"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-teal-500/20 group-hover:bg-teal-500 border-2 border-teal-400/60 group-hover:border-teal-300 text-teal-300 group-hover:text-slate-950 flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-teal-500/30 transition-all">
-                    <Cloud className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Cloud Hub
-                  </span>
-                </button>
-
-                {/* 7. Katalog UMKM */}
-                <button
-                  type="button"
-                  id="btn-circle-katalog"
-                  onClick={() => openEditorial('katalog-umkm')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Katalog Produk UMKM"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500/20 group-hover:bg-orange-500 border-2 border-orange-400/60 group-hover:border-orange-300 text-orange-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-orange-500/30 transition-all">
-                    <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Katalog
-                  </span>
-                </button>
-
-                {/* 8. Panduan Pemula */}
-                <button
-                  type="button"
-                  id="btn-circle-panduan"
-                  onClick={() => openEditorial('panduan-pemula')}
-                  className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-hidden"
-                  title="Buka Redaksi Panduan Pemula 3 Langkah"
-                >
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-indigo-500/20 group-hover:bg-indigo-500 border-2 border-indigo-400/60 group-hover:border-indigo-300 text-indigo-300 group-hover:text-white flex items-center justify-center shadow-md group-hover:scale-105 group-hover:shadow-indigo-500/30 transition-all">
-                    <HelpCircle className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 group-hover:text-white text-center leading-tight">
-                    Panduan
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Call to Actions */}
-          <div className="pt-5 sm:pt-6 flex flex-wrap items-center gap-3 relative z-10 border-t border-slate-800/80 mt-5">
-            {currentUser?.role === 'MEMBER' || currentMember ? (
-              <>
-                <button
-                  id="btn-hero-book"
-                  onClick={() => handleBookingClick()}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-slate-950/20 flex items-center justify-center">
-                    <Store className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Pesan Stand Sekarang</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  id="btn-hero-dashboard"
-                  onClick={() => onNavigateTab && onNavigateTab('member-dashboard')}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                    <Users className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Dashboard Saya</span>
-                </button>
-
-                {onOpenBarcodeModal && (
-                  <button
-                    id="btn-hero-barcode"
-                    onClick={() => onOpenBarcodeModal(currentMember)}
-                    className="px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs sm:text-sm rounded-2xl border border-amber-500/40 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-300">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                    <span>Barcode KTA</span>
-                  </button>
-                )}
-              </>
-            ) : currentUser?.role === 'SUPER_ADMIN' ? (
-              <>
-                <button
-                  id="btn-hero-admin-manage"
-                  onClick={() => onNavigateTab && onNavigateTab('admin-dashboard')}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Admin Koperasi</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  id="btn-hero-book-admin"
-                  onClick={() => handleBookingClick()}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                    <Store className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Kelola 64 Stand</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  id="btn-hero-view-stands"
-                  onClick={scrollToStandDisplay}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-slate-950/20 flex items-center justify-center">
-                    <Store className="w-3.5 h-3.5" />
-                  </div>
-                  <span>Pilih & Pesan Stand 64</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  id="btn-hero-login"
-                  onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
-                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
-                    <Users className="w-3.5 h-3.5 text-slate-300" />
-                  </div>
-                  <span>Masuk Akun</span>
-                </button>
-
-                <button
-                  id="btn-hero-register"
-                  onClick={() => onOpenAuthModal('REGISTER')}
-                  className="px-4 py-3 bg-slate-800/90 hover:bg-slate-700 text-emerald-300 font-bold text-xs sm:text-sm rounded-2xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  </div>
-                  <span>Daftar UMKM</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-
-        {/* Bento Side Stats & Event Widget (5 Cols) */}
-        <div className="md:col-span-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-4">
-          {/* Event Live Card */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 text-amber-900 font-extrabold text-[10px] uppercase tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-amber-600 animate-ping"></span>
-                  Pendaftaran Stand Buka
-                </span>
-                <h3 className="text-base font-black text-slate-900 mt-2">
-                  {currentEvent.event_name || 'Banuarasa Weekend Market'}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">{branding.tagline || 'Pasar Gastronomi & Kreatif Mingguan'}</p>
-              </div>
-
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col items-center justify-center text-amber-900 shrink-0 text-center px-1">
-                <span className="text-[9px] font-bold uppercase truncate max-w-full">{currentEvent.event_date || 'Sabtu-Minggu'}</span>
-                <span className="text-xs font-black">{new Date().getFullYear()}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 py-3 border-y border-slate-100 text-xs text-slate-600 font-medium">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Pukul {currentEvent.start_time || '06:00'} - {currentEvent.end_time || '12:00'} WITA</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-rose-600 shrink-0" />
-                <span className="truncate">{currentEvent.location || 'Jl. Dr. Murjani I, Tanjung Redeb Kabupaten Berau'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Store className="w-4 h-4 text-purple-600 shrink-0" />
-                <span>64 Kapasitas Stand (Tersedia: {totalAvailable} Stand)</span>
-              </div>
-            </div>
-
-            <div className="pt-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">
-                Mulai Rp35.000 / Hari
-              </span>
-              <button
-                onClick={() => {
-                  const el = document.getElementById('fitur-display-pendaftaran-stand');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    handleBookingClick();
-                  }
-                }}
-                className="text-xs font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
-              >
-                <span>Lihat Denah & Pilih Stand</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Google Workspace Cloud Sync Badge Card */}
-          <div className="bg-emerald-900 text-white rounded-3xl p-6 border border-emerald-800 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div className="flex items-start justify-between gap-2">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-300 text-xs font-extrabold">
-                  <Cloud className="w-4 h-4" />
-                  <span>Google Sheets & Drive Hub</span>
-                </div>
-                <h4 className="text-sm sm:text-base font-extrabold text-white">
-                  Database & Dokumen Tersinkron
-                </h4>
-              </div>
-              <span className="px-2 py-0.5 bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 rounded-full text-[10px] font-mono font-bold">
-                Live Active
-              </span>
-            </div>
-
-            <p className="text-[11px] text-emerald-200/90 leading-relaxed my-3">
-              Seluruh pendaftaran anggota, transaksi 64 stand, buku kas simpanan, dan upload foto bukti transfer tercatat rapi secara real-time.
-            </p>
-
-            <button
-              id="btn-open-google-workspace"
-              onClick={onOpenGoogleModal}
-              className="w-full py-2 px-3 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl border border-emerald-700/80 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
-              <span>Inspeksi Google Spreadsheet & Drive</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. FITUR DISPLAY PENDAFTARAN STAND (64 STAND BANUARASA WEEKEND MARKET) */}
-      <section id="fitur-display-pendaftaran-stand" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-extrabold text-xs tracking-wide shadow-xs flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5" />
-                Fitur Display Pendaftaran Stand
-              </span>
-              <h3 className="text-xl font-black text-slate-900">
-                Denah Interaktif 64 Stand Banuarasa Weekend Market
-              </h3>
-              <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">
-                64 Alokasi Stand
-              </span>
-              <span className="text-xs bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full">
-                {currentEvent.event_name}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Pendaftaran Stand Aktif • Jadwal Pelaksanaan: <strong className="text-slate-800">{currentEvent.event_date}</strong> ({currentEvent.start_time} - {currentEvent.end_time} WITA) • Lokasi: <strong className="text-slate-800">{currentEvent.location}</strong>
-            </p>
-          </div>
-
-          {/* Action buttons & Filter Pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {onRefresh && (
-              <button
-                type="button"
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 shadow-xs"
-                title="Sinkronkan data stand terbaru langsung dari Google Spreadsheet"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
-                <span>{isRefreshing ? 'Menyinkronkan...' : 'Refresh Data Stand'}</span>
-              </button>
-            )}
-
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-              <button
-                onClick={() => setActiveStandFilter('ALL')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                  activeStandFilter === 'ALL'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Semua Stand (64)
-              </button>
-              <button
-                onClick={() => setActiveStandFilter('VIP')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                  activeStandFilter === 'VIP'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
-                }`}
-              >
-                Kategori 1 (A-J) • Rp50k
-              </button>
-              <button
-                onClick={() => setActiveStandFilter('KAT2')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                  activeStandFilter === 'KAT2'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-blue-50 text-blue-900 hover:bg-blue-100'
-                }`}
-              >
-                Kategori 2 (1-43) • Rp50k
-              </button>
-              <button
-                onClick={() => setActiveStandFilter('KAT3')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                  activeStandFilter === 'KAT3'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
-                }`}
-              >
-                Kategori 3 (44-54) • Rp35k
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Kategori Stand Pricing & Benefit Summary Cards (Circular Icons & Short Titles) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Kategori 1 (VIP) */}
-          <div
-            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
-              activeStandFilter === 'VIP'
-                ? 'bg-emerald-50/90 border-emerald-500 shadow-md ring-2 ring-emerald-400/30'
-                : 'bg-slate-50/80 hover:bg-emerald-50/40 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                id="btn-circle-kat1"
-                onClick={() => openEditorial('stand-vip')}
-                className="w-12 h-12 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-2 border-emerald-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
-                title="Buka Redaksi Lengkap Kategori 1"
-              >
-                <Crown className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-slate-900">Kategori 1 (VIP)</span>
-                  <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-                    A - J
-                  </span>
-                </div>
-                <p className="text-[11px] font-extrabold text-emerald-700">Rp50.000 / Hari</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => openEditorial('stand-vip')}
-              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-              title="Ketuk untuk membaca rincian fasilitas"
-            >
-              <span>Rincian</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Kategori 2 */}
-          <div
-            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
-              activeStandFilter === 'KAT2'
-                ? 'bg-blue-50/90 border-blue-500 shadow-md ring-2 ring-blue-400/30'
-                : 'bg-slate-50/80 hover:bg-blue-50/40 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                id="btn-circle-kat2"
-                onClick={() => openEditorial('stand-kat2')}
-                className="w-12 h-12 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-800 border-2 border-blue-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
-                title="Buka Redaksi Lengkap Kategori 2"
-              >
-                <Store className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-slate-900">Kategori 2 (Reguler)</span>
-                  <span className="text-[10px] font-extrabold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
-                    1 - 43
-                  </span>
-                </div>
-                <p className="text-[11px] font-extrabold text-blue-700">Rp50.000 / Hari</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => openEditorial('stand-kat2')}
-              className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-100/70 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-              title="Ketuk untuk membaca rincian fasilitas"
-            >
-              <span>Rincian</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Kategori 3 */}
-          <div
-            className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
-              activeStandFilter === 'KAT3'
-                ? 'bg-amber-50/90 border-amber-500 shadow-md ring-2 ring-amber-400/30'
-                : 'bg-slate-50/80 hover:bg-amber-50/40 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                id="btn-circle-kat3"
-                onClick={() => openEditorial('stand-kat3')}
-                className="w-12 h-12 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 border-2 border-amber-400 flex items-center justify-center shrink-0 shadow-xs transition-transform hover:scale-110 cursor-pointer"
-                title="Buka Redaksi Lengkap Kategori 3"
-              >
-                <Coffee className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-slate-900">Kategori 3 (Subsidi)</span>
-                  <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                    44 - 54
-                  </span>
-                </div>
-                <p className="text-[11px] font-extrabold text-amber-700">Rp35.000 / Hari</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => openEditorial('stand-kat3')}
-              className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-100/70 hover:bg-amber-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-              title="Ketuk untuk membaca rincian fasilitas"
-            >
-              <span>Rincian</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Visual Map Grid */}
-        <div className="space-y-6">
-          {/* CATEGORY 1 SECTION (Stand A - J) */}
-          {(activeStandFilter === 'ALL' || activeStandFilter === 'VIP') && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-900 bg-emerald-50/80 px-4 py-2 rounded-xl border border-emerald-200">
-                <span className="flex items-center gap-2">
-                  <Star className="w-4 h-4 text-emerald-600 fill-emerald-500" />
-                  <span>Kategori 1 (A sampai J) — Rp50.000 / Event</span>
-                </span>
-                <span className="text-[11px] text-emerald-800 font-semibold">10 Stand Resmi</span>
-              </div>
-
-              <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                {vipStands.map((code) => {
-                  const occ = getStandOccupancy(code);
-                  const isAvailable = occ.status === 'AVAILABLE';
-                  return (
-                    <button
-                      key={code}
-                      onClick={() => handleStandClick(code)}
-                      onMouseEnter={() => setHoveredStand(code)}
-                      onMouseLeave={() => setHoveredStand(null)}
-                      className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
-                        isAvailable
-                          ? 'bg-white hover:bg-emerald-50 border-emerald-200 text-slate-800 hover:border-emerald-400 hover:scale-105 shadow-xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <span className="text-xs font-black">Stand {code}</span>
-                      <span
-                        className={`text-[9px] font-bold mt-1 px-1.5 py-0.2 rounded-md ${
-                          isAvailable ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {isAvailable ? 'Tersedia' : 'Terisi'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* KATEGORI 2 (Stand 1 - 43) */}
-          {(activeStandFilter === 'ALL' || activeStandFilter === 'KAT2') && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-blue-900 bg-blue-50/80 px-4 py-2 rounded-xl border border-blue-200">
-                <span className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-blue-600" />
-                  <span>Kategori 2 (1 sampai 43) — Rp50.000 / Event</span>
-                </span>
-                <span className="text-[11px] text-blue-800 font-semibold">43 Stand Kuliner & Kriya</span>
-              </div>
-
-              <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-14 gap-2">
-                {kat2Stands.map((code) => {
-                  const occ = getStandOccupancy(code);
-                  const isAvailable = occ.status === 'AVAILABLE';
-                  return (
-                    <button
-                      key={code}
-                      onClick={() => handleStandClick(code)}
-                      className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
-                        isAvailable
-                          ? 'bg-white hover:bg-blue-50 border-slate-200 text-slate-800 hover:border-blue-500 hover:scale-105 shadow-xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <span className="text-xs font-black">{code}</span>
-                      <span
-                        className={`text-[8px] font-bold mt-0.5 px-1 py-0.2 rounded-md ${
-                          isAvailable ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {isAvailable ? 'Kosong' : 'Booked'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* KATEGORI 3 (Stand 44 - 54) */}
-          {(activeStandFilter === 'ALL' || activeStandFilter === 'KAT3') && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-amber-900 bg-amber-50/80 px-4 py-2 rounded-xl border border-amber-200">
-                <span className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-amber-600" />
-                  <span>Kategori 3 (44 sampai 54) — Rp35.000 / Event</span>
-                </span>
-                <span className="text-[11px] text-amber-800 font-semibold">11 Stand UMKM</span>
-              </div>
-
-              <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">
-                {kat3Stands.map((code) => {
-                  const occ = getStandOccupancy(code);
-                  const isAvailable = occ.status === 'AVAILABLE';
-                  return (
-                    <button
-                      key={code}
-                      onClick={() => handleStandClick(code)}
-                      className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between cursor-pointer ${
-                        isAvailable
-                          ? 'bg-white hover:bg-blue-50 border-slate-200 text-slate-800 hover:border-blue-500 hover:scale-105 shadow-xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <span className="text-xs font-black">{code}</span>
-                      <span
-                        className={`text-[8px] font-bold mt-0.5 px-1 py-0.2 rounded-md ${
-                          isAvailable ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {isAvailable ? 'Kosong' : 'Booked'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Legend & Action */}
-        <div className="bg-slate-50 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-4 text-slate-600 font-medium">
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <span>Tersedia ({totalAvailable} Stand)</span>
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">
+            Rayakan Cita Rasa & Kreativitas Lokal di{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+              Banuarasa
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-slate-300"></span>
-              <span>Sudah Dipesan ({totalBooked} Stand)</span>
-            </span>
-          </div>
+          </h1>
 
-          <button
-            onClick={() => handleBookingClick()}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <span>{currentUser ? 'Pesan Stand 64 Sekarang' : 'Masuk untuk Memesan Stand'}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </section>
-
-      {/* 3. MASKOT BARA & GASTRONOMI BERAU HIGHLIGHT SECTION (CIRCULAR ICONS & PROGRESSIVE DISCLOSURE) */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 lg:p-10 border border-emerald-800/40 shadow-xl overflow-hidden relative">
-        {/* Left: Bara Profile & Circular Traits (5 Cols) */}
-        <div className="lg:col-span-5 flex flex-col justify-between space-y-5">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-400/20 text-amber-300 rounded-full text-xs font-bold border border-amber-400/30">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <span>Maskot Resmi Banuarasa</span>
-              </div>
-              {onOpenSplashIntro && (
-                <button
-                  onClick={onOpenSplashIntro}
-                  className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
-                >
-                  Buka Sambutan
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3.5">
-              <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 shrink-0 bg-emerald-950 shadow-md">
-                <img
-                  src={branding.mascotUrl || BARA_ASSETS.mascot}
-                  alt="Bara Maskot"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
-                  }}
-                />
-              </div>
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
-                  Kenalan dengan <span className="text-amber-400">BARA</span>
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Si Kerang Laut Kalimantan Timur. Ketuk ikon lingkaran untuk membaca filosofi:
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bara 4 Traits Circular Icon Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3">
-            <button
-              type="button"
-              id="btn-circle-bara-maritim"
-              onClick={() => openEditorial('bara-maritim')}
-              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
-              title="Ketuk untuk membaca rincian Simbol Kelautan"
-            >
-              <div className="w-10 h-10 rounded-full bg-amber-400/20 group-hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
-                🐚
-              </div>
-              <div className="min-w-0">
-                <h5 className="font-black text-white text-xs group-hover:text-amber-300 transition-colors truncate">
-                  Kelautan
-                </h5>
-                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              id="btn-circle-bara-etnik"
-              onClick={() => openEditorial('bara-etnik')}
-              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
-              title="Ketuk untuk membaca rincian Kearifan Lokal"
-            >
-              <div className="w-10 h-10 rounded-full bg-emerald-400/20 group-hover:bg-emerald-400/30 border border-emerald-400/40 text-emerald-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
-                ✨
-              </div>
-              <div className="min-w-0">
-                <h5 className="font-black text-white text-xs group-hover:text-emerald-300 transition-colors truncate">
-                  Kearifan Etnik
-                </h5>
-                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              id="btn-circle-bara-kolaborasi"
-              onClick={() => openEditorial('bara-kolaborasi')}
-              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
-              title="Ketuk untuk membaca rincian Kolaborasi UMKM"
-            >
-              <div className="w-10 h-10 rounded-full bg-blue-400/20 group-hover:bg-blue-400/30 border border-blue-400/40 text-blue-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
-                🤝
-              </div>
-              <div className="min-w-0">
-                <h5 className="font-black text-white text-xs group-hover:text-blue-300 transition-colors truncate">
-                  Kolaborasi
-                </h5>
-                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              id="btn-circle-bara-sahabat"
-              onClick={() => openEditorial('bara-sahabat')}
-              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 hover:border-rose-400/50 rounded-2xl p-3 flex items-center gap-3 transition-all cursor-pointer group text-left shadow-xs"
-              title="Ketuk untuk membaca rincian Sahabat Wisata"
-            >
-              <div className="w-10 h-10 rounded-full bg-rose-400/20 group-hover:bg-rose-400/30 border border-rose-400/40 text-rose-300 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
-                💛
-              </div>
-              <div className="min-w-0">
-                <h5 className="font-black text-white text-xs group-hover:text-rose-300 transition-colors truncate">
-                  Sahabat Wisata
-                </h5>
-                <p className="text-[10px] text-slate-400 font-semibold truncate">Ketuk Redaksi</p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Right: 4 Pilar Gastronomi Circular Icon Buttons (7 Cols) */}
-        <div className="lg:col-span-7 bg-slate-900/90 border border-emerald-500/30 rounded-3xl p-6 sm:p-7 flex flex-col justify-between space-y-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-            <div>
-              <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider">
-                Konsep Berbasis Pengalaman
-              </span>
-              <h4 className="text-lg sm:text-xl font-black text-white mt-0.5">
-                4 Elemen Gastronomi Banuarasa
-              </h4>
-            </div>
-
-            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-[10px] font-bold">
-              Standar UNWTO
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-300">
-            Ketuk ikon lingkaran pilar di bawah untuk membuka redaksi filosofi & rincian:
+          <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+            Wadah kolaborasi UMKM binaan Koperasi Banuarasa. Akses produk lokal autentik, reservasi stand event berkala, dan bertransaksi langsung secara transparan.
           </p>
 
-          {/* 4 Pilar Circular Icon Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {/* Pilar 1: Food */}
+          <div className="flex flex-wrap justify-center gap-3 pt-4">
             <button
-              type="button"
-              id="btn-circle-pilar-food"
-              onClick={() => openEditorial('pilar-food')}
-              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-amber-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
-              title="Ketuk untuk membaca redaksi lengkap Pilar Food"
+              onClick={onOpenStandMap}
+              className="px-6 py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/40 transition hover:-translate-y-0.5"
             >
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 group-hover:bg-amber-500 border-2 border-amber-400/50 group-hover:border-amber-300 text-amber-300 group-hover:text-slate-950 flex items-center justify-center transition-all group-hover:scale-110">
-                <Utensils className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-black text-white group-hover:text-amber-300 transition-colors">
-                1. Food
-              </span>
-              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
-                Kuliner Autentik
-              </span>
+              Lihat Denah Stand Event
             </button>
-
-            {/* Pilar 2: Story */}
             <button
-              type="button"
-              id="btn-circle-pilar-story"
-              onClick={() => openEditorial('pilar-story')}
-              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-emerald-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
-              title="Ketuk untuk membaca redaksi lengkap Pilar Story"
+              onClick={onOpenRegisterMember}
+              className="px-6 py-3.5 rounded-xl font-bold text-slate-200 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition hover:-translate-y-0.5"
             >
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500 border-2 border-emerald-400/50 group-hover:border-emerald-300 text-emerald-300 group-hover:text-slate-950 flex items-center justify-center transition-all group-hover:scale-110">
-                <BookMarked className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-black text-white group-hover:text-emerald-300 transition-colors">
-                2. Story
-              </span>
-              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
-                Narasi Budaya
-              </span>
-            </button>
-
-            {/* Pilar 3: People */}
-            <button
-              type="button"
-              id="btn-circle-pilar-people"
-              onClick={() => openEditorial('pilar-people')}
-              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-blue-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
-              title="Ketuk untuk membaca redaksi lengkap Pilar People"
-            >
-              <div className="w-12 h-12 rounded-full bg-blue-500/20 group-hover:bg-blue-500 border-2 border-blue-400/50 group-hover:border-blue-300 text-blue-300 group-hover:text-white flex items-center justify-center transition-all group-hover:scale-110">
-                <Users className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-black text-white group-hover:text-blue-300 transition-colors">
-                3. People
-              </span>
-              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
-                Pelaku UMKM
-              </span>
-            </button>
-
-            {/* Pilar 4: Experience */}
-            <button
-              type="button"
-              id="btn-circle-pilar-experience"
-              onClick={() => openEditorial('pilar-experience')}
-              className="p-3.5 rounded-2xl border bg-slate-800/80 hover:bg-slate-800 border-slate-700 hover:border-purple-400/60 text-center transition-all flex flex-col items-center gap-2 group cursor-pointer shadow-xs"
-              title="Ketuk untuk membaca redaksi lengkap Pilar Experience"
-            >
-              <div className="w-12 h-12 rounded-full bg-purple-500/20 group-hover:bg-purple-500 border-2 border-purple-400/50 group-hover:border-purple-300 text-purple-300 group-hover:text-white flex items-center justify-center transition-all group-hover:scale-110">
-                <Compass className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-black text-white group-hover:text-purple-300 transition-colors">
-                4. Experience
-              </span>
-              <span className="text-[10px] text-slate-400 group-hover:text-slate-200">
-                Interaksi Nyata
-              </span>
-            </button>
-          </div>
-
-          {/* Wisata Gastronomi Quick Callout */}
-          <div className="bg-emerald-950/70 border border-emerald-700/50 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                <Info className="w-4 h-4" />
-              </div>
-              <p className="text-emerald-200/90 leading-relaxed text-[11px] sm:text-xs">
-                Wisata gastronomi menggali makna <em>"mengapa, bagaimana, dan siapa di balik kuliner Berau"</em>.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => openEditorial('wisata-gastronomi')}
-              className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline whitespace-nowrap cursor-pointer shrink-0"
-            >
-              Pelajari Konsep
+              Daftar Jadi Anggota UMKM
             </button>
           </div>
         </div>
       </section>
 
-      {/* 4. KATALOG PRODUK UNGGULAN UMKM BERAU */}
-      <section className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-xl font-black text-slate-900">
-              Katalog Produk Unggulan Gastronomi UMKM Berau
-            </h3>
-            <p className="text-xs text-slate-500">
-              Cita rasa khas Kabupaten Berau dan produk kreatif kerajinan tangan lokal dikoordinir Koperasi Berau Melangkah Bersama.
-            </p>
-          </div>
-
-          <button
-            onClick={() => onOpenAuthModal('MEMBER_LOGIN')}
-            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
-          >
-            <span>Pasarkan Produk Anda</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {products.slice(0, 4).map((prod) => (
-            <div
-              key={prod.product_id}
-              onClick={() => onSelectProduct && onSelectProduct(prod)}
-              className="bg-white rounded-3xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col group cursor-pointer"
-            >
-              <div className="relative h-44 overflow-hidden bg-slate-100">
-                <img
-                  src={prod.image_url}
-                  alt={prod.product_name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <span className="absolute top-3 left-3 px-2.5 py-1 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold rounded-lg">
-                  {prod.category}
+      {/* Highlight Acara Aktif */}
+      {activeEvent && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                  {activeEvent.status}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {activeEvent.timezone || 'WITA (Berau)'}
                 </span>
               </div>
+              <h2 className="text-2xl font-black text-slate-900">{activeEvent.title}</h2>
+              <p className="text-sm text-slate-600 max-w-xl">{activeEvent.description}</p>
+              <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-500 pt-2">
+                <span>📅 {activeEvent.event_date}</span>
+                <span>⏰ {activeEvent.start_time} - {activeEvent.end_time}</span>
+                <span>📍 {activeEvent.location}</span>
+              </div>
+            </div>
 
-              <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
-                <div>
-                  <h4 className="font-bold text-sm text-slate-900 line-clamp-1 group-hover:text-emerald-700 transition-colors">
-                    {prod.product_name}
-                  </h4>
-                  <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
-                    {prod.description}
-                  </p>
-                </div>
+            <button
+              onClick={onOpenStandMap}
+              className="w-full md:w-auto whitespace-nowrap px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold shadow-md transition"
+            >
+              Reservasi Stand ({activeEvent.available_stands ?? 64} Tersisa)
+            </button>
+          </div>
+        </section>
+      )}
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Harga</p>
-                    <p className="text-sm font-black text-slate-900">
-                      Rp{prod.price.toLocaleString('id-ID')}
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
-                    Tersedia di Market
+      {/* Etalase Produk UMKM */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900">Etalase Produk Unggulan</h2>
+            <p className="text-sm text-slate-500">Produk lokal berkualitas karya anggota Koperasi Banuarasa</p>
+          </div>
+
+          {/* Filter Kategori */}
+          <div className="flex overflow-x-auto gap-2 text-xs font-semibold">
+            {['ALL', 'KULINER', 'KERAJINAN', 'FASHION', 'JASA'].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-lg transition whitespace-nowrap ${
+                  selectedCategory === cat
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {cat === 'ALL' ? 'Semua' : cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredProducts.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 text-slate-400 text-sm">
+            Belum ada produk terdaftar di kategori ini.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {filteredProducts.map((p) => (
+              <div
+                key={p.product_id}
+                onClick={() => onSelectProduct(p)}
+                className="group bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition cursor-pointer flex flex-col"
+              >
+                <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-300 text-3xl font-black">
+                      B
+                    </div>
+                  )}
+                  <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/90 text-slate-700 shadow-xs">
+                    {p.category}
                   </span>
                 </div>
+
+                <div className="p-3 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-emerald-600 transition">
+                      {p.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 line-clamp-1">{p.member_name}</p>
+                  </div>
+                  <div className="mt-2 text-sm font-extrabold text-emerald-600">
+                    Rp {p.price.toLocaleString('id-ID')}
+                  </div>
+                </div>
               </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Pojok Edukasi & Liputan Editorial */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900">Kabar & Editorial Banuarasa</h2>
+          <p className="text-sm text-slate-500">Wawasan pengembangan usaha, sejarah gastronomi, dan agenda komunitas</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              id: 'gastronomi-berau',
+              title: 'Menyusuri Jejak Rempah Gastronomi Kesultanan Berau',
+              excerpt: 'Eksplorasi resep kuliner warisan pesisir yang kini menjadi daya tarik utama pasar akhir pekan Banuarasa.',
+              tag: 'Budaya & Kuliner'
+            },
+            {
+              id: 'koperasi-digital',
+              title: 'Transformasi Koperasi Banuarasa Menuju Ekosistem Digital',
+              excerpt: 'Bagaimana pencatatan simpanan dan alokasi stand digital membantu UMKM Berau naik kelas secara akuntabel.',
+              tag: 'Ekonomi UMKM'
+            },
+            {
+              id: 'tips-stand-weekend',
+              title: '5 Tips Mengoptimalkan Omzet Stand di Akhir Pekan',
+              excerpt: 'Strategi visual merchandise, penataan display produk, hingga alur transaksi digital cepat QRIS.',
+              tag: 'Panduan Usaha'
+            }
+          ].map((item) => (
+            <div
+              key={item.id}
+              onClick={() => onSelectEditorial(item.id)}
+              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                  {item.tag}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 hover:text-emerald-600 transition">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{item.excerpt}</p>
+              </div>
+
+              <span className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1">
+                Baca Selengkapnya →
+              </span>
             </div>
           ))}
         </div>
       </section>
-
-      {/* 5. PROGRAM BERJENJANG (WEEKLY, MONTHLY, ANNUAL) & PENTAHELIX */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-sm">
-            W
-          </div>
-          <h4 className="text-base font-black text-slate-900">Weekly (Aktivasi Rutin)</h4>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Kegiatan mingguan 64 stand Banuarasa Weekend Market yang berfokus pada <em>traffic building</em> dan perputaran ekonomi cepat UMKM serta interaksi langsung dengan masyarakat.
-          </p>
-        </div>
-
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-black text-sm">
-            M
-          </div>
-          <h4 className="text-base font-black text-slate-900">Monthly (Showcase & Edukasi)</h4>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Program bulanan kurasi kuliner, cooking demo, fasilitasi NIB/Halal, serta penguatan kapasitas branding dan packaging pelaku usaha lokal.
-          </p>
-        </div>
-
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center font-black text-sm">
-            A
-          </div>
-          <h4 className="text-base font-black text-slate-900">Annual (Banuarasa Expo)</h4>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Festival tahunan berskala besar yang menjadi magnet wisata nasional, melibatkan kolaborasi pentahelix lintas kementerian, perbankan, dan komunitas.
-          </p>
-        </div>
-      </section>
-
-      {/* 6. 4 PILAR MANFAAT ANGGOTA KOPERASI BERAU MELANGKAH BERSAMA */}
-      <section className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 space-y-8">
-        <div className="text-center max-w-2xl mx-auto space-y-2">
-          <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-widest">
-            Manfaat & Pemberdayaan Anggota
-          </span>
-          <h3 className="text-2xl sm:text-3xl font-black">
-            Mengapa UMKM Bergabung dengan Koperasi Berau Melangkah Bersama?
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-400">
-            Koperasi bertindak sebagai payung kelembagaan yang mengkoordinasikan stand, pendanaan simpanan, dan legalitas seluruh pelaku Banuarasa.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <Store className="w-5 h-5" />
-            </div>
-            <h4 className="font-extrabold text-sm text-white">Prioritas 64 Stand</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Hak reservasi mandiri 24/7 untuk 64 stand Banuarasa Weekend Market dengan sistem kunci lock realtime anti bentrok.
-            </p>
-          </div>
-
-          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <Award className="w-5 h-5" />
-            </div>
-            <h4 className="font-extrabold text-sm text-white">Fasilitasi Legalitas</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Pendampingan resmi NIB OSS, Sertifikasi Halal BPJPH, Izin Edar P-IRT, dan NPWP Badan Usaha UMKM.
-            </p>
-          </div>
-
-          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
-              <DollarSign className="w-5 h-5" />
-            </div>
-            <h4 className="font-extrabold text-sm text-white">Buku Simpanan Anggota</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Pencatatan transparan Simpanan Pokok (Rp100k), Simpanan Wajib (Rp25k/bln), dan Simpanan Sukarela dengan status verifikasi instan.
-            </p>
-          </div>
-
-          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-5 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
-              <Cloud className="w-5 h-5" />
-            </div>
-            <h4 className="font-extrabold text-sm text-white">Google Cloud Sync</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Seluruh data pendaftaran dan berkas foto tersimpan aman di Google Spreadsheet dan Google Drive terstruktur.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 7. MITRA STRATEGIS PENTAHELIX & FOOTER */}
-      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
-        <div className="text-center space-y-1">
-          <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
-            Didukung Kolaborasi Pentahelix
-          </p>
-          <h4 className="text-sm font-bold text-slate-800">
-            Ekosistem Kemitraan Pemerintah, Swasta, Komunitas, Akademisi & Media Kab. Berau
-          </h4>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-slate-600 font-extrabold text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Dinas Koperasi & UKM Kab. Berau</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            <span>Bank Kaltimtara Tanjung Redeb</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span>PT Berau Coal CSR Synergy</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-            <span>BRI Kantor Cabang Berau</span>
-          </div>
-        </div>
-
-        {/* Official Banuarasa Branding & Mascot Banner Card */}
-        <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-amber-400 bg-slate-950 p-1 shrink-0 shadow-md">
-              <img
-                src={branding.logoUrl || BANUARASA_ASSETS.logo}
-                alt={branding.logoAlt || 'Logo Resmi Banua Rasa Weekend Market'}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = BANUARASA_ASSETS.logo;
-                }}
-              />
-            </div>
-            <div>
-              <h5 className="text-sm font-black text-slate-900 leading-tight">
-                {branding.heroBannerTitle || 'BANUARASA'} <span className="text-emerald-600">{branding.heroBannerSubtitle || 'WEEKEND MARKET'}</span>
-              </h5>
-              <p className="text-xs font-bold text-amber-700">
-                "{branding.tagline || 'Rasa Lokal, Cerita Global'}" • {branding.organizationName || 'Koperasi Berau Melangkah Bersama'}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                {currentEvent.location || 'Kawasan Tepian Teratai & Gedung Pusat UMKM Tanjung Redeb, Kabupaten Berau, Kalimantan Timur'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {onOpenSplashIntro && (
-              <button
-                onClick={onOpenSplashIntro}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                <div className="w-4 h-4 rounded-full overflow-hidden shrink-0 border border-amber-500">
-                  <img
-                    src={branding.mascotUrl || BARA_ASSETS.mascot}
-                    alt="Bara"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = BARA_ASSETS.mascot;
-                    }}
-                  />
-                </div>
-                <span>Sambutan Bara</span>
-              </button>
-            )}
-            <p className="text-[11px] text-slate-400 font-medium">
-              © {new Date().getFullYear()} Hak Cipta Dilindungi
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Progressive Disclosure Editorial Detail Modal */}
-      <EditorialDetailModal
-        topic={activeEditorial}
-        onClose={() => setActiveEditorial(null)}
-        onAction={handleEditorialAction}
-      />
     </div>
   );
 };
+
+export default LandingPage;
