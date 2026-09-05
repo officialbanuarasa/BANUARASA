@@ -28,10 +28,6 @@ export type EventStatus = 'DRAFT' | 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANC
 export type MemberStatus = 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED' | 'INACTIVE';
 export type DocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
-// --------------------------------------------------------
-// ENTITY SCHEMAS (Matches Database / Google Spreadsheet)
-// --------------------------------------------------------
-
 export interface UserAccount {
   user_id: string;
   member_id?: string;
@@ -65,10 +61,10 @@ export interface EventItem {
   event_id: string;
   title: string;
   description: string;
-  event_date: string;       // Format: YYYY-MM-DD
-  start_time: string;       // Format: HH:mm (WITA)
-  end_time: string;         // Format: HH:mm (WITA)
-  timezone: string;         // Default: 'Asia/Makassar'
+  event_date: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
   location: string;
   status: EventStatus;
   banner_url?: string;
@@ -80,7 +76,7 @@ export interface EventItem {
 
 export interface MasterStand {
   stand_id: string;
-  stand_code: string;       // Contoh: A-01, B-12
+  stand_code: string;
   stand_number: number;
   category: StandCategory;
   zone: StandZone;
@@ -97,7 +93,7 @@ export interface EventStand {
   booking_status: StandBookingStatus;
   booked_by_member_id?: string;
   booked_by_member_name?: string;
-  lock_expires_at?: string; // ISO String untuk batas 15 menit
+  lock_expires_at?: string;
 }
 
 export interface Registration {
@@ -184,6 +180,21 @@ export interface DocumentRecord {
   created_at: string;
 }
 
+// --------------------------------------------------------
+// KABAR & EDITORIAL BANUARASA SCHEMA
+// --------------------------------------------------------
+export interface EditorialArticle {
+  article_id: string;
+  title: string;
+  tag: string;
+  excerpt: string;
+  content: string;
+  cover_image?: string;
+  author: string;
+  published_at: string;
+  status: 'PUBLISHED' | 'DRAFT';
+}
+
 export interface AuditLog {
   log_id: string;
   timestamp_wita: string;
@@ -191,7 +202,7 @@ export interface AuditLog {
   actor_name: string;
   actor_role: Role;
   action: string;
-  module: 'AUTH' | 'STAND' | 'PAYMENT' | 'MEMBER' | 'EVENT' | 'SALES' | 'DOCUMENT';
+  module: 'AUTH' | 'STAND' | 'PAYMENT' | 'MEMBER' | 'EVENT' | 'SALES' | 'DOCUMENT' | 'EDITORIAL';
   reference_id?: string;
   details: string;
   status: 'SUCCESS' | 'FAILED';
@@ -206,10 +217,6 @@ export interface AppNotification {
   is_read: boolean;
   created_at: string;
 }
-
-// --------------------------------------------------------
-// AUTH & SESSION STATE
-// --------------------------------------------------------
 
 export interface AuthSession {
   token: string;
