@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Navbar from './components/Navbar';
-import LandingPage from './components/LandingPage';
-import MemberDashboard from './components/MemberDashboard';
-import AdminDashboard from './components/AdminDashboard';
-import AuthModal from './components/AuthModal';
-import StandMapModal from './components/StandMapModal';
-import PaymentModal from './components/PaymentModal';
-import DigitalMemberCardModal from './components/DigitalMemberCardModal';
-import QRScannerModal from './components/QRScannerModal';
-import ProductDetailModal from './components/ProductDetailModal';
-import ChangePasswordModal from './components/ChangePasswordModal';
-import RegisterMemberModal from './components/RegisterMemberModal';
-import BaraMascotWidget from './components/BaraMascotWidget';
-import GoogleWorkspaceModal from './components/GoogleWorkspaceModal';
-import EditorialDetailModal from './components/EditorialDetailModal';
+import { Navbar } from './components/Navbar';
+import { LandingPage } from './components/LandingPage';
+import { MemberDashboard } from './components/MemberDashboard';
+import { AdminDashboard } from './components/AdminDashboard';
+import { AuthModal } from './components/AuthModal';
+import { StandMapModal } from './components/StandMapModal';
+import { PaymentModal } from './components/PaymentModal';
+import { DigitalMemberCardModal } from './components/DigitalMemberCardModal';
+import { QRScannerModal } from './components/QRScannerModal';
+import { ProductDetailModal } from './components/ProductDetailModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { RegisterMemberModal } from './components/RegisterMemberModal';
+import { BaraMascotWidget } from './components/BaraMascotWidget';
+import { GoogleWorkspaceModal } from './components/GoogleWorkspaceModal';
+import { EditorialDetailModal } from './components/EditorialDetailModal';
 
 import { storage } from './services/storage';
 import { 
@@ -26,8 +26,7 @@ import {
   Product, 
   DocumentRecord, 
   AuditLog, 
-  AuthSession,
-  Role
+  AuthSession 
 } from './types';
 
 export function App() {
@@ -35,7 +34,7 @@ export function App() {
   const [session, setSession] = useState<AuthSession | null>(() => storage.getSession());
   const [currentMember, setCurrentMember] = useState<Member | null>(null);
 
-  // Core Data Cache (Read from cleaned storage service)
+  // Core Data Cache
   const [members, setMembers] = useState<Member[]>(() => storage.getMembers());
   const [events, setEvents] = useState<EventItem[]>(() => storage.getEvents());
   const [registrations, setRegistrations] = useState<Registration[]>(() => storage.getRegistrations());
@@ -61,7 +60,6 @@ export function App() {
   // Active view routing
   const [currentView, setCurrentView] = useState<'home' | 'member' | 'admin'>('home');
 
-  // Sync member profile when session changes
   useEffect(() => {
     if (session?.user?.member_id) {
       const found = storage.getMemberById(session.user.member_id);
@@ -73,7 +71,6 @@ export function App() {
     }
   }, [session, members]);
 
-  // Handle refresh data lokal saat ada mutasi/aksi
   const refreshLocalState = () => {
     setMembers([...storage.getMembers()]);
     setEvents([...storage.getEvents()]);
@@ -107,7 +104,6 @@ export function App() {
     refreshLocalState();
   };
 
-  // Tentukan Event aktif saat ini
   const activeEvent = useMemo(() => {
     return events.find(e => e.status === 'UPCOMING' || e.status === 'ONGOING') || events[0] || null;
   }, [events]);
@@ -173,10 +169,8 @@ export function App() {
         )}
       </main>
 
-      {/* Widget Maskot Bara */}
       <BaraMascotWidget />
 
-      {/* MODALS */}
       {isAuthOpen && (
         <AuthModal
           isOpen={isAuthOpen}
