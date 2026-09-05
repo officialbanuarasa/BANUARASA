@@ -1,400 +1,230 @@
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN_KOPERASI' | 'ADMIN_EVENT' | 'MEMBER' | 'PUBLIC';
+// ========================================================
+// BANUARASA WEEKEND MARKET - DATA CONTRACT & TYPES v2
+// Single Source of Truth Types
+// ========================================================
 
-export type MembershipStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+export type Role = 
+  | 'SUPER_ADMIN' 
+  | 'ADMIN_KOPERASI' 
+  | 'ADMIN_EVENT' 
+  | 'MEMBER' 
+  | 'PUBLIC';
 
-export type KoperasiMembershipCategory = 'KOPERASI' | 'PASAR_ONLY';
-export type KoperasiStatus = 'AKTIF' | 'BELUM_AKTIF';
+export type StandCategory = 'KULINER' | 'KERAJINAN' | 'FASHION' | 'JASA' | 'UMUM';
+export type StandZone = 'ZONA_A' | 'ZONA_B' | 'ZONA_C' | 'ZONA_D' | 'TENGAH';
+export type StandBookingStatus = 
+  | 'AVAILABLE' 
+  | 'RESERVED' 
+  | 'WAITING_PAYMENT' 
+  | 'WAITING_VERIFICATION' 
+  | 'CONFIRMED' 
+  | 'BLOCKED';
+
+export type PaymentMethod = 'TRANSFER_BANK' | 'QRIS' | 'TUNAI';
+export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type PaymentType = 'STAND_REGISTRATION' | 'SIMPANAN_POKOK' | 'SIMPANAN_WAJIB' | 'SIMPANAN_SUKARELA';
+
+export type EventStatus = 'DRAFT' | 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+export type MemberStatus = 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED' | 'INACTIVE';
+export type DocumentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+// --------------------------------------------------------
+// ENTITY SCHEMAS (Matches Database / Google Spreadsheet)
+// --------------------------------------------------------
+
+export interface UserAccount {
+  user_id: string;
+  member_id?: string;
+  username: string;
+  role: Role;
+  status: 'ACTIVE' | 'INACTIVE';
+  last_login?: string;
+  created_at: string;
+  updated_at?: string;
+}
 
 export interface Member {
-  member_id: string; // BM-00001 or MBR-0001
-  nomor_anggota: string; // KBMB-2026-001
-  nama_lengkap: string;
+  member_id: string;
   nik: string;
-  tempat_lahir: string;
-  tanggal_lahir: string;
-  jenis_kelamin: 'L' | 'P';
+  nama_lengkap: string;
+  nama_usaha: string;
+  kategori_usaha: StandCategory;
   alamat: string;
   nomor_hp: string;
-  email: string;
-  foto_profil_url: string;
-  nama_usaha: string;
-  deskripsi_usaha: string;
-  kategori_usaha: 'Kuliner' | 'Kriya' | 'Fashion' | 'Pertanian' | 'Jasa' | 'Lainnya';
-  alamat_usaha: string;
-  instagram?: string;
   whatsapp: string;
-  status_keanggotaan: MembershipStatus;
-  tipe_keanggotaan?: KoperasiMembershipCategory; // 'KOPERASI' (default) atau 'PASAR_ONLY' (hanya anggota Banuarasa Weekend Market)
-  status_koperasi?: KoperasiStatus; // 'AKTIF' atau 'BELUM_AKTIF'
-  is_cooperative_member?: boolean; // true: Anggota Koperasi (kewajiban simpanan pokok & wajib), false: Bukan Anggota Koperasi (hanya pasar)
-  tanggal_bergabung: string;
-  password_hash?: string;
-  password?: string;
-  role?: string;
+  email: string;
+  status_keanggotaan: MemberStatus;
+  avatar_url?: string;
+  avatar_file_id?: string;
+  barcode_data?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
-
-export type DocumentType = 'NIB' | 'NPWP' | 'HALAL' | 'PIRT' | 'IZIN_USAHA' | 'KTP' | 'OTHER';
-export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
-
-export interface MemberDocument {
-  document_id: string;
-  member_id: string;
-  document_type: DocumentType;
-  document_number: string;
-  file_name: string;
-  drive_file_id: string;
-  drive_url: string;
-  upload_date: string;
-  verification_status: VerificationStatus;
-  verified_by?: string;
-  verified_at?: string;
-  rejection_reason?: string;
-}
-
-export interface Product {
-  product_id: string;
-  member_id: string;
-  product_name: string;
-  category: 'Kuliner' | 'Kriya' | 'Fashion' | 'Pertanian' | 'Lainnya';
-  description: string;
-  price: number;
-  image_file_id?: string;
-  image_url: string;
-  featured: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-  created_at: string;
-  updated_at: string;
-}
-
-export type EventStatus = 'DRAFT' | 'OPEN_REGISTRATION' | 'REGISTRATION_CLOSED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
 
 export interface EventItem {
-  event_id: string; // BWM-2026-001
-  event_number: number;
-  event_name: string;
-  event_date: string; // YYYY-MM-DD
-  start_time: string; // 16:00
-  end_time: string; // 22:00
-  location: string;
-  description: string;
-  banner_file_id?: string;
-  banner_url: string;
-  registration_open: string;
-  registration_close: string;
-  event_status: EventStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-export type StandCategory = 'KATEGORI_1' | 'KATEGORI_2' | 'KATEGORI_3';
-
-export interface Stand {
-  stand_id: string;
-  stand_code: string; // A..J, 1..43, 44..54
-  stand_category: StandCategory;
-  participation_price: number; // 50000 or 35000
-  status: 'ACTIVE' | 'MAINTENANCE';
-  zone_name: string;
-}
-
-export type RegistrationStatus =
-  | 'AVAILABLE'
-  | 'RESERVED'
-  | 'WAITING_PAYMENT'
-  | 'PAYMENT_VERIFICATION'
-  | 'CONFIRMED'
-  | 'REJECTED'
-  | 'EXPIRED'
-  | 'CANCELLED';
-
-export type PaymentStatus = 'UNPAID' | 'PENDING_VERIFICATION' | 'PAID' | 'REJECTED';
-
-export interface EventRegistration {
-  registration_id: string; // REG-20260906-0001
   event_id: string;
-  member_id: string;
-  stand_code: string;
-  stand_price: number;
-  registration_date: string;
-  registration_status: RegistrationStatus;
-  payment_status: PaymentStatus;
-  payment_deadline: string; // ISO datetime
-  check_in_status: 'NOT_CHECKED_IN' | 'CHECKED_IN';
-  check_in_time?: string;
-  notes?: string;
+  title: string;
+  description: string;
+  event_date: string;       // Format: YYYY-MM-DD
+  start_time: string;       // Format: HH:mm (WITA)
+  end_time: string;         // Format: HH:mm (WITA)
+  timezone: string;         // Default: 'Asia/Makassar'
+  location: string;
+  status: EventStatus;
+  banner_url?: string;
+  banner_file_id?: string;
+  total_stands: number;
+  available_stands?: number;
   created_at: string;
-  updated_at: string;
 }
 
-export type PaymentType = 'EVENT_PARTICIPATION' | 'SIMPANAN_POKOK' | 'SIMPANAN_WAJIB' | 'SIMPANAN_SUKARELA';
-export type PaymentMethod = 'TRANSFER_BANK' | 'QRIS' | 'CASH';
+export interface MasterStand {
+  stand_id: string;
+  stand_code: string;       // Contoh: A-01, B-12
+  stand_number: number;
+  category: StandCategory;
+  zone: StandZone;
+  base_price: number;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface EventStand {
+  event_stand_id: string;
+  event_id: string;
+  stand_id: string;
+  stand_code: string;
+  assigned_price: number;
+  booking_status: StandBookingStatus;
+  booked_by_member_id?: string;
+  booked_by_member_name?: string;
+  lock_expires_at?: string; // ISO String untuk batas 15 menit
+}
+
+export interface Registration {
+  registration_id: string;
+  event_id: string;
+  event_title: string;
+  stand_id: string;
+  stand_code: string;
+  member_id: string;
+  member_name: string;
+  nama_usaha: string;
+  status: StandBookingStatus;
+  total_fee: number;
+  created_at: string;
+  expires_at?: string;
+}
 
 export interface Payment {
-  payment_id: string; // PAY-20260831-0001
+  payment_id: string;
   registration_id?: string;
   member_id: string;
+  member_name: string;
   payment_type: PaymentType;
   amount: number;
   payment_method: PaymentMethod;
   payment_date: string;
-  proof_file_id: string;
-  proof_file_url: string;
-  verification_status: VerificationStatus;
+  proof_url?: string;
+  proof_file_id?: string;
+  verification_status: PaymentStatus;
   verified_by?: string;
   verified_at?: string;
   rejection_reason?: string;
   created_at: string;
-  updated_at: string;
-}
-
-export interface SalesReport {
-  sales_report_id: string;
-  event_id: string;
-  member_id: string;
-  registration_id: string;
-  total_transactions: number;
-  total_items_sold: number;
-  gross_sales: number; // Omzet kotor UMKM
-  cost: number; // HPP
-  net_profit: number; // Keuntungan bersih UMKM
-  report_status: 'DRAFT' | 'SUBMITTED' | 'VERIFIED';
-  submitted_at: string;
-  verified_by?: string;
-  verified_at?: string;
-  notes?: string;
-  details?: SalesDetail[];
-}
-
-export interface SalesDetail {
-  sales_detail_id: string;
-  sales_report_id: string;
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  price: number;
-  total: number;
 }
 
 export interface Saving {
   saving_id: string;
   member_id: string;
+  member_name: string;
   saving_type: 'SIMPANAN_POKOK' | 'SIMPANAN_WAJIB' | 'SIMPANAN_SUKARELA';
   amount: number;
   payment_id?: string;
-  payment_status: 'PAID' | 'PENDING';
-  payment_date: string;
-  period_month_year: string; // e.g. "2026-08"
+  created_at: string;
+}
+
+export interface SalesReport {
+  sales_report_id: string;
+  event_id: string;
+  event_title: string;
+  member_id: string;
+  member_name: string;
+  stand_code: string;
+  report_date: string;
+  total_turnover: number;
   notes?: string;
-  created_at: string;
+  submitted_at: string;
 }
 
-export interface CooperativeSettings {
-  simpanan_pokok_total: number; // default: 100000
-  simpanan_pokok_cicilan: number; // default: 20000 per cicilan
-  simpanan_wajib_per_bulan: number; // default: 25000
-  nama_koperasi: string;
-  keterangan?: string;
-  updated_at: string;
-}
-
-export interface MemberSavingsSummary {
-  isCooperativeMember: boolean;
-  targetSimpananPokok: number;
-  simpananPokokTerbayar: number;
-  sisaSimpananPokok: number;
-  jumlahCicilanPokokTerbayar: number;
-  targetCicilanPokokNominal: number;
-  totalCicilanPokokDibutuhkan: number;
-  targetSimpananWajibPerBulan: number;
-  totalSimpananWajibTerbayar: number;
-  bulanSimpananWajibCount: number;
-  isWajibCurrentMonthPaid: boolean;
-  simpananSukarela: number;
-  totalSimpanan: number;
-}
-
-export interface Announcement {
-  announcement_id: string;
-  title: string;
-  content: string;
-  category: 'EVENT' | 'SIMPANAN' | 'UMKM' | 'GENERAL';
+export interface Product {
+  product_id: string;
+  member_id: string;
+  member_name: string;
+  name: string;
+  description: string;
+  category: StandCategory;
+  price: number;
   image_url?: string;
-  publish_date: string;
-  expiration_date?: string;
-  status: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED';
-  created_by: string;
+  image_file_id?: string;
+  is_available: boolean;
   created_at: string;
 }
 
-export interface NewsItem {
-  news_id: string;
-  title: string;
-  summary: string;
-  content: string;
-  category: string;
-  author: string;
-  cover_image_url: string;
-  published_at: string;
-}
-
-export interface GalleryItem {
-  gallery_id: string;
-  event_id?: string;
-  title: string;
-  year: number;
-  image_url: string;
-  caption: string;
+export interface DocumentRecord {
+  document_id: string;
+  member_id: string;
+  member_name: string;
+  document_type: 'KTP' | 'NIB' | 'SERTIFIKAT_HALAL' | 'PIRT' | 'LAINNYA';
+  document_number: string;
+  file_url?: string;
+  file_id?: string;
+  verification_status: DocumentStatus;
+  verified_by?: string;
+  verified_at?: string;
   created_at: string;
-}
-
-export interface Sponsor {
-  sponsor_id: string;
-  sponsor_name: string;
-  tier: 'PLATINUM' | 'GOLD' | 'SILVER' | 'PARTNER';
-  logo_url: string;
-  website_url?: string;
-  is_active: boolean;
 }
 
 export interface AuditLog {
   log_id: string;
-  timestamp: string;
-  user_id: string;
-  user_role: UserRole;
+  timestamp_wita: string;
+  actor_user_id: string;
+  actor_name: string;
+  actor_role: Role;
   action: string;
-  module: string;
-  reference_id: string;
-  description: string;
-  ip_or_session_reference?: string;
-  result: 'SUCCESS' | 'FAILED' | 'BLOCKED';
+  module: 'AUTH' | 'STAND' | 'PAYMENT' | 'MEMBER' | 'EVENT' | 'SALES' | 'DOCUMENT';
+  reference_id?: string;
+  details: string;
+  status: 'SUCCESS' | 'FAILED';
 }
 
 export interface AppNotification {
-  id: string;
+  notification_id: string;
+  recipient_role: Role | 'ALL';
+  recipient_member_id?: string;
   title: string;
   message: string;
-  type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ALERT';
-  timestamp: string;
-  read: boolean;
-  link?: string;
-}
-
-export interface AuthUser {
-  id: string;
-  username: string;
-  name: string;
-  role: UserRole;
-  member_id?: string;
-  email?: string;
-  foto_profil_url?: string;
-  nomor_anggota?: string;
-  nama_usaha?: string;
-}
-
-export type MediaAssetCategory = 'LOGO' | 'BANNER_HERO' | 'BANNER_PROMO' | 'MASCOT' | 'SPONSOR' | 'OTHER';
-export type MediaSourceType = 'UPLOAD' | 'GOOGLE_DRIVE' | 'EXTERNAL_URL' | 'DEFAULT';
-
-export interface MediaAssetItem {
-  id: string;
-  title: string;
-  category: MediaAssetCategory;
-  url: string;
-  sourceType: MediaSourceType;
-  rawDriveLink?: string;
-  description?: string;
-  is_active: boolean;
-  file_size?: string;
-  dimension?: string;
-  created_at: string;
-  updated_at: string;
-  updated_by?: string;
-}
-
-export interface CustomBannerItem {
-  id: string;
-  title: string;
-  subtitle?: string;
-  category: string;
-  image_url: string;
-  sourceType: MediaSourceType;
-  rawDriveLink?: string;
-  link_url?: string;
-  cta_text?: string;
-  is_active: boolean;
-  order: number;
+  is_read: boolean;
   created_at: string;
 }
 
-export interface AppBrandingConfig {
-  logoUrl: string;
-  logoAlt: string;
-  logoSourceType: MediaSourceType;
-  logoDriveLink?: string;
+// --------------------------------------------------------
+// AUTH & SESSION STATE
+// --------------------------------------------------------
 
-  heroBannerUrl: string;
-  heroBannerTitle: string;
-  heroBannerSubtitle: string;
-  heroBannerSourceType: MediaSourceType;
-  heroBannerDriveLink?: string;
-
-  marketBannerUrl: string;
-  marketBannerSourceType: MediaSourceType;
-
-  mascotUrl: string;
-  mascotAvatarUrl: string;
-  mascotSourceType: MediaSourceType;
-  mascotDriveLink?: string;
-
-  tagline: string;
-  subTagline: string;
-  organizationName: string;
-
-  customBanners: CustomBannerItem[];
-  mediaAssets: MediaAssetItem[];
-  updated_at: string;
-  updated_by?: string;
+export interface AuthSession {
+  token: string;
+  user: {
+    user_id: string;
+    username: string;
+    role: Role;
+    member_id?: string;
+    nama_lengkap?: string;
+  };
 }
 
-export type MemberCardTheme = 'LUXURY_SLATE' | 'EMERALD_GOLD' | 'ROYAL_PURPLE' | 'OCEAN_BLUE' | 'MINIMAL_LIGHT';
-
-export interface MemberCardDesignConfig {
-  theme: MemberCardTheme;
-  cardTitle: string;
-  organizationName: string;
-  marketName: string;
-  badgeText: string;
-  tagline: string;
-  authorizedOfficerName: string;
-  authorizedOfficerTitle: string;
-  authorizedOfficerNip?: string;
-  showPhoto: boolean;
-  showQrCode: boolean;
-  showBusinessName: boolean;
-  showCategory: boolean;
-  showAddress: boolean;
-  showJoinDate: boolean;
-  showValidityPeriod: boolean;
-  validityDurationYears: number;
-  customLogoUrl?: string;
-  customWatermarkUrl?: string;
-  disclaimerNotes: string;
-  cardAccentColor?: string;
-  updated_at: string;
-  updated_by?: string;
-}
-
-export interface KoperasiConfig {
-  simpanan_pokok_nominal: number; // default e.g. 100000
-  simpanan_pokok_cicilan_nominal?: number; // default e.g. 20000 per cicilan
-  simpanan_wajib_nominal: number; // default e.g. 25000
-  nama_koperasi: string;
-  nama_bank: string;
-  nomor_rekening: string;
-  atas_nama_rekening: string;
-  nomor_wa_konfirmasi: string;
-  catatan_iuran?: string;
-  updated_at: string;
-  updated_by?: string;
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
 }
