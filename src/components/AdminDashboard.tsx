@@ -1,1914 +1,581 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Payment,
-  EventItem,
-  Member,
-  EventRegistration,
-  Saving,
-  SalesReport,
-  AuditLog,
-  MemberDocument,
+import React, { useState, useMemo } from 'react';
+import { 
+  AuthSession, 
+  Member, 
+  EventItem, 
+  Registration, 
+  Payment, 
+  Saving, 
+  SalesReport, 
+  DocumentRecord, 
+  AuditLog 
 } from '../types';
 import { storage } from '../services/storage';
-import {
-  GOOGLE_DRIVE_FOLDER_URL,
-  GOOGLE_SPREADSHEET_URL,
-} from '../services/googleWorkspaceSync';
-import {
-  MemberCrudModal,
-  StandCrudModal,
-  PaymentCrudModal,
-  SavingCrudModal,
-  SalesReportCrudModal,
-  EventCrudModal,
-} from './AdminCrudModals';
-import { AdminMediaManager } from './AdminMediaManager';
-import { AdminCardStudio } from './AdminCardStudio';
-import {
-  ShieldCheck,
-  CreditCard,
-  Calendar,
-  Users,
-  TrendingUp,
-  FileText,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Search,
-  Download,
-  Filter,
-  Eye,
-  Store,
-  QrCode,
-  Sparkles,
-  Award,
-  DollarSign,
-  Building2,
-  FileCheck,
-  AlertTriangle,
-  Plus,
-  Trash2,
-  Edit2,
-  ExternalLink,
-  Check,
-  X,
-  Cloud,
-  FileSpreadsheet,
-  Image as ImageIcon,
-  KeyRound,
-} from 'lucide-react';
 
 interface AdminDashboardProps {
-  adminId: string;
-  onOpenPaymentInspector: (payment: Payment) => void;
-  onOpenQRScanner: () => void;
-  onOpenStandMap: (event: EventItem) => void;
-  onOpenGoogleWorkspaceModal?: () => void;
-  onOpenChangePassword?: (targetMember?: Member | null, isSuperAdminReset?: boolean) => void;
-  onOpenBarcodeModal?: (member?: Member | null) => void;
+  session: AuthSession;
+  members: Member[];
+  events: EventItem[];
+  registrations: Registration[];
+  payments: Payment[];
+  savings: Saving[];
+  salesReports: SalesReport[];
+  documents: DocumentRecord[];
+  auditLogs: AuditLog[];
+  onDataUpdated: () => void;
+  onOpenScanner?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  adminId,
-  onOpenPaymentInspector,
-  onOpenQRScanner,
-  onOpenStandMap,
-  onOpenGoogleWorkspaceModal,
-  onOpenChangePassword,
-  onOpenBarcodeModal,
+  session,
+  members,
+  events,
+  registrations,
+  payments,
+  savings,
+  salesReports,
+  documents,
+  auditLogs,
+  onDataUpdated,
+  onOpenScanner
 }) => {
-  const [activeAdminTab, setActiveAdminTab] = useState<
-    'OVERVIEW' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
-  >('OVERVIEW');
-
-  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
+  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'stands' | 'payments' | 'savings' | 'reports' | 'audit'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
-  const [version, setVersion] = useState(0);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
-  // Modals inside Admin - CRUD State
-  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-  const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
-  const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  // Ringkasan Statistik Utama
+  const stats = useMemo(() => {
+    const totalOmzet = salesReports.reduce((sum, r) => sum + (r.total_turnover || 0), 0);
+    const totalSimpanan = savings.reduce((sum, s) => sum + (s.amount || 0), 0);
+    const pendingPayments = payments.filter(p => p.verification_status === 'PENDING').length;
+    const confirmedStands = registrations.filter(r => r.status === 'CONFIRMED').length;
 
-  const [isAssignStandOpen, setIsAssignStandOpen] = useState(false);
-  const [standToEdit, setStandToEdit] = useState<EventRegistration | null>(null);
-  const [standToDelete, setStandToDelete] = useState<EventRegistration | null>(null);
+    return {
+      totalMembers: members.length,
+      totalEvents: events.length,
+      confirmedStands,
+      pendingPayments,
+      totalSimpanan,
+      totalOmzet
+    };
+  }, [members, events, registrations, payments, savings, salesReports]);
 
-  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
-  const [paymentToEdit, setPaymentToEdit] = useState<Payment | null>(null);
-  const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
-
-  const [isAddSavingOpen, setIsAddSavingOpen] = useState(false);
-  const [savingToEdit, setSavingToEdit] = useState<Saving | null>(null);
-  const [savingToDelete, setSavingToDelete] = useState<Saving | null>(null);
-
-  const [isAddSalesOpen, setIsAddSalesOpen] = useState(false);
-  const [salesToEdit, setSalesToEdit] = useState<SalesReport | null>(null);
-  const [salesToDelete, setSalesToDelete] = useState<SalesReport | null>(null);
-
-  const [isEditEventOpen, setIsEditEventOpen] = useState(false);
-
-  const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
-  const [docRejectReason, setDocRejectReason] = useState('');
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-
-  // Cooperative Configuration State (Admin Form)
-  const initialCoopConfig = storage.getKoperasiConfig();
-  const [coopPokok, setCoopPokok] = useState<number>(initialCoopConfig.simpanan_pokok_nominal);
-  const [coopPokokCicilan, setCoopPokokCicilan] = useState<number>(
-    initialCoopConfig.simpanan_pokok_cicilan_nominal || 20000
-  );
-  const [coopWajib, setCoopWajib] = useState<number>(initialCoopConfig.simpanan_wajib_nominal);
-  const [coopBank, setCoopBank] = useState<string>(initialCoopConfig.nama_bank);
-  const [coopRek, setCoopRek] = useState<string>(initialCoopConfig.nomor_rekening);
-  const [coopAtasNama, setCoopAtasNama] = useState<string>(initialCoopConfig.atas_nama_rekening);
-  const [coopWa, setCoopWa] = useState<string>(initialCoopConfig.nomor_wa_konfirmasi);
-  const [coopCatatan, setCoopCatatan] = useState<string>(initialCoopConfig.catatan_iuran || '');
-  const [coopNotice, setCoopNotice] = useState<string | null>(null);
-
-  // Subscribe to storage updates
-  useEffect(() => {
-    const unsub = storage.subscribe(() => {
-      setVersion((v) => v + 1);
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const fresh = storage.getKoperasiConfig();
-    setCoopPokok(fresh.simpanan_pokok_nominal);
-    setCoopPokokCicilan(fresh.simpanan_pokok_cicilan_nominal || 20000);
-    setCoopWajib(fresh.simpanan_wajib_nominal);
-    setCoopBank(fresh.nama_bank);
-    setCoopRek(fresh.nomor_rekening);
-    setCoopAtasNama(fresh.atas_nama_rekening);
-    setCoopWa(fresh.nomor_wa_konfirmasi);
-    setCoopCatatan(fresh.catatan_iuran || '');
-  }, [version]);
-
-  const handleSaveCoopConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    storage.updateKoperasiConfig(
-      {
-        simpanan_pokok_nominal: Number(coopPokok),
-        simpanan_pokok_cicilan_nominal: Number(coopPokokCicilan),
-        simpanan_wajib_nominal: Number(coopWajib),
-        nama_bank: coopBank,
-        nomor_rekening: coopRek,
-        atas_nama_rekening: coopAtasNama,
-        nomor_wa_konfirmasi: coopWa,
-        catatan_iuran: coopCatatan,
-      },
-      adminId
+  // Handler Verifikasi Pembayaran
+  const handleVerifyPayment = (paymentId: string, status: 'VERIFIED' | 'REJECTED') => {
+    storage.verifyPayment(
+      paymentId, 
+      session.user.nama_lengkap || session.user.username, 
+      status, 
+      status === 'REJECTED' ? rejectReason : undefined
     );
-    setCoopNotice('Pengaturan besaran simpanan pokok dan wajib berhasil disimpan!');
-    setTimeout(() => setCoopNotice(null), 4000);
-  };
-
-  const handleToggleMemberKoperasi = (memberId: string, currentIsCoop: boolean) => {
-    const nextVal = !currentIsCoop;
-    const res = storage.toggleMemberKoperasiStatus(memberId, nextVal, adminId);
-    setActionNotice(res.message);
-    setTimeout(() => setActionNotice(null), 4000);
-  };
-
-  // Data from Storage
-  const stats = storage.getAggregatedStats();
-  const payments = storage.getPayments();
-  const events = storage.getEvents();
-  const members = storage.getMembers();
-  const registrations = storage.getRegistrations();
-  const savings = storage.getSavings();
-  const salesReports = storage.getSalesReports();
-  const auditLogs = storage.getAuditLogs();
-  const documents = storage.getDocuments();
-
-  const activeEvent = events[0];
-
-  // Filtered Payments
-  const filteredPayments = payments.filter((p) => {
-    if (paymentFilter !== 'ALL' && p.verification_status !== paymentFilter) return false;
-    if (!searchQuery) return true;
-    const member = members.find((m) => m.member_id === p.member_id);
-    const query = searchQuery.toLowerCase();
-    return (
-      p.payment_id.toLowerCase().includes(query) ||
-      p.member_id.toLowerCase().includes(query) ||
-      (member?.nama_lengkap.toLowerCase().includes(query) ?? false) ||
-      (member?.nama_usaha.toLowerCase().includes(query) ?? false)
-    );
-  });
-
-  const pendingPaymentsCount = payments.filter((p) => p.verification_status === 'PENDING').length;
-  const pendingDocsCount = documents.filter((d) => d.verification_status === 'PENDING').length;
-
-  const showToast = (msg: string) => {
-    setActionNotice(msg);
-    setTimeout(() => setActionNotice(null), 4000);
-  };
-
-  const handleConfirmDeleteMember = () => {
-    if (!memberToDelete) return;
-    const res = storage.deleteMember(memberToDelete.member_id, adminId);
-    if (res.success) {
-      showToast(res.message);
-    }
-    setMemberToDelete(null);
-  };
-
-  const handleConfirmDeleteStand = () => {
-    if (!standToDelete) return;
-    const ok = storage.deleteRegistration(standToDelete.registration_id, adminId);
-    if (ok) {
-      showToast(`Alokasi Stand ${standToDelete.stand_code} berhasil dilepaskan.`);
-    }
-    setStandToDelete(null);
-  };
-
-  const handleConfirmDeletePayment = () => {
-    if (!paymentToDelete) return;
-    const ok = storage.deletePayment(paymentToDelete.payment_id, adminId);
-    if (ok) {
-      showToast(`Catatan pembayaran ${paymentToDelete.payment_id} berhasil dihapus.`);
-    }
-    setPaymentToDelete(null);
-  };
-
-  const handleConfirmDeleteSaving = () => {
-    if (!savingToDelete) return;
-    const ok = storage.deleteSaving(savingToDelete.saving_id, adminId);
-    if (ok) {
-      showToast(`Catatan simpanan ${savingToDelete.saving_id} berhasil dihapus.`);
-    }
-    setSavingToDelete(null);
-  };
-
-  const handleConfirmDeleteSales = () => {
-    if (!salesToDelete) return;
-    const ok = storage.deleteSalesReport(salesToDelete.sales_report_id, adminId);
-    if (ok) {
-      showToast(`Laporan omzet ${salesToDelete.sales_report_id} berhasil dihapus.`);
-    }
-    setSalesToDelete(null);
-  };
-
-  const handleApproveDocument = (docId: string) => {
-    const ok = storage.verifyDocument(docId, adminId, true);
-    if (ok) {
-      showToast('Dokumen legalitas berhasil diverifikasi.');
-    }
-  };
-
-  const handleRejectDocument = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rejectingDocId) return;
-    const ok = storage.verifyDocument(rejectingDocId, adminId, false, docRejectReason);
-    if (ok) {
-      showToast('Dokumen legalitas telah ditolak.');
-    }
-    setRejectingDocId(null);
-    setDocRejectReason('');
-  };
-
-  const handleExportCSV = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      'ID_ANGGOTA,NAMA_LENGKAP,NAMA_USAHA,KATEGORI,STATUS,WHATSAPP\n' +
-      members
-        .map(
-          (m) =>
-            `"${m.member_id}","${m.nama_lengkap}","${m.nama_usaha}","${m.kategori_usaha}","${m.status_keanggotaan}","${m.whatsapp}"`
-        )
-        .join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Koperasi_Berau_Data_Export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('File CSV berhasil diunduh.');
+    setSelectedPayment(null);
+    setRejectReason('');
+    onDataUpdated();
   };
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* Toast Notice */}
-      {actionNotice && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 bg-slate-900 text-white rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <p className="text-xs font-bold">{actionNotice}</p>
-        </div>
-      )}
-
-      {/* Top Bento Header & Navigation Tabs */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-purple-900 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
-                Panel Super Admin Koperasi
-              </span>
-              <span className="text-xs text-slate-400 font-bold">• Tingkat Otoritas Penuh (CRUD)</span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Dashboard Manajemen & Keuangan Koperasi
-            </h2>
-            <p className="text-xs text-slate-500">
-              Pengelolaan 64 Stand Banuarasa, Verifikasi Pembayaran & Dokumen, Manajemen Anggota, dan Laporan Kas.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {onOpenGoogleWorkspaceModal && (
-              <button
-                id="btn-admin-google-workspace"
-                onClick={onOpenGoogleWorkspaceModal}
-                className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <Cloud className="w-4 h-4 text-emerald-600" />
-                <span>Google Workspace Hub</span>
-              </button>
-            )}
-            {onOpenChangePassword && (
-              <button
-                id="btn-admin-change-password"
-                onClick={() => onOpenChangePassword(null, false)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
-                title="Ganti Kata Sandi Master Super Admin"
-              >
-                <KeyRound className="w-4 h-4 text-emerald-600" />
-                <span>Rubah Sandi Admin</span>
-              </button>
-            )}
-            <button
-              onClick={onOpenQRScanner}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <QrCode className="w-4 h-4 text-emerald-400" />
-              <span>Scan QR Check-In</span>
-            </button>
-            <button
-              onClick={() => onOpenStandMap(activeEvent)}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Denah 64 Stand</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Real Links Direct Action Banner */}
-        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 font-medium">
-            <span className="bg-emerald-500 text-slate-950 font-black px-2 py-0.5 rounded text-[10px] uppercase">
-              Cloud Database
-            </span>
-            <span className="text-slate-300">Tautan repositori data resmi Banuarasa:</span>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href={GOOGLE_SPREADSHEET_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Google Spreadsheet Resmi</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-
-            <a
-              href={GOOGLE_DRIVE_FOLDER_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold rounded-xl flex items-center gap-1.5 transition-colors"
-            >
-              <Cloud className="w-3.5 h-3.5" />
-              <span>Google Drive Folder Resmi</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        </div>
-
-        {/* Sub-Nav Bento Tabs */}
-        <div className="flex items-center gap-2 pt-1 overflow-x-auto">
-          {[
-            { id: 'OVERVIEW', label: 'Ringkasan Eksekutif', icon: ShieldCheck },
-            { id: 'CARD_STUDIO', label: 'Desain KTA (Kartu Anggota)', icon: Sparkles },
-            { id: 'PAYMENTS', label: `Verifikasi Bayar (${pendingPaymentsCount})`, icon: CreditCard },
-            { id: 'STANDS', label: 'Manajemen 64 Stand', icon: Calendar },
-            { id: 'MEMBERS', label: `Anggota & Legalitas (${members.length})`, icon: Users },
-            { id: 'SAVINGS', label: 'Buku Kas Simpanan', icon: DollarSign },
-            { id: 'SALES', label: 'Laporan Omzet UMKM', icon: TrendingUp },
-            { id: 'BRANDING', label: 'Logo, Banner & Media', icon: ImageIcon },
-            { id: 'AUDIT', label: 'Audit Logs & Ekspor', icon: FileText },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeAdminTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveAdminTab(tab.id as any)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* OVERVIEW TAB */}
-      {activeAdminTab === 'OVERVIEW' && (
-        <div className="space-y-6">
-          {/* 4 Primary Bento Metrics: Koperasi vs UMKM strictly separated */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* Card 1: Pendapatan Kas Koperasi */}
-            <div className="bg-emerald-900 text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">
-                    Kas Koperasi
-                  </span>
-                  <DollarSign className="w-5 h-5 text-emerald-400" />
-                </div>
-                <p className="text-xs text-emerald-200 font-medium">Total Kas Masuk Koperasi</p>
-                <p className="text-2xl font-black text-white mt-1">
-                  Rp{stats.totalKasMasukKoperasi.toLocaleString('id-ID')}
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-emerald-800/80 text-[10px] text-emerald-200 flex justify-between">
-                <span>Stand: Rp{stats.totalPendapatanPartisipasiStand.toLocaleString('id-ID')}</span>
-                <span>Simpanan: Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}</span>
-              </div>
-            </div>
-
-            {/* Card 2: Total Omzet Penjualan UMKM */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                    Omzet UMKM
-                  </span>
-                  <TrendingUp className="w-5 h-5 text-blue-600" />
-                </div>
-                <p className="text-xs text-slate-500 font-medium">Total Omzet Transaksi Tenant</p>
-                <p className="text-2xl font-black text-slate-900 mt-1">
-                  Rp{stats.totalOmzetUMKM.toLocaleString('id-ID')}
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
-                <span>Laba: Rp{stats.totalLabaBersihUMKM.toLocaleString('id-ID')}</span>
-                <span className="font-bold text-emerald-700">{stats.totalProdukTerjual} Item Terjual</span>
-              </div>
-            </div>
-
-            {/* Card 3: Stand Status */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    Okupansi Stand
-                  </span>
-                  <Store className="w-5 h-5 text-amber-600" />
-                </div>
-                <p className="text-xs text-slate-500 font-medium">Stand Terisi (Banuarasa #1)</p>
-                <p className="text-2xl font-black text-slate-900 mt-1">
-                  {stats.standTerisi} <span className="text-sm font-bold text-slate-400">/ 64 Stand</span>
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
-                <span className="text-emerald-700 font-bold">{stats.standAvailable} Stand Kosong</span>
-                <span>{Math.round((stats.standTerisi / 64) * 100)}% Terisi</span>
-              </div>
-            </div>
-
-            {/* Card 4: Anggota Aktif */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                    Keanggotaan
-                  </span>
-                  <Users className="w-5 h-5 text-purple-600" />
-                </div>
-                <p className="text-xs text-slate-500 font-medium">Total Anggota Terdaftar</p>
-                <p className="text-2xl font-black text-slate-900 mt-1">
-                  {stats.totalAnggota} <span className="text-sm font-bold text-slate-400">Pelaku UMKM</span>
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
-                <span className="text-purple-700 font-bold">{stats.anggotaAktif} Anggota Aktif</span>
-                <span>{pendingPaymentsCount} Antrean Bayar</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Actions Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 mb-1">Verifikasi Pembayaran</h4>
-                <p className="text-xs text-slate-500 mb-3">
-                  Terdapat {pendingPaymentsCount} bukti transfer menanti persetujuan pengurus.
-                </p>
-              </div>
-              <button
-                onClick={() => setActiveAdminTab('PAYMENTS')}
-                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
-              >
-                Buka Antrean Verifikasi →
-              </button>
-            </div>
-
-            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 mb-1">Direktori Anggota UMKM</h4>
-                <p className="text-xs text-slate-500 mb-3">
-                  Kelola profil anggota, verifikasi NIB/Halal, dan kelola akun demo/anggota baru.
-                </p>
-              </div>
-              <button
-                onClick={() => setActiveAdminTab('MEMBERS')}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors"
-              >
-                Kelola Anggota & Hapus Akun →
-              </button>
-            </div>
-
-            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 mb-1">Audit Trail & Laporan</h4>
-                <p className="text-xs text-slate-500 mb-3">
-                  Ekspor rekaman kas simpanan dan omzet mingguan ke file spreadsheet.
-                </p>
-              </div>
-              <button
-                onClick={handleExportCSV}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Unduh File CSV Anggota</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PAYMENTS TAB */}
-      {activeAdminTab === 'PAYMENTS' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-100/60 pb-16">
+      {/* Top Banner Admin */}
+      <div className="bg-slate-900 text-white border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-black text-slate-900">Verifikasi Pembayaran Masuk</h3>
-              <p className="text-xs text-slate-500">
-                Pemeriksaan bukti transfer bank dan QRIS untuk biaya stand dan simpanan anggota.
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {session.user.role}
+                </span>
+                <span className="text-slate-400 text-xs">• WITA (Berau)</span>
+              </div>
+              <h1 className="text-2xl font-bold mt-1 text-slate-100">
+                Pusat Kendali Operasional Banuarasa
+              </h1>
+              <p className="text-sm text-slate-400">
+                Pengelola: <strong className="text-slate-200">{session.user.nama_lengkap || session.user.username}</strong>
               </p>
             </div>
 
-            {/* Actions: Filter Buttons & Tambah Pembayaran Manual */}
-            <div className="flex items-center gap-2 flex-wrap">
+            {onOpenScanner && (
               <button
-                onClick={() => {
-                  setPaymentToEdit(null);
-                  setIsAddPaymentOpen(true);
-                }}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                onClick={onOpenScanner}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-sm transition"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Pembayaran</span>
+                <span>📷 Scan Barcode / Tiket</span>
               </button>
-
-              <div className="flex items-center gap-1">
-                {(['PENDING', 'VERIFIED', 'REJECTED', 'ALL'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setPaymentFilter(filter)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                      paymentFilter === filter
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {filter === 'ALL' ? 'Semua' : filter}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Search Box */}
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari ID Pembayaran, Nama Anggota, atau Nama Usaha..."
-              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-          </div>
-
-          {/* Payment List Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                  <th className="p-3">ID Pembayaran</th>
-                  <th className="p-3">Nama Anggota / Usaha</th>
-                  <th className="p-3">Jenis & Metode</th>
-                  <th className="p-3">Nominal</th>
-                  <th className="p-3">Tanggal</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Aksi Super Admin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredPayments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
-                      Tidak ada pembayaran dengan filter ini.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPayments.map((pay) => {
-                    const member = members.find((m) => m.member_id === pay.member_id);
-                    return (
-                      <tr key={pay.payment_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-slate-700">{pay.payment_id}</td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-900">{member?.nama_lengkap || pay.member_id}</p>
-                          <p className="text-[10px] text-slate-500">{member?.nama_usaha}</p>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800">{pay.payment_type.replace(/_/g, ' ')}</span>
-                          <p className="text-[10px] text-slate-500">{pay.payment_method}</p>
-                        </td>
-                        <td className="p-3 font-black text-slate-900">
-                          Rp{pay.amount.toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3 text-slate-500">{pay.payment_date}</td>
-                        <td className="p-3">
-                          <span
-                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                              pay.verification_status === 'VERIFIED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : pay.verification_status === 'PENDING'
-                                ? 'bg-amber-100 text-amber-900'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {pay.verification_status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right space-x-1.5">
-                          <button
-                            onClick={() => onOpenPaymentInspector(pay)}
-                            className="px-2.5 py-1 bg-slate-900 hover:bg-black text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Periksa bukti bayar"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Lihat</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setPaymentToEdit(pay);
-                              setIsAddPaymentOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Ubah data pembayaran"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span>Ubah</span>
-                          </button>
-                          <button
-                            onClick={() => setPaymentToDelete(pay)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Hapus pembayaran"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Hapus</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+          {/* Navigasi Tab */}
+          <div className="flex overflow-x-auto gap-2 mt-6 pt-2 border-t border-slate-800 text-sm">
+            {[
+              { id: 'overview', label: 'Ringkasan' },
+              { id: 'members', label: `Anggota (${members.length})` },
+              { id: 'stands', label: `Stand & Registrasi (${registrations.length})` },
+              { id: 'payments', label: `Pembayaran (${payments.length})` },
+              { id: 'savings', label: 'Simpanan Koperasi' },
+              { id: 'reports', label: 'Laporan Omzet' },
+              { id: 'audit', label: 'Audit Trail' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition ${
+                  activeTab === tab.id
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
-    )}
 
-      {/* STANDS TAB */}
-      {activeAdminTab === 'STANDS' && (
-        <div className="space-y-6">
-          {/* Superadmin Event Details Card: Waktu, Tempat, dan Tanggal Pelaksanaan */}
-          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 rounded-3xl border border-emerald-500/30 p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-              <div className="space-y-2 max-w-2xl">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/40">
-                    Pengaturan Event Weekend Market
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-500/40">
-                    Status: {activeEvent?.event_status || 'ACTIVE'}
-                  </span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {activeEvent?.event_name || 'Banuarasa Weekend Market Edisi #24'}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
-                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
-                    <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tanggal Pelaksanaan</p>
-                      <p className="font-black text-white">{activeEvent?.event_date || '2026-09-05'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
-                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Waktu / Jam Operasional</p>
-                      <p className="font-black text-white">{activeEvent?.start_time || '06:00'} - {activeEvent?.end_time || '12:00'} WITA</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
-                    <Building2 className="w-4 h-4 text-blue-400 shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tempat / Lokasi</p>
-                      <p className="font-bold text-white truncate max-w-[180px]">{activeEvent?.location || 'Jl. Dr. Murjani I, Tanjung Redeb'}</p>
-                    </div>
-                  </div>
-                </div>
-                {activeEvent?.description && (
-                  <p className="text-slate-300 text-xs pt-1">{activeEvent.description}</p>
-                )}
+      {/* Konten Utama */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Anggota</span>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalMembers}</p>
               </div>
-
-              <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
-                <button
-                  onClick={() => setIsEditEventOpen(true)}
-                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] cursor-pointer"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  <span>Ubah Informasi Event Stand</span>
-                </button>
-                <button
-                  onClick={() => onOpenStandMap(activeEvent)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Store className="w-4 h-4 text-emerald-400" />
-                  <span>Lihat Peta Visual Stand</span>
-                </button>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Stand Terisi</span>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.confirmedStands}</p>
               </div>
-            </div>
-          </div>
-
-          {/* Stand Table Container */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">
-                  Daftar 64 Stand & Penyewa - {activeEvent?.event_name}
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Data 64 stand resmi Banuarasa Weekend Market beserta tenant UMKM yang terdaftar di Google Spreadsheet.
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Verifikasi Tertunda</span>
+                <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingPayments}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Event</span>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{stats.totalEvents}</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Dana Simpanan</span>
+                <p className="text-lg font-bold text-indigo-600 mt-1">
+                  Rp {(stats.totalSimpanan / 1000).toLocaleString('id-ID')}k
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    setStandToEdit(null);
-                    setIsAssignStandOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Alokasi Stand Manual</span>
-                </button>
-                <button
-                  onClick={() => onOpenStandMap(activeEvent)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
-                >
-                  Buka Peta Visual 64 Stand
-                </button>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-xs font-medium text-slate-500">Total Omzet UMKM</span>
+                <p className="text-lg font-bold text-slate-800 mt-1">
+                  Rp {(stats.totalOmzet / 1000).toLocaleString('id-ID')}k
+                </p>
               </div>
             </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                  <th className="p-3">Kode Stand</th>
-                  <th className="p-3">Biaya Stand</th>
-                  <th className="p-3">Penyewa (Member ID)</th>
-                  <th className="p-3">Nama Usaha</th>
-                  <th className="p-3">Status Registrasi</th>
-                  <th className="p-3">Status Check-In</th>
-                  <th className="p-3 text-right">Aksi Super Admin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {registrations.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
-                      Belum ada stand yang terisi. Semua 64 stand siap di-booking!
-                    </td>
-                  </tr>
+            {/* Antrean Verifikasi Cepat */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 className="text-base font-bold text-slate-800">Menunggu Verifikasi Pembayaran</h2>
+                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
+                  {payments.filter(p => p.verification_status === 'PENDING').length} Antrean
+                </span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {payments.filter(p => p.verification_status === 'PENDING').length === 0 ? (
+                  <p className="py-8 text-center text-sm text-slate-500">Tidak ada bukti transfer yang perlu diverifikasi saat ini.</p>
                 ) : (
-                  registrations.map((reg) => {
-                    const member = members.find((m) => m.member_id === reg.member_id);
-                    return (
-                      <tr key={reg.registration_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-black text-slate-900 text-sm">Stand {reg.stand_code}</td>
-                        <td className="p-3 font-bold text-slate-800">
-                          Rp{reg.stand_price.toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-900">{member?.nama_lengkap || reg.member_id}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">{reg.member_id}</p>
-                        </td>
-                        <td className="p-3 font-semibold text-slate-700">{member?.nama_usaha || '-'}</td>
-                        <td className="p-3">
-                          <span
-                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                              reg.registration_status === 'CONFIRMED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : reg.registration_status === 'WAITING_PAYMENT'
-                                ? 'bg-amber-100 text-amber-900'
-                                : 'bg-sky-100 text-sky-800'
-                            }`}
-                          >
-                            {reg.registration_status}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                              reg.check_in_status === 'CHECKED_IN'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {reg.check_in_status === 'CHECKED_IN' ? 'HADIR DI LOKASI' : 'BELUM HADIR'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right space-x-1.5">
-                          <button
-                            onClick={() => {
-                              setStandToEdit(reg);
-                              setIsAssignStandOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Ubah data stand"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span>Ubah</span>
-                          </button>
-                          <button
-                            onClick={() => setStandToDelete(reg)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Lepas alokasi stand ini"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Lepas</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  payments.filter(p => p.verification_status === 'PENDING').map(pay => (
+                    <div key={pay.payment_id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800">{pay.member_name}</span>
+                          <span className="text-xs text-slate-400">({pay.payment_id})</span>
+                        </div>
+                        <p className="text-sm text-slate-600 mt-0.5">
+                          Tipe: <strong className="text-slate-800">{pay.payment_type}</strong> — Rp {pay.amount.toLocaleString('id-ID')} via {pay.payment_method}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">Tanggal: {pay.payment_date}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedPayment(pay)}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                        >
+                          Lihat Bukti
+                        </button>
+                        <button
+                          onClick={() => handleVerifyPayment(pay.payment_id, 'VERIFIED')}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+                        >
+                          Setujui
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* MEMBERS DIRECTORY TAB (WITH CRUD ACTIONS) */}
-      {activeAdminTab === 'MEMBERS' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Direktori Anggota UMKM ({members.length})</h3>
-                <p className="text-xs text-slate-500">
-                  Super Admin berhak menambah, mengubah profil, dan menghapus data anggota koperasi.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setMemberToEdit(null);
-                    setIsAddMemberOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-purple-900 hover:bg-purple-950 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Tambah Anggota</span>
-                </button>
-                <button
-                  onClick={handleExportCSV}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Unduh CSV</span>
-                </button>
               </div>
             </div>
+          </div>
+        )}
 
+        {/* TAB 2: MEMBERS */}
+        {activeTab === 'members' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-3 bg-slate-50/50">
+              <input
+                type="text"
+                placeholder="Cari nama anggota / usaha / NIK..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-emerald-500 w-full sm:w-80"
+              />
+              <span className="text-xs text-slate-500 self-center">Total: {members.length} Anggota</span>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                    <th className="p-3">No. Anggota</th>
-                    <th className="p-3">Nama Anggota</th>
-                    <th className="p-3">Nama Usaha / Brand</th>
-                    <th className="p-3">Kategori</th>
-                    <th className="p-3">No. WhatsApp</th>
-                    <th className="p-3">Status Akun</th>
-                    <th className="p-3">Status Koperasi (KBMB)</th>
-                    <th className="p-3 text-right">Aksi Super Admin</th>
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">ID / NIK</th>
+                    <th className="px-4 py-3">Nama Anggota</th>
+                    <th className="px-4 py-3">Nama Usaha</th>
+                    <th className="px-4 py-3">Kategori</th>
+                    <th className="px-4 py-3">Kontak</th>
+                    <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {members.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
-                        Tidak ada anggota terdaftar. Klik 'Tambah Anggota' di atas.
-                      </td>
-                    </tr>
-                  ) : (
-                    members.map((m) => {
-                      const isCoop =
-                        m.is_cooperative_member !== undefined
-                          ? Boolean(m.is_cooperative_member)
-                          : (m.tipe_keanggotaan !== 'PASAR_ONLY' && m.status_koperasi !== 'BELUM_AKTIF');
-
-                      return (
-                      <tr key={m.member_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-emerald-700">{m.nomor_anggota}</td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-900">{m.nama_lengkap}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{m.member_id}</p>
+                  {members
+                    .filter(m => 
+                      m.nama_lengkap.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      m.nama_usaha.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      m.nik.includes(searchQuery)
+                    )
+                    .map(m => (
+                      <tr key={m.member_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs">
+                          <div className="font-bold text-slate-800">{m.member_id}</div>
+                          <div className="text-slate-400">{m.nik}</div>
                         </td>
-                        <td className="p-3 text-slate-700 font-medium">{m.nama_usaha}</td>
-                        <td className="p-3 text-slate-500">{m.kategori_usaha}</td>
-                        <td className="p-3 font-mono text-slate-600">{m.whatsapp}</td>
-                        <td className="p-3">
-                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        <td className="px-4 py-3 font-semibold text-slate-800">{m.nama_lengkap}</td>
+                        <td className="px-4 py-3">{m.nama_usaha}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                            {m.kategori_usaha}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <div>{m.nomor_hp}</div>
+                          <div className="text-slate-400">{m.email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            m.status_keanggotaan === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
                             {m.status_keanggotaan}
                           </span>
                         </td>
-                        <td className="p-3">
-                          <div className="flex flex-col items-start gap-1">
-                            <span
-                              className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                                isCoop
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}
-                            >
-                              <Building2 className="w-2.5 h-2.5" />
-                              <span>{isCoop ? 'Anggota Koperasi' : 'Bukan Anggota'}</span>
-                            </span>
-                            <span className="text-[9px] text-slate-400">
-                              {isCoop ? 'Wajib Simpanan Pokok & Wajib' : 'Hanya Stand Pasar (Bebas Iuran)'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
-                          {/* Quick Toggle Status Koperasi Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMemberKoperasi(m.member_id, isCoop)}
-                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer border ${
-                              isCoop
-                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                            }`}
-                            title={
-                              isCoop
-                                ? 'Ubah menjadi Bukan Anggota Koperasi (Bebas Iuran)'
-                                : 'Tetapkan sebagai Anggota Koperasi Penuh (Kewajiban Iuran Aktif)'
-                            }
-                          >
-                            <Building2 className="w-3 h-3 text-amber-600" />
-                            <span>{isCoop ? 'Ubah ke Non-Koperasi' : 'Jadikan Anggota'}</span>
-                          </button>
-                          <a
-                            href={`https://wa.me/${String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs transition-colors inline-block"
-                          >
-                            WA
-                          </a>
-
-                          {onOpenBarcodeModal && (
-                            <button
-                              onClick={() => onOpenBarcodeModal(m)}
-                              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-500/30"
-                              title="Generate Barcode 1D & QR Code Anggota"
-                            >
-                              <QrCode className="w-3 h-3 text-amber-600" />
-                              <span>Barcode</span>
-                            </button>
-                          )}
-
-                          {onOpenChangePassword && (
-                            <button
-                              onClick={() => onOpenChangePassword(m, true)}
-                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-200/60"
-                              title="Reset / Ganti Kata Sandi Anggota"
-                            >
-                              <KeyRound className="w-3 h-3 text-amber-600" />
-                              <span>Sandi</span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => {
-                              setMemberToEdit(m);
-                              setIsAddMemberOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Ubah Profil Anggota"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span>Ubah</span>
-                          </button>
-
-                          <button
-                            id={`btn-delete-member-${m.member_id}`}
-                            onClick={() => setMemberToDelete(m)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Hapus Anggota oleh Super Admin"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Hapus</span>
-                          </button>
-                        </td>
                       </tr>
-                    );
-                  })
-                )}
+                    ))}
                 </tbody>
               </table>
             </div>
           </div>
+        )}
 
-          {/* Legalitas Documents Verification Table */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">
-                Verifikasi Dokumen Legalitas UMKM ({documents.length})
-              </h3>
-              <p className="text-xs text-slate-500">
-                Pemeriksaan Nomor Induk Berusaha (NIB) dan Sertifikat Halal binaan koperasi di Google Drive.
-              </p>
+        {/* TAB 3: STANDS & REGISTRATIONS */}
+        {activeTab === 'stands' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Daftar Pendaftaran & Reservasi Stand</h2>
             </div>
-
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                    <th className="p-3">ID Dokumen</th>
-                    <th className="p-3">Anggota</th>
-                    <th className="p-3">Jenis Dokumen</th>
-                    <th className="p-3">Nomor Legalitas</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Aksi Verifikasi</th>
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">Kode Stand</th>
+                    <th className="px-4 py-3">Peserta / Usaha</th>
+                    <th className="px-4 py-3">Event</th>
+                    <th className="px-4 py-3">Biaya</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Waktu Daftar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {documents.length === 0 ? (
+                  {registrations.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-slate-400">
-                        Tidak ada dokumen legalitas yang diunggah.
-                      </td>
+                      <td colSpan={6} className="text-center py-8 text-slate-400">Belum ada data pendaftaran stand.</td>
                     </tr>
                   ) : (
-                    documents.map((doc) => {
-                      const member = members.find((m) => m.member_id === doc.member_id);
-                      return (
-                        <tr key={doc.document_id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="p-3 font-mono font-bold text-slate-700">{doc.document_id}</td>
-                          <td className="p-3">
-                            <p className="font-bold text-slate-900">{member?.nama_lengkap || doc.member_id}</p>
-                            <p className="text-[10px] text-slate-500">{member?.nama_usaha}</p>
-                          </td>
-                          <td className="p-3 font-bold text-slate-800">{doc.document_type}</td>
-                          <td className="p-3 font-mono text-slate-600">{doc.document_number}</td>
-                          <td className="p-3">
-                            <span
-                              className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                                doc.verification_status === 'VERIFIED'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : doc.verification_status === 'PENDING'
-                                  ? 'bg-amber-100 text-amber-900'
-                                  : 'bg-rose-100 text-rose-800'
-                              }`}
-                            >
-                              {doc.verification_status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right space-x-1.5">
-                            {doc.verification_status === 'PENDING' && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveDocument(doc.document_id)}
-                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  <span>Setujui</span>
-                                </button>
-                                <button
-                                  onClick={() => setRejectingDocId(doc.document_id)}
-                                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                >
-                                  <X className="w-3 h-3" />
-                                  <span>Tolak</span>
-                                </button>
-                              </>
-                            )}
-                            {doc.drive_url && (
-                              <a
-                                href={doc.drive_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span>Lihat File</span>
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
+                    registrations.map(r => (
+                      <tr key={r.registration_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-bold text-emerald-600">{r.stand_code}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-800">{r.member_name}</div>
+                          <div className="text-xs text-slate-400">{r.nama_usaha}</div>
+                        </td>
+                        <td className="px-4 py-3 text-xs">{r.event_title}</td>
+                        <td className="px-4 py-3 font-medium">Rp {r.total_fee.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            r.status === 'CONFIRMED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : r.status === 'RESERVED'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {new Date(r.created_at).toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* SAVINGS TAB */}
-      {activeAdminTab === 'SAVINGS' && (
-        <div className="space-y-6">
-          {/* Form Pengaturan Besaran Simpanan Pokok & Wajib oleh Admin */}
-          <div className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-6 sm:p-7 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900">
-                    Pengaturan Kewajiban Simpanan Koperasi (Form Admin)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Tentukan jumlah simpanan pokok (bisa dicicil) dan simpanan wajib bulanan untuk seluruh anggota koperasi.
-                  </p>
-                </div>
-              </div>
-              <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 self-start sm:self-center">
-                Berlaku untuk Anggota Koperasi
-              </span>
+        {/* TAB 4: PAYMENTS */}
+        {activeTab === 'payments' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Seluruh Riwayat Pembayaran</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">ID Pembayaran</th>
+                    <th className="px-4 py-3">Nama Anggota</th>
+                    <th className="px-4 py-3">Tipe</th>
+                    <th className="px-4 py-3">Nominal</th>
+                    <th className="px-4 py-3">Metode</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Verifikator</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {payments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8 text-slate-400">Belum ada catatan pembayaran.</td>
+                    </tr>
+                  ) : (
+                    payments.map(p => (
+                      <tr key={p.payment_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs">{p.payment_id}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">{p.member_name}</td>
+                        <td className="px-4 py-3 text-xs">{p.payment_type}</td>
+                        <td className="px-4 py-3 font-bold text-slate-800">Rp {p.amount.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-xs">{p.payment_method}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            p.verification_status === 'VERIFIED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : p.verification_status === 'PENDING'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {p.verification_status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {p.verified_by || '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: SAVINGS */}
+        {activeTab === 'savings' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Mutasi Simpanan Koperasi</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">ID Simpanan</th>
+                    <th className="px-4 py-3">Anggota</th>
+                    <th className="px-4 py-3">Jenis Simpanan</th>
+                    <th className="px-4 py-3">Jumlah</th>
+                    <th className="px-4 py-3">Waktu</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {savings.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-slate-400">Belum ada transaksi simpanan tercatat.</td>
+                    </tr>
+                  ) : (
+                    savings.map(s => (
+                      <tr key={s.saving_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs">{s.saving_id}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
+                        <td className="px-4 py-3 text-xs">{s.saving_type}</td>
+                        <td className="px-4 py-3 font-bold text-indigo-600">Rp {s.amount.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-xs text-slate-400">{new Date(s.created_at).toLocaleString('id-ID')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: REPORTS */}
+        {activeTab === 'reports' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Laporan Omzet Penjualan Stand UMKM</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">Kode Stand</th>
+                    <th className="px-4 py-3">Nama Anggota</th>
+                    <th className="px-4 py-3">Event</th>
+                    <th className="px-4 py-3">Tanggal Laporan</th>
+                    <th className="px-4 py-3">Total Omzet</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {salesReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-slate-400">Belum ada laporan omzet masuk.</td>
+                    </tr>
+                  ) : (
+                    salesReports.map(rep => (
+                      <tr key={rep.sales_report_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-bold text-emerald-600">{rep.stand_code}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">{rep.member_name}</td>
+                        <td className="px-4 py-3 text-xs">{rep.event_title}</td>
+                        <td className="px-4 py-3 text-xs">{rep.report_date}</td>
+                        <td className="px-4 py-3 font-bold text-slate-800">Rp {rep.total_turnover.toLocaleString('id-ID')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: AUDIT TRAIL */}
+        {activeTab === 'audit' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Audit Trail (Immutable Activity Log)</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3">Waktu (WITA)</th>
+                    <th className="px-4 py-3">Pelaku</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Aksi</th>
+                    <th className="px-4 py-3">Detail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                  {auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-slate-400 font-sans">Belum ada aktivitas tercatat.</td>
+                    </tr>
+                  ) : (
+                    auditLogs.map(log => (
+                      <tr key={log.log_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{log.timestamp_wita}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-800 font-sans">{log.actor_name}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {log.actor_role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-emerald-700 font-bold">{log.action}</td>
+                        <td className="px-4 py-3 text-slate-600 font-sans">{log.details}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal Detail Verifikasi Pembayaran */}
+      {selectedPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800">Verifikasi Pembayaran</h3>
+            <div className="mt-4 space-y-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <p>Anggota: <strong className="text-slate-800">{selectedPayment.member_name}</strong></p>
+              <p>Jumlah: <strong className="text-slate-800">Rp {selectedPayment.amount.toLocaleString('id-ID')}</strong></p>
+              <p>Tipe: <strong className="text-slate-800">{selectedPayment.payment_type}</strong></p>
+              <p>Metode: <strong className="text-slate-800">{selectedPayment.payment_method}</strong></p>
             </div>
 
-            {coopNotice && (
-              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-900 text-xs font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{coopNotice}</span>
+            {selectedPayment.proof_url && (
+              <div className="mt-4">
+                <a 
+                  href={selectedPayment.proof_url} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-xs text-emerald-600 underline hover:text-emerald-700 block text-center"
+                >
+                  Buka Gambar Bukti Transfer di Tab Baru
+                </a>
               </div>
             )}
 
-            <form onSubmit={handleSaveCoopConfig} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <label className="block text-xs font-black text-slate-700 mb-1">
-                  Total Simpanan Pokok (Rp) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    required
-                    value={coopPokok}
-                    onChange={(e) => setCoopPokok(Number(e.target.value))}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">Dibayar sekali saat awal bergabung (bisa dicicil).</p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <label className="block text-xs font-black text-slate-700 mb-1">
-                  Nominal Cicilan Pokok / Transaksi (Rp)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    required
-                    value={coopPokokCicilan}
-                    onChange={(e) => setCoopPokokCicilan(Number(e.target.value))}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Rekomendasi cicilan: {Math.ceil(coopPokok / (coopPokokCicilan || 1))}x setoran.
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <label className="block text-xs font-black text-slate-700 mb-1">
-                  Simpanan Wajib per Bulan (Rp) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    required
-                    value={coopWajib}
-                    onChange={(e) => setCoopWajib(Number(e.target.value))}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">Kewajiban rutin bulanan seluruh anggota aktif.</p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <label className="block text-xs font-black text-slate-700 mb-1">Nama Bank & Rekening</label>
-                <input
-                  type="text"
-                  required
-                  value={coopBank}
-                  onChange={(e) => setCoopBank(e.target.value)}
-                  placeholder="Bank Kaltimtara / BSI"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
-                />
-                <input
-                  type="text"
-                  required
-                  value={coopRek}
-                  onChange={(e) => setCoopRek(e.target.value)}
-                  placeholder="Nomor Rekening"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <label className="block text-xs font-black text-slate-700 mb-1">Atas Nama Rekening & Kontak WA</label>
-                <input
-                  type="text"
-                  required
-                  value={coopAtasNama}
-                  onChange={(e) => setCoopAtasNama(e.target.value)}
-                  placeholder="Koperasi Berau Melangkah Bersama"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
-                />
-                <input
-                  type="text"
-                  value={coopWa}
-                  onChange={(e) => setCoopWa(e.target.value)}
-                  placeholder="6281234567890 (WA Konfirmasi)"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between">
-                <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1">Catatan Tambahan untuk Anggota</label>
-                  <input
-                    type="text"
-                    value={coopCatatan}
-                    onChange={(e) => setCoopCatatan(e.target.value)}
-                    placeholder="Contoh: Simpanan Pokok dapat dicicil maksimal 5 kali..."
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
-                  />
-                </div>
-                <div className="mt-3 text-right">
-                  <button
-                    type="submit"
-                    className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>SIMPAN PENGATURAN SIMPANAN</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Buku Kas Simpanan Anggota</h3>
-                <p className="text-xs text-slate-500">
-                  Pencatatan Simpanan Pokok, Simpanan Wajib bulanan, dan Simpanan Sukarela.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    setSavingToEdit(null);
-                    setIsAddSavingOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Tambah Setoran Simpanan</span>
-                </button>
-                <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-right">
-                  <p className="text-[10px] font-bold text-emerald-800 uppercase">Total Kas Simpanan</p>
-                  <p className="text-lg font-black text-emerald-950">
-                    Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                  <th className="p-3">ID Simpanan</th>
-                  <th className="p-3">Anggota</th>
-                  <th className="p-3">Jenis Simpanan</th>
-                  <th className="p-3">Periode</th>
-                  <th className="p-3">Nominal</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Aksi Super Admin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {savings.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
-                      Belum ada mutasi simpanan tercatat.
-                    </td>
-                  </tr>
-                ) : (
-                  savings.map((sav) => {
-                    const member = members.find((m) => m.member_id === sav.member_id);
-                    return (
-                      <tr key={sav.saving_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-slate-700">{sav.saving_id}</td>
-                        <td className="p-3 font-bold text-slate-900">{member?.nama_lengkap || sav.member_id}</td>
-                        <td className="p-3">{sav.saving_type.replace(/_/g, ' ')}</td>
-                        <td className="p-3 text-slate-500">{sav.period_month_year}</td>
-                        <td className="p-3 font-black text-emerald-700">
-                          Rp{sav.amount.toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3">
-                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            {sav.payment_status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right space-x-1.5">
-                          <button
-                            onClick={() => {
-                              setSavingToEdit(sav);
-                              setIsAddSavingOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Ubah simpanan"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span>Ubah</span>
-                          </button>
-                          <button
-                            onClick={() => setSavingToDelete(sav)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Hapus simpanan"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Hapus</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* SALES REPORTS TAB */}
-      {activeAdminTab === 'SALES' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">Laporan Omzet Penjualan UMKM</h3>
-              <p className="text-xs text-slate-500">
-                Monitoring perputaran ekonomi mingguan dari stand Banuarasa Weekend Market.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setSalesToEdit(null);
-                  setIsAddSalesOpen(true);
-                }}
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Input Laporan Omzet</span>
-              </button>
-              <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 text-right">
-                <p className="text-[10px] font-bold text-blue-800 uppercase">Total Omzet UMKM</p>
-                <p className="text-lg font-black text-blue-950">
-                  Rp{stats.totalOmzetUMKM.toLocaleString('id-ID')}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
-                  <th className="p-3">ID Laporan</th>
-                  <th className="p-3">Tenant / Anggota</th>
-                  <th className="p-3">Stand</th>
-                  <th className="p-3">Omzet Kotor</th>
-                  <th className="p-3">Laba Bersih</th>
-                  <th className="p-3">Produk Terlaris</th>
-                  <th className="p-3">Porsi Terjual</th>
-                  <th className="p-3 text-right">Aksi Super Admin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {salesReports.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
-                      Belum ada laporan omzet yang dikirimkan.
-                    </td>
-                  </tr>
-                ) : (
-                  salesReports.map((sr) => {
-                    const member = members.find((m) => m.member_id === sr.member_id);
-                    return (
-                      <tr key={sr.sales_report_id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-mono font-bold text-slate-700">{sr.sales_report_id}</td>
-                        <td className="p-3">
-                          <p className="font-bold text-slate-900">{member?.nama_usaha || sr.member_id}</p>
-                          <p className="text-[10px] text-slate-500">{member?.nama_lengkap}</p>
-                        </td>
-                        <td className="p-3 font-black text-emerald-700">{sr.registration_id}</td>
-                        <td className="p-3 font-black text-slate-900">
-                          Rp{sr.gross_sales.toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3 font-bold text-emerald-700">
-                          Rp{sr.net_profit.toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3 text-slate-800">{sr.notes || 'Menu Utama'}</td>
-                        <td className="p-3 font-semibold text-slate-600">{sr.total_items_sold} Item</td>
-                        <td className="p-3 text-right space-x-1.5">
-                          <button
-                            onClick={() => {
-                              setSalesToEdit(sr);
-                              setIsAddSalesOpen(true);
-                            }}
-                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Ubah laporan omzet"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span>Ubah</span>
-                          </button>
-                          <button
-                            onClick={() => setSalesToDelete(sr)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            title="Hapus laporan omzet"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Hapus</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* AUDIT LOGS & EXPORT TAB */}
-      {activeAdminTab === 'AUDIT' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">Audit Trail & Google Sheets Export</h3>
-              <p className="text-xs text-slate-500">
-                Rekaman histori seluruh transaksi, mutasi simpanan, dan verifikasi admin.
-              </p>
-            </div>
-            <button
-              onClick={handleExportCSV}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              <span>Ekspor Data CSV</span>
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {auditLogs.map((log) => (
-              <div
-                key={log.log_id}
-                className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-start justify-between gap-4 text-xs"
-              >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
-                      {log.action}
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                      Modul: {log.module}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">User: {log.user_id}</span>
-                  </div>
-                  <p className="text-slate-700 text-xs leading-relaxed">{log.description}</p>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                  {new Date(log.timestamp).toLocaleString('id-ID')}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* KTA STUDIO (MEMBER CARD DESIGNER) TAB */}
-      {activeAdminTab === 'CARD_STUDIO' && (
-        <AdminCardStudio
-          adminUsername={adminId}
-          onSaved={() => showToast('Desain KTA Digital berhasil diperbarui & disinkronkan ke seluruh sistem!')}
-        />
-      )}
-
-      {/* BRANDING, LOGO, BANNER & MEDIA ASSETS MANAGER TAB */}
-      {activeAdminTab === 'BRANDING' && (
-        <AdminMediaManager
-          adminUsername={adminId}
-          onShowToast={showToast}
-        />
-      )}
-
-      {/* CRUD MODALS */}
-      <MemberCrudModal
-        isOpen={isAddMemberOpen}
-        onClose={() => {
-          setIsAddMemberOpen(false);
-          setMemberToEdit(null);
-        }}
-        memberToEdit={memberToEdit}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      <StandCrudModal
-        isOpen={isAssignStandOpen}
-        onClose={() => {
-          setIsAssignStandOpen(false);
-          setStandToEdit(null);
-        }}
-        standToEdit={standToEdit}
-        members={members}
-        eventId={activeEvent?.event_id || 'BWM-2026-001'}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      <PaymentCrudModal
-        isOpen={isAddPaymentOpen}
-        onClose={() => {
-          setIsAddPaymentOpen(false);
-          setPaymentToEdit(null);
-        }}
-        paymentToEdit={paymentToEdit}
-        members={members}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      <SavingCrudModal
-        isOpen={isAddSavingOpen}
-        onClose={() => {
-          setIsAddSavingOpen(false);
-          setSavingToEdit(null);
-        }}
-        savingToEdit={savingToEdit}
-        members={members}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      <SalesReportCrudModal
-        isOpen={isAddSalesOpen}
-        onClose={() => {
-          setIsAddSalesOpen(false);
-          setSalesToEdit(null);
-        }}
-        salesToEdit={salesToEdit}
-        members={members}
-        eventId={activeEvent?.event_id || 'BWM-2026-001'}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      {/* EVENT CRUD MODAL (SUPER ADMIN EVENT MANAGEMENT) */}
-      <EventCrudModal
-        isOpen={isEditEventOpen}
-        onClose={() => setIsEditEventOpen(false)}
-        eventToEdit={activeEvent}
-        adminId={adminId}
-        onSaved={showToast}
-      />
-
-      {/* CONFIRMATION MODAL: DELETE MEMBER */}
-      {memberToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Konfirmasi Hapus Anggota</h3>
-                <p className="text-xs text-slate-500">Tindakan Super Admin</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
-              <p className="text-slate-800 font-semibold">
-                Anda akan menghapus data anggota:
-              </p>
-              <div className="bg-white p-2.5 rounded-xl border border-rose-100">
-                <p className="font-black text-slate-900">{memberToDelete.nama_lengkap}</p>
-                <p className="text-slate-500 font-mono">{memberToDelete.member_id} • {memberToDelete.nomor_anggota}</p>
-                <p className="text-slate-600">{memberToDelete.nama_usaha}</p>
-              </div>
-              <p className="text-rose-800 font-medium leading-relaxed">
-                ⚠️ Seluruh stand event yang dipesan, produk UMKM, dokumen legalitas, dan bukti pembayaran anggota ini akan ikut dibersihkan dan stand terkait akan kembali kosong.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setMemberToDelete(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                id="btn-confirm-delete-member"
-                onClick={handleConfirmDeleteMember}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>HAPUS SEKARANG</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRMATION MODAL: DELETE STAND */}
-      {standToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Lepaskan Alokasi Stand</h3>
-                <p className="text-xs text-slate-500">Stand {standToDelete.stand_code}</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
-              <p className="text-slate-800">
-                Alokasi <span className="font-bold">Stand {standToDelete.stand_code}</span> untuk anggota{' '}
-                <span className="font-mono font-bold">{standToDelete.member_id}</span> akan dihapus dan stand akan kembali menjadi <strong>AVAILABLE</strong>.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setStandToDelete(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleConfirmDeleteStand}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Lepas Stand</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRMATION MODAL: DELETE PAYMENT */}
-      {paymentToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Hapus Catatan Pembayaran</h3>
-                <p className="text-xs text-slate-500">ID: {paymentToDelete.payment_id}</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
-              <p className="text-slate-800">
-                Anda akan menghapus transaksi sebesar{' '}
-                <span className="font-bold text-slate-900">Rp{paymentToDelete.amount.toLocaleString('id-ID')}</span> ({paymentToDelete.payment_type}).
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setPaymentToDelete(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleConfirmDeletePayment}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Hapus Pembayaran</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRMATION MODAL: DELETE SAVING */}
-      {savingToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Hapus Catatan Simpanan</h3>
-                <p className="text-xs text-slate-500">ID: {savingToDelete.saving_id}</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
-              <p className="text-slate-800">
-                Setoran simpanan sebesar{' '}
-                <span className="font-bold text-slate-900">Rp{savingToDelete.amount.toLocaleString('id-ID')}</span> ({savingToDelete.saving_type}) akan dihapus dari buku kas.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setSavingToDelete(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleConfirmDeleteSaving}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Hapus Simpanan</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRMATION MODAL: DELETE SALES REPORT */}
-      {salesToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Hapus Laporan Omzet</h3>
-                <p className="text-xs text-slate-500">ID: {salesToDelete.sales_report_id}</p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
-              <p className="text-slate-800">
-                Laporan omzet kotor sebesar{' '}
-                <span className="font-bold text-slate-900">Rp{salesToDelete.gross_sales.toLocaleString('id-ID')}</span> untuk stand {salesToDelete.registration_id} akan dihapus.
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setSalesToDelete(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleConfirmDeleteSales}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Hapus Laporan</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: REJECT DOCUMENT REASON */}
-      {rejectingDocId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <form
-            onSubmit={handleRejectDocument}
-            className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
-                <XCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Alasan Penolakan Dokumen</h3>
-                <p className="text-xs text-slate-500">ID: {rejectingDocId}</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Catatan Alasan Penolakan
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                Alasan Penolakan (Hanya jika ditolak):
               </label>
-              <textarea
-                rows={3}
-                value={docRejectReason}
-                onChange={(e) => setDocRejectReason(e.target.value)}
-                placeholder="Contoh: Foto NIB buram / Nomor NIB tidak terdaftar di sistem OSS..."
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
-                required
+              <input
+                type="text"
+                placeholder="Contoh: Bukti transfer buram / nominal kurang"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg focus:outline-emerald-500"
               />
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-2 mt-6">
               <button
-                type="button"
-                onClick={() => setRejectingDocId(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                onClick={() => setSelectedPayment(null)}
+                className="flex-1 px-3 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
               >
                 Batal
               </button>
               <button
-                type="submit"
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/20 transition-colors cursor-pointer"
+                onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'REJECTED')}
+                className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition"
               >
-                Kirim Penolakan
+                Tolak
+              </button>
+              <button
+                onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'VERIFIED')}
+                className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+              >
+                Setujui
               </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
     </div>
   );
 };
+
+export default AdminDashboard;
