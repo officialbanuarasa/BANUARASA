@@ -1,197 +1,199 @@
 import React, { useState } from 'react';
+import { StandCategory, Member } from '../types';
 import { storage } from '../services/storage';
-import { Member } from '../types';
-import { X, Store, User, Phone, MapPin, ShieldCheck, ArrowRight } from 'lucide-react';
 
 interface RegisterMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (newMember: Member) => void;
+  onRegisterSuccess: (newMember: Member) => void;
 }
 
 export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
   isOpen,
   onClose,
-  onSuccess,
+  onRegisterSuccess
 }) => {
-  const [fullName, setFullName] = useState('');
-  const [businessName, setBusinessName] = useState('');
-  const [category, setCategory] = useState<'KULINER' | 'FASHION' | 'KRIYA' | 'JASA' | 'AGROBISNIS'>('KULINER');
-  const [nik, setNik] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    nama_lengkap: '',
+    nama_usaha: '',
+    kategori_usaha: 'KULINER' as StandCategory,
+    alamat: '',
+    nomor_hp: '',
+    email: '',
+    password: ''
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setErrorMsg('');
 
-    const members = storage.getMembers();
-    const newSeq = (members.length + 1).toString().padStart(3, '0');
-    const memberId = `BM-${newSeq}`;
-    const nomorAnggota = `KBM-${new Date().getFullYear()}-${newSeq}`;
+    if (!formData.nama_lengkap.trim() || !formData.nama_usaha.trim() || !formData.nomor_hp.trim()) {
+      setErrorMsg('Nama lengkap, nama usaha, dan nomor HP/WhatsApp wajib diisi.');
+      return;
+    }
 
-    const member = storage.createMember({
-      member_id: memberId,
-      nomor_anggota: nomorAnggota,
-      nama_lengkap: fullName,
-      nik: nik,
-      tempat_lahir: 'Tanjung Redeb',
-      tanggal_lahir: '1990-01-01',
-      jenis_kelamin: 'L',
-      alamat: address,
-      nomor_hp: whatsapp,
-      email: email || `${memberId.toLowerCase()}@koperasiberau.id`,
-      foto_profil_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      nama_usaha: businessName,
-      deskripsi_usaha: `Usaha ${category.toLowerCase()} binaan Koperasi Berau Melangkah Bersama`,
-      kategori_usaha: category === 'KULINER' ? 'Kuliner' : category === 'FASHION' ? 'Fashion' : category === 'KRIYA' ? 'Kriya' : 'Jasa',
-      alamat_usaha: address,
-      whatsapp: whatsapp,
-      status_keanggotaan: 'ACTIVE',
-      tanggal_bergabung: new Date().toISOString().split('T')[0],
-    });
+    if (formData.password.length < 6) {
+      setErrorMsg('Kata sandi akun minimal 6 karakter.');
+      return;
+    }
 
-    setIsSubmitting(false);
-    onSuccess(member);
-    onClose();
+    setIsLoading(true);
+
+    try {
+      const allMembers = storage.getMembers();
+      const newId = `MBR-${String(allMembers.length + 1).padStart(4, '0')}`;
+
+      const newMember: Member = {
+        member_id: newId,
+        nik: '', // NIK dikosongkan/ditiadakan
+        nama_lengkap: formData.nama_lengkap.trim(),
+        nama_usaha: formData.nama_usaha.trim(),
+        kategori_usaha: formData.kategori_usaha,
+        alamat: formData.alamat.trim() || 'Berau, Kalimantan Timur',
+        nomor_hp: formData.nomor_hp.trim(),
+        whatsapp: formData.nomor_hp.trim(),
+        email: formData.email.trim() || `${newId.toLowerCase()}@banuarasa.id`,
+        password: formData.password,
+        status_keanggotaan: 'ACTIVE',
+        created_at: new Date().toISOString()
+      };
+
+      storage.saveMember(newMember);
+      storage.logActivity('REGISTER_MEMBER', 'MEMBER', `Pendaftaran anggota baru UMKM: ${newMember.nama_lengkap} (${newMember.nama_usaha})`, newMember.member_id);
+
+      setIsLoading(false);
+      onRegisterSuccess(newMember);
+      onClose();
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMsg(err.message || 'Gagal menyimpan data pendaftaran.');
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden my-6 border border-slate-100">
+        
+        {/* Header Modal */}
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div>
-            <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
-              Form Pendaftaran
-            </span>
-            <h2 className="text-lg font-black tracking-tight mt-1">
-              Daftar Anggota UMKM Koperasi Berau
-            </h2>
+            <h2 className="text-xl font-black text-slate-900">Pendaftaran Anggota UMKM</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Gabung ekosistem Banuarasa Weekend Market</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition"
           >
-            <X className="w-4 h-4" />
+            ✕
           </button>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-grow space-y-4 text-xs">
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs font-semibold rounded-xl leading-relaxed">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Nama Lengkap Sesuai KTP</label>
+            <label className="block font-bold text-slate-700 mb-1">Nama Lengkap Pemilik Usaha</label>
             <input
               type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Contoh: Rahmat Hidayat"
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               required
+              placeholder="Contoh: Budi Santoso"
+              value={formData.nama_lengkap}
+              onChange={e => setFormData({ ...formData, nama_lengkap: e.target.value })}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500 font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Nama Usaha / Brand UMKM</label>
+            <input
+              type="text"
+              required
+              placeholder="Contoh: Dapur Pesisir Berau"
+              value={formData.nama_usaha}
+              onChange={e => setFormData({ ...formData, nama_usaha: e.target.value })}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500 font-semibold"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="font-bold text-slate-700 block mb-1">Nama Usaha / Brand</label>
-              <input
-                type="text"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="Contoh: Dapur Rasa Berau"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                required
-              />
-            </div>
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">Kategori Usaha</label>
+              <label className="block font-semibold text-slate-600 mb-1">Kategori Produk</label>
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                value={formData.kategori_usaha}
+                onChange={e => setFormData({ ...formData, kategori_usaha: e.target.value as StandCategory })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-emerald-500 font-semibold"
               >
-                <option value="KULINER">Kuliner & Makanan</option>
-                <option value="FASHION">Fashion & Tekstil</option>
-                <option value="KRIYA">Kriya & Kerajinan</option>
-                <option value="AGROBISNIS">Agrobisnis & Perikanan</option>
-                <option value="JASA">Jasa</option>
+                <option value="KULINER">KULINER</option>
+                <option value="KERAJINAN">KERAJINAN</option>
+                <option value="FASHION">FASHION</option>
+                <option value="JASA">JASA</option>
+                <option value="UMUM">UMUM</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="font-bold text-slate-700 block mb-1">Nomor Induk Kependudukan (NIK)</label>
+              <label className="block font-semibold text-slate-600 mb-1">No. WhatsApp / HP</label>
               <input
-                type="text"
-                value={nik}
-                onChange={(e) => setNik(e.target.value)}
-                placeholder="640301xxxxxxxxxx"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
+                type="tel"
                 required
-              />
-            </div>
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">Nomor WhatsApp Aktif</label>
-              <input
-                type="text"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
                 placeholder="0812xxxxxxxx"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-mono"
-                required
+                value={formData.nomor_hp}
+                onChange={e => setFormData({ ...formData, nomor_hp: e.target.value })}
+                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500 font-mono"
               />
             </div>
           </div>
 
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Email</label>
+            <label className="block font-semibold text-slate-600 mb-1">Email Aktif</label>
             <input
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nama@email.com"
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+              placeholder="email@domain.com"
+              value={formData.email}
+              onChange={e => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500"
             />
           </div>
 
           <div>
-            <label className="font-bold text-slate-700 block mb-1">Alamat Tempat Usaha / Domisili Berau</label>
-            <textarea
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Jl. Pulau Derawan, Tanjung Redeb, Berau..."
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden h-16"
-              required
+            <label className="block font-semibold text-slate-600 mb-1">Alamat di Berau</label>
+            <input
+              type="text"
+              placeholder="Kecamatan / Kelurahan"
+              value={formData.alamat}
+              onChange={e => setFormData({ ...formData, alamat: e.target.value })}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500"
             />
           </div>
 
-          <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-2 text-emerald-900">
-            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-[11px] leading-tight">
-              Dengan mendaftar, Anda menyetujui AD/ART Koperasi Berau Melangkah Bersama dan berhak mengikuti seleksi stand mingguan.
-            </p>
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Kata Sandi Akun</label>
+            <input
+              type="password"
+              required
+              placeholder="Minimal 6 karakter untuk masuk"
+              value={formData.password}
+              onChange={e => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500 font-semibold"
+            />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-700"
-            >
-              Batal
-            </button>
+          <div className="pt-3">
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
+              disabled={isLoading}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md transition disabled:opacity-50"
             >
-              <span>DAFTAR SEKARANG</span>
-              <ArrowRight className="w-4 h-4" />
+              {isLoading ? 'Mendaftarkan...' : 'Daftar Sebagai Anggota'}
             </button>
           </div>
         </form>
@@ -199,3 +201,5 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
     </div>
   );
 };
+
+export default RegisterMemberModal;
