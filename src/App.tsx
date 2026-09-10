@@ -54,6 +54,8 @@ export const App: React.FC = () => {
 
   const [isStandMapOpen, setIsStandMapOpen] = useState(false);
   const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
+  const [standBookingMember, setStandBookingMember] = useState<Member | null>(null);
+  const [paymentMember, setPaymentMember] = useState<Member | null>(null);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentModalParams, setPaymentModalParams] = useState<{
@@ -76,17 +78,15 @@ export const App: React.FC = () => {
     setIsBarcodeModalOpen(true);
   };
 
-  // Sinkronisasi Google Spreadsheet HANYA dilakukan secara manual.
-  // Ini sengaja tidak berjalan di background agar data/form yang sedang
-  // diedit pengguna tidak tertimpa oleh snapshot lama dari Spreadsheet.
-  const handleRefreshData = useCallback(async () => {
+  // Manual or background sync with Google Apps Script / Spreadsheet
+  const handleRefreshData = useCallback(async (isSilent = false) => {
     try {
-      setIsRefreshing(true);
+      if (!isSilent) setIsRefreshing(true);
       await storage.syncFromGoogleSheets();
     } catch (err) {
-      console.warn('Manual refresh data error:', err);
+      console.warn('Auto-refresh data error:', err);
     } finally {
-      setIsRefreshing(false);
+      if (!isSilent) setIsRefreshing(false);
     }
   }, []);
 
@@ -111,13 +111,10 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // IMPORTANT: Tidak ada auto-sync / auto-refresh dari Google Spreadsheet.
-  // Pengambilan data terbaru hanya terjadi ketika pengguna menekan tombol
-  // Refresh & Sync. Dengan demikian form yang sedang diisi tidak pernah
-  // ditimpa oleh data Spreadsheet yang belum memuat perubahan terbaru.
-  useEffect(() => {
-    // Tidak ada pekerjaan sinkronisasi di sini secara sengaja.
-  }, []);
+  // Sinkronisasi Google Sheets SENGAJA MANUAL ONLY.
+  // Tidak ada initial pull, interval, focus-sync, atau visibility-sync.
+  // Data terbaru dari Spreadsheet hanya ditarik ketika pengguna menekan
+  // tombol Refresh & Sync.
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
@@ -147,9 +144,15 @@ export const App: React.FC = () => {
     setActiveTab('landing');
   };
 
-  const handleOpenStandMap = (event: EventItem) => {
+  const handleOpenStandMap = (event: EventItem, bookingMember?: Member | null) => {
     setSelectedEventForMap(event);
+    setStandBookingMember(bookingMember || null);
     setIsStandMapOpen(true);
+  };
+
+  const handleCloseStandMap = () => {
+    setIsStandMapOpen(false);
+    setStandBookingMember(null);
   };
 
   const handleOpenPaymentModal = (params: {
@@ -162,7 +165,9 @@ export const App: React.FC = () => {
   };
 
   const handleBookingSuccess = (reg: EventRegistration) => {
-    setActiveTab('member-dashboard');
+    const bookedMember = storage.getMemberById(reg.member_id);
+    setPaymentMember(bookedMember || (currentUser?.role === 'MEMBER' ? currentMember : standBookingMember));
+    if (currentUser?.role === 'MEMBER') setActiveTab('member-dashboard');
     handleOpenPaymentModal({
       registration: reg,
       paymentType: 'EVENT_PARTICIPATION',
@@ -287,9 +292,11 @@ export const App: React.FC = () => {
               currentUser.role === 'ADMIN_EVENT') ? (
               <AdminDashboard
                 adminId={currentUser.id || 'ADM-SUPER'}
+                adminRole={currentUser.role}
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
+                onOpenStandMapForMember={(event, member) => handleOpenStandMap(event, member)}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
                 onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
                 onOpenBarcodeModal={handleOpenBarcodeModal}
@@ -358,18 +365,23 @@ export const App: React.FC = () => {
       {isStandMapOpen && selectedEventForMap && (
         <StandMapModal
           isOpen={isStandMapOpen}
-          onClose={() => setIsStandMapOpen(false)}
+          onClose={handleCloseStandMap}
           event={selectedEventForMap}
-          currentMember={currentMember}
+          currentMember={currentUser?.role === 'MEMBER' ? currentMember : null}
+          bookingMember={standBookingMember}
+          allowAdminBooking={currentUser?.role === 'SUPER_ADMIN'}
           onBookingSuccess={handleBookingSuccess}
         />
       )}
 
-      {isPaymentModalOpen && currentMember && (
+      {isPaymentModalOpen && (currentMember || paymentMember || standBookingMember) && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          currentMember={currentMember}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setPaymentMember(null);
+          }}
+          currentMember={currentMember || paymentMember || standBookingMember}
           registration={paymentModalParams.registration}
           paymentType={paymentModalParams.paymentType || 'EVENT_PARTICIPATION'}
           defaultAmount={paymentModalParams.defaultAmount || 50000}
