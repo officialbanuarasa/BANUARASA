@@ -36,7 +36,7 @@ export async function fetchAllDataFromGas(): Promise<GasResponse> {
 }
 
 export async function syncRowToSpreadsheet(sheetName:string, id:string, data:any):Promise<GasResponse> {
-  const actionMap:any={SHEET_ANGGOTA_KOPERASI:'updateMember',SHEET_REGISTRASI_STAND:'updateRegistration',SHEET_PEMBAYARAN:'updatePayment',SHEET_SIMPANAN:'updateSaving',SHEET_OMZET_PENJUALAN:'updateSalesReport',SHEET_DOKUMEN_LEGALITAS:'upsertDocument',SHEET_PRODUK_UMKM:'upsertProduct',SHEET_EVENT_MARKET:'updateEvent',SHEET_AUDIT_LOGS:'logAudit',SHEET_KEHADIRAN_EVENT:'upsertAttendance'};
+  const actionMap:any={SHEET_ANGGOTA_KOPERASI:'updateMember',SHEET_REGISTRASI_STAND:'updateRegistration',SHEET_PEMBAYARAN:'updatePayment',SHEET_BUKTI_PEMBAYARAN:'createPayment',SHEET_SIMPANAN:'updateSaving',SHEET_OMZET_PENJUALAN:'updateSalesReport',SHEET_DOKUMEN_LEGALITAS:'upsertDocument',SHEET_PRODUK_UMKM:'upsertProduct',SHEET_EVENT_MARKET:'updateEvent',SHEET_AUDIT_LOGS:'logAudit',SHEET_KEHADIRAN_EVENT:'upsertAttendance'};
   const action=actionMap[sheetName] || 'upsertRow';
   const payload={...data};
   if(id && !payload.member_id && sheetName==='SHEET_ANGGOTA_KOPERASI') payload.member_id=id;
@@ -77,9 +77,9 @@ export async function uploadFile(file:File,category:string,memberId:string,name?
     r.readAsDataURL(file);
   });
 
-  // IMPORTANT: jangan gunakan syncFileToGoogleDrive() di sini karena fungsi
-  // tersebut bersifat fire-and-forget. Pendaftaran anggota membutuhkan hasil
-  // upload yang sebenarnya agar URL foto dapat disimpan ke Spreadsheet.
+  // Upload harus menunggu respons Apps Script. Jangan fire-and-forget,
+  // karena bukti pembayaran membutuhkan fileId/URL Drive sebelum data pembayaran
+  // ditulis ke Spreadsheet.
   return callGoogleAppsScript('uploadFileToDrive',{
     fileName:file.name,
     fileUrl:base64,
@@ -90,7 +90,6 @@ export async function uploadFile(file:File,category:string,memberId:string,name?
     memberId
   });
 }
-
 
 export async function updateKoperasiConfig(config:any):Promise<GasResponse> {
   return callGoogleAppsScript('updateKoperasiConfig', { config });
