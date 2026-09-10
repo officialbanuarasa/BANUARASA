@@ -1,60 +1,56 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { BARA_ASSETS } from '../assets/baraAssets';
+import { Megaphone, Sparkles } from 'lucide-react';
 
-export const BaraMascotWidget: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [tipsIndex, setTipsIndex] = useState(0);
+interface BaraMascotWidgetProps {
+  onOpenNoticeBoard?: () => void;
+  onOpenAuthModal?: (mode: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
+  onExploreStands?: () => void;
+  onOpenSplashIntro?: () => void;
+}
 
-  const tips = [
-    'Halo! Aku Bara, maskot Banuarasa. Jangan lupa konfirmasi pesanan stand sebelum 15 menit ya!',
-    'Tahukah kamu? UMKM kuliner di Berau bisa mendaftarkan produk autentiknya langsung ke koperasi.',
-    'Pastikan upload bukti transfer QRIS atau transfer bank dengan gambar yang jelas agar cepat diverifikasi admin.',
-    'Pantau omzet harian stand kamu di dashboard anggota untuk rekapan berkala akhir pekan.'
-  ];
-
-  const handleNextTip = () => {
-    setTipsIndex((prev) => (prev + 1) % tips.length);
-  };
-
+export const BaraMascotWidget: React.FC<BaraMascotWidgetProps> = ({
+  onOpenNoticeBoard,
+  onOpenSplashIntro,
+}) => {
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end">
-      {isOpen && (
-        <div className="mb-3 w-72 rounded-2xl bg-white p-4 shadow-xl border border-slate-200 transition-all animate-in fade-in slide-in-from-bottom-2">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-800">Bara si Maskot</span>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">Tips UMKM</span>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-slate-400 hover:text-slate-600 text-xs p-1"
-            >
-              ✕
-            </button>
-          </div>
-          <p className="text-xs text-slate-600 leading-relaxed min-h-[48px]">
-            {tips[tipsIndex]}
-          </p>
-          <div className="mt-3 flex justify-between items-center pt-2 border-t border-slate-100 text-[10px]">
-            <span className="text-slate-400">{tipsIndex + 1} dari {tips.length}</span>
-            <button
-              onClick={handleNextTip}
-              className="text-emerald-600 hover:text-emerald-700 font-bold"
-            >
-              Tips Berikutnya →
-            </button>
-          </div>
-        </div>
-      )}
-
+    <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end pointer-events-auto">
+      {/* Floating Bara Mascot Button Avatar - Direct to Papan Pemberitahuan */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="group flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-lg hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition"
-        title="Tanya Bara"
+        id="btn-floating-bara-mascot"
+        type="button"
+        onClick={() => {
+          if (onOpenNoticeBoard) {
+            onOpenNoticeBoard();
+          } else if (onOpenSplashIntro) {
+            onOpenSplashIntro();
+          }
+        }}
+        className="group relative flex items-center gap-2.5 bg-slate-900 hover:bg-slate-950 text-white pl-2 pr-4 py-2 rounded-full border-2 border-amber-400 shadow-2xl shadow-amber-500/25 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+        title="Buka Papan Pemberitahuan Resmi Bara"
       >
-        <span className="text-2xl transition group-hover:rotate-12">🦔</span>
+        <span className="relative flex h-10 w-10 shrink-0">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-30" />
+          <img
+            src={BARA_ASSETS.mascot}
+            alt="Bara Mascot"
+            className="relative inline-flex rounded-full h-10 w-10 object-cover border border-amber-300 ring-2 ring-emerald-500/50"
+          />
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[9px] font-black ring-2 ring-white">
+            <Megaphone className="w-2.5 h-2.5" />
+          </span>
+        </span>
+
+        <div className="text-left hidden sm:block">
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-black text-amber-300 tracking-wide">PAPAN BARA</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          </div>
+          <p className="text-[10px] text-slate-300 font-bold leading-none">
+            Pemberitahuan Resmi
+          </p>
+        </div>
       </button>
     </div>
   );
 };
-
-export default BaraMascotWidget;

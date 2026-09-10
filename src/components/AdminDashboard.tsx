@@ -1,2215 +1,2301 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  AuthSession, 
-  Member, 
-  EventItem, 
-  Registration, 
-  Payment, 
-  Saving, 
-  SalesReport, 
-  DocumentRecord, 
+import React, { useState, useEffect } from 'react';
+import {
+  Payment,
+  EventItem,
+  Member,
+  EventRegistration,
+  Saving,
+  SalesReport,
   AuditLog,
-  MasterStand,
-  EditorialArticle,
-  StandCategory,
-  StandZone,
-  EventStatus
+  MemberDocument,
+  Announcement,
 } from '../types';
 import { storage } from '../services/storage';
-
-export type BarcodePosition = 'BOTTOM_RIGHT' | 'TOP_RIGHT' | 'BOTTOM_CENTER' | 'LEFT_PANEL';
-export type BarcodeShape = 'SQUARE' | 'ROUNDED' | 'MINIMAL';
-
-export interface KTADesignConfig {
-  themePreset: 'EMERALD' | 'BERAU_HERITAGE' | 'DARK_VIP' | 'SLATE_CLEAN' | 'CUSTOM';
-  bgImageUrl: string;
-  bgOpacity: number;
-  overlayColor: 'DARK' | 'LIGHT' | 'EMERALD';
-  barcodePos: BarcodePosition;
-  barcodeShape: BarcodeShape;
-  showCategory: boolean;
-  showAddress: boolean;
-  showRegId: boolean;
-  customTitle: string;
-}
-
-const DEFAULT_KTA_CONFIG: KTADesignConfig = {
-  themePreset: 'EMERALD',
-  bgImageUrl: '',
-  bgOpacity: 85,
-  overlayColor: 'DARK',
-  barcodePos: 'BOTTOM_RIGHT',
-  barcodeShape: 'SQUARE',
-  showCategory: true,
-  showAddress: false,
-  showRegId: true,
-  customTitle: 'KARTU TANDA ANGGOTA UMKM'
-};
+import {
+  GOOGLE_DRIVE_FOLDER_URL,
+  GOOGLE_SPREADSHEET_URL,
+} from '../services/googleWorkspaceSync';
+import { BARA_ASSETS } from '../assets/baraAssets';
+import {
+  MemberCrudModal,
+  StandCrudModal,
+  PaymentCrudModal,
+  SavingCrudModal,
+  SalesReportCrudModal,
+  EventCrudModal,
+} from './AdminCrudModals';
+import { AdminMediaManager } from './AdminMediaManager';
+import { AdminCardStudio } from './AdminCardStudio';
+import { AdminCarouselsManagerModal } from './AdminCarouselsManagerModal';
+import {
+  ShieldCheck,
+  CreditCard,
+  Calendar,
+  Users,
+  TrendingUp,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Search,
+  Download,
+  Filter,
+  Eye,
+  Store,
+  QrCode,
+  Sparkles,
+  Award,
+  DollarSign,
+  Building2,
+  FileCheck,
+  AlertTriangle,
+  Plus,
+  Trash2,
+  Edit2,
+  ExternalLink,
+  Check,
+  X,
+  Cloud,
+  FileSpreadsheet,
+  Image as ImageIcon,
+  KeyRound,
+  Megaphone,
+  ChevronDown,
+  Edit3,
+  SlidersHorizontal,
+} from 'lucide-react';
 
 interface AdminDashboardProps {
-  session: AuthSession;
-  members?: Member[];
-  events?: EventItem[];
-  registrations?: Registration[];
-  payments?: Payment[];
-  savings?: Saving[];
-  salesReports?: SalesReport[];
-  documents?: DocumentRecord[];
-  auditLogs?: AuditLog[];
-  onDataUpdated: () => void;
-  onOpenScanner?: () => void;
+  adminId: string;
+  onOpenPaymentInspector: (payment: Payment) => void;
+  onOpenQRScanner: () => void;
+  onOpenStandMap: (event: EventItem) => void;
+  onOpenGoogleWorkspaceModal?: () => void;
+  onOpenChangePassword?: (targetMember?: Member | null, isSuperAdminReset?: boolean) => void;
+  onOpenBarcodeModal?: (member?: Member | null) => void;
+  onOpenNoticeBoard?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  session,
-  members = [],
-  events = [],
-  registrations = [],
-  payments = [],
-  savings = [],
-  salesReports = [],
-  documents = [],
-  auditLogs = [],
-  onDataUpdated,
-  onOpenScanner
+  adminId,
+  onOpenPaymentInspector,
+  onOpenQRScanner,
+  onOpenStandMap,
+  onOpenGoogleWorkspaceModal,
+  onOpenChangePassword,
+  onOpenBarcodeModal,
+  onOpenNoticeBoard,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'events' | 'stands' | 'payments' | 'savings' | 'reports' | 'editorials' | 'audit'>('overview');
+  const [activeAdminTab, setActiveAdminTab] = useState<
+    'OVERVIEW' | 'ANNOUNCEMENTS' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
+  >('OVERVIEW');
+
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Safe Fallbacks
-  const safeMembers = Array.isArray(members) ? members : [];
-  const safeEvents = Array.isArray(events) ? events : [];
-  const safeRegistrations = Array.isArray(registrations) ? registrations : [];
-  const safePayments = Array.isArray(payments) ? payments : [];
-  const safeSavings = Array.isArray(savings) ? savings : [];
-  const safeSalesReports = Array.isArray(salesReports) ? salesReports : [];
-  const safeAuditLogs = Array.isArray(auditLogs) ? auditLogs : [];
-  const safeArticles: EditorialArticle[] = Array.isArray(storage.getArticles?.()) ? storage.getArticles() : [];
-  const safeStands: MasterStand[] = Array.isArray(storage.getStands?.()) ? storage.getStands() : [];
+  const [version, setVersion] = useState(0);
 
-  // Filter Penjualan Mingguan
-  const [filterEventTitle, setFilterEventTitle] = useState<string>('ALL');
-  const [filterStandCode, setFilterStandCode] = useState<string>('ALL');
+  // Modals inside Admin - CRUD State
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
 
-  // Modal Verifikasi Bayar
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
+  const [isAssignStandOpen, setIsAssignStandOpen] = useState(false);
+  const [standToEdit, setStandToEdit] = useState<EventRegistration | null>(null);
+  const [standToDelete, setStandToDelete] = useState<EventRegistration | null>(null);
 
-  // Modal Lihat Detail & Edit Profil Anggota (Superadmin)
-  const [viewingProfileMember, setViewingProfileMember] = useState<Member | null>(null);
-  const [isEditingInProfileModal, setIsEditingInProfileModal] = useState(false);
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
+  const [paymentToEdit, setPaymentToEdit] = useState<Payment | null>(null);
+  const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
 
-  // Modal Studio KTA Anggota (Superadmin)
-  const [selectedMemberForKTA, setSelectedMemberForKTA] = useState<Member | null>(null);
-  const [ktaDesignConfig, setKtaDesignConfig] = useState<KTADesignConfig>(DEFAULT_KTA_CONFIG);
-  const [ktaActiveControlTab, setKtaActiveControlTab] = useState<'background' | 'barcode' | 'elements' | 'profile'>('background');
-  const [ktaSaveAlert, setKtaSaveAlert] = useState<string>('');
+  const [isAddSavingOpen, setIsAddSavingOpen] = useState(false);
+  const [savingToEdit, setSavingToEdit] = useState<Saving | null>(null);
+  const [savingToDelete, setSavingToDelete] = useState<Saving | null>(null);
 
-  // Modal CRUD Member Biasa
-  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
-  const [memberForm, setMemberForm] = useState({
-    nama_lengkap: '',
-    nama_usaha: '',
-    kategori_usaha: 'KULINER' as StandCategory,
-    nomor_hp: '',
-    email: '',
-    alamat: ''
-  });
+  const [isAddSalesOpen, setIsAddSalesOpen] = useState(false);
+  const [salesToEdit, setSalesToEdit] = useState<SalesReport | null>(null);
+  const [salesToDelete, setSalesToDelete] = useState<SalesReport | null>(null);
 
-  // Modal Event
-  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
-  const [eventForm, setEventForm] = useState({
-    title: '',
-    description: '',
-    event_date: '',
-    start_time: '06:00',
-    end_time: '12:00',
-    location: 'Tepian Sambaliung, Berau',
-    status: 'UPCOMING' as EventStatus,
-    total_stands: 64
-  });
+  const [isEditEventOpen, setIsEditEventOpen] = useState(false);
+  const [isCarouselsModalOpen, setIsCarouselsModalOpen] = useState(false);
 
-  // Modal Stand
-  const [isStandModalOpen, setIsStandModalOpen] = useState(false);
-  const [editingStand, setEditingStand] = useState<MasterStand | null>(null);
-  const [standForm, setStandForm] = useState({
-    stand_code: '',
-    category: 'KULINER' as StandCategory,
-    zone: 'ZONA_A' as StandZone,
-    base_price: 150000
-  });
+  // Announcement Editorial State (Super Admin)
+  const [isAddAnnouncementOpen, setIsAddAnnouncementOpen] = useState(false);
+  const [announcementToEdit, setAnnouncementToEdit] = useState<Announcement | null>(null);
+  const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
+  const [annTitle, setAnnTitle] = useState('');
+  const [annCategory, setAnnCategory] = useState<'EVENT' | 'SIMPANAN' | 'UMKM' | 'GENERAL'>('EVENT');
+  const [annContent, setAnnContent] = useState('');
+  const [annStatus, setAnnStatus] = useState<'PUBLISHED' | 'DRAFT'>('PUBLISHED');
+  const [annImageUrl, setAnnImageUrl] = useState('');
+  const [annPublishDate, setAnnPublishDate] = useState('');
 
-  // Modal Assist Booking Tenant
-  const [isAssistBookingOpen, setIsAssistBookingOpen] = useState(false);
-  const [assistForm, setAssistForm] = useState({
-    member_id: '',
-    stand_id: '',
-    event_id: safeEvents[0]?.event_id || 'EVT-2026-001',
-    instant_confirm: true
-  });
+  const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
+  const [docRejectReason, setDocRejectReason] = useState('');
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  // Modal Simpanan Manual
-  const [isSavingModalOpen, setIsSavingModalOpen] = useState(false);
-  const [savingForm, setSavingForm] = useState({
-    member_id: '',
-    saving_type: 'SIMPANAN_WAJIB' as 'SIMPANAN_POKOK' | 'SIMPANAN_WAJIB' | 'SIMPANAN_SUKARELA',
-    amount: 50000
-  });
+  // Cooperative Configuration State (Admin Form)
+  const initialCoopConfig = storage.getKoperasiConfig();
+  const [coopPokok, setCoopPokok] = useState<number>(initialCoopConfig.simpanan_pokok_nominal);
+  const [coopPokokCicilan, setCoopPokokCicilan] = useState<number>(
+    initialCoopConfig.simpanan_pokok_cicilan_nominal || 20000
+  );
+  const [coopWajib, setCoopWajib] = useState<number>(initialCoopConfig.simpanan_wajib_nominal);
+  const [coopBank, setCoopBank] = useState<string>(initialCoopConfig.nama_bank);
+  const [coopRek, setCoopRek] = useState<string>(initialCoopConfig.nomor_rekening);
+  const [coopAtasNama, setCoopAtasNama] = useState<string>(initialCoopConfig.atas_nama_rekening);
+  const [coopWa, setCoopWa] = useState<string>(initialCoopConfig.nomor_wa_konfirmasi);
+  const [coopCatatan, setCoopCatatan] = useState<string>(initialCoopConfig.catatan_iuran || '');
+  const [coopNotice, setCoopNotice] = useState<string | null>(null);
 
-  // Modal Berita
-  const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
-  const [editingArticle, setEditingArticle] = useState<EditorialArticle | null>(null);
-  const [articleForm, setArticleForm] = useState({
-    title: '',
-    tag: 'Budaya & Kuliner',
-    excerpt: '',
-    content: '',
-    cover_image: '',
-    author: session?.user?.nama_lengkap || 'Redaksi Banuarasa',
-    status: 'PUBLISHED' as 'PUBLISHED' | 'DRAFT'
-  });
-
-  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN';
-
-  // Rekap Metrik Keuangan Simpanan
-  const stats = useMemo(() => {
-    const totalSimpananPokok = safeSavings
-      .filter(s => s?.saving_type === 'SIMPANAN_POKOK')
-      .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
-
-    const totalSimpananWajib = safeSavings
-      .filter(s => s?.saving_type === 'SIMPANAN_WAJIB')
-      .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
-
-    const totalSimpananSukarela = safeSavings
-      .filter(s => s?.saving_type === 'SIMPANAN_SUKARELA')
-      .reduce((sum, s) => sum + (Number(s?.amount) || 0), 0);
-
-    const totalOmzet = safeSalesReports.reduce((sum, r) => sum + (Number(r?.total_turnover) || 0), 0);
-    const pendingPayments = safePayments.filter(p => p?.verification_status === 'PENDING').length;
-    const confirmedStands = safeRegistrations.filter(r => r?.status === 'CONFIRMED').length;
-
-    return {
-      totalMembers: safeMembers.length,
-      totalEvents: safeEvents.length,
-      confirmedStands,
-      pendingPayments,
-      totalSimpananPokok,
-      totalSimpananWajib,
-      totalSimpananSukarela,
-      grandTotalSimpanan: totalSimpananPokok + totalSimpananWajib + totalSimpananSukarela,
-      totalOmzet
-    };
-  }, [safeMembers, safeEvents, safeRegistrations, safePayments, safeSavings, safeSalesReports]);
-
-  // Filter Laporan Penjualan
-  const filteredSalesReports = useMemo(() => {
-    return safeSalesReports.filter(report => {
-      const matchEvent = filterEventTitle === 'ALL' || report.event_title === filterEventTitle;
-      const matchStand = filterStandCode === 'ALL' || report.stand_code === filterStandCode;
-      return matchEvent && matchStand;
+  // Subscribe to storage updates
+  useEffect(() => {
+    const unsub = storage.subscribe(() => {
+      setVersion((v) => v + 1);
     });
-  }, [safeSalesReports, filterEventTitle, filterStandCode]);
+    return unsub;
+  }, []);
 
-  const uniqueEventsList = useMemo(() => {
-    return Array.from(new Set(safeSalesReports.map(r => r.event_title).filter(Boolean)));
-  }, [safeSalesReports]);
+  useEffect(() => {
+    const fresh = storage.getKoperasiConfig();
+    setCoopPokok(fresh.simpanan_pokok_nominal);
+    setCoopPokokCicilan(fresh.simpanan_pokok_cicilan_nominal || 20000);
+    setCoopWajib(fresh.simpanan_wajib_nominal);
+    setCoopBank(fresh.nama_bank);
+    setCoopRek(fresh.nomor_rekening);
+    setCoopAtasNama(fresh.atas_nama_rekening);
+    setCoopWa(fresh.nomor_wa_konfirmasi);
+    setCoopCatatan(fresh.catatan_iuran || '');
+  }, [version]);
 
-  const uniqueStandsList = useMemo(() => {
-    return Array.from(new Set(safeSalesReports.map(r => r.stand_code).filter(Boolean)));
-  }, [safeSalesReports]);
-
-  // ----------------------------------------------------
-  // HANDLERS PROFIL ANGGOTA (LIHAT & EDIT OLEH SUPERADMIN)
-  // ----------------------------------------------------
-  const handleOpenViewProfile = (m: Member) => {
-    setViewingProfileMember({ ...m });
-    setIsEditingInProfileModal(false);
-  };
-
-  const handleSaveProfileFromModal = (e: React.FormEvent) => {
+  const handleSaveCoopConfig = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!viewingProfileMember) return;
-    storage.saveMember(viewingProfileMember);
-    storage.logActivity('SUPERADMIN_UPDATE_PROFILE', 'MEMBER', `Superadmin memperbarui profil anggota ${viewingProfileMember.nama_lengkap} (${viewingProfileMember.member_id})`, viewingProfileMember.member_id);
-    alert('Data profil anggota berhasil diperbarui!');
-    setIsEditingInProfileModal(false);
-    onDataUpdated();
-  };
-
-  // ----------------------------------------------------
-  // HANDLERS EDITING KTA ANGGOTA
-  // ----------------------------------------------------
-  const handleOpenKTAStudio = (m: Member) => {
-    setSelectedMemberForKTA({ ...m });
-    setKtaDesignConfig(DEFAULT_KTA_CONFIG);
-    setKtaActiveControlTab('background');
-    setKtaSaveAlert('');
-  };
-
-  const handleKtaPresetSelect = (preset: KTADesignConfig['themePreset']) => {
-    let bgUrl = '';
-    let opacity = 85;
-    let overlay: KTADesignConfig['overlayColor'] = 'DARK';
-
-    if (preset === 'BERAU_HERITAGE') {
-      bgUrl = 'https://images.unsplash.com/photo-1606787366850-de6330128bfc?auto=format&fit=crop&w=800&q=80';
-      opacity = 40;
-      overlay = 'DARK';
-    } else if (preset === 'DARK_VIP') {
-      bgUrl = 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=800&q=80';
-      opacity = 60;
-      overlay = 'DARK';
-    } else if (preset === 'SLATE_CLEAN') {
-      bgUrl = '';
-      opacity = 95;
-      overlay = 'LIGHT';
-    }
-
-    setKtaDesignConfig(prev => ({
-      ...prev,
-      themePreset: preset,
-      bgImageUrl: bgUrl,
-      bgOpacity: opacity,
-      overlayColor: overlay
-    }));
-  };
-
-  const handleKtaBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('Ukuran gambar maksimal 2MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setKtaDesignConfig(prev => ({
-          ...prev,
-          themePreset: 'CUSTOM',
-          bgImageUrl: reader.result as string
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleKtaMemberPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && selectedMemberForKTA) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setSelectedMemberForKTA({
-          ...selectedMemberForKTA,
-          avatar_url: reader.result as string
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSaveKTAStudio = () => {
-    if (!selectedMemberForKTA) return;
-    storage.saveMember(selectedMemberForKTA);
-    storage.logActivity('SUPERADMIN_EDIT_KTA', 'MEMBER', `Superadmin mengubah desain KTA anggota ${selectedMemberForKTA.nama_lengkap}`, selectedMemberForKTA.member_id);
-    setKtaSaveAlert('Desain KTA & Data Anggota Berhasil Disimpan!');
-    onDataUpdated();
-    setTimeout(() => {
-      setKtaSaveAlert('');
-      setSelectedMemberForKTA(null);
-    }, 1200);
-  };
-
-  // Handlers Berita
-  const handleOpenAddArticle = () => {
-    setEditingArticle(null);
-    setArticleForm({
-      title: '',
-      tag: 'Budaya & Kuliner',
-      excerpt: '',
-      content: '',
-      cover_image: '',
-      author: session?.user?.nama_lengkap || 'Redaksi Banuarasa',
-      status: 'PUBLISHED'
-    });
-    setIsArticleModalOpen(true);
-  };
-
-  const handleOpenEditArticle = (art: EditorialArticle) => {
-    setEditingArticle(art);
-    setArticleForm({
-      title: art.title || '',
-      tag: art.tag || 'Budaya & Kuliner',
-      excerpt: art.excerpt || '',
-      content: art.content || '',
-      cover_image: art.cover_image || '',
-      author: art.author || '',
-      status: art.status || 'PUBLISHED'
-    });
-    setIsArticleModalOpen(true);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('Ukuran gambar maksimal 2MB.');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setArticleForm(prev => ({ ...prev, cover_image: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSaveArticle = (e: React.FormEvent) => {
-    e.preventDefault();
-    const articleData: EditorialArticle = {
-      article_id: editingArticle?.article_id || `art-${Date.now()}`,
-      title: articleForm.title,
-      tag: articleForm.tag,
-      excerpt: articleForm.excerpt,
-      content: articleForm.content,
-      cover_image: articleForm.cover_image,
-      author: articleForm.author,
-      published_at: editingArticle?.published_at || new Date().toISOString().split('T')[0],
-      status: articleForm.status
-    };
-
-    storage.saveArticle(articleData);
-    setIsArticleModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleDeleteArticle = (articleId: string, title: string) => {
-    if (!window.confirm(`Hapus berita: "${title}"?`)) return;
-    storage.deleteArticle(articleId, title);
-    onDataUpdated();
-  };
-
-  // Handlers Stand & Booking
-  const handleOpenAddStand = () => {
-    setEditingStand(null);
-    setStandForm({
-      stand_code: '',
-      category: 'KULINER',
-      zone: 'ZONA_A',
-      base_price: 150000
-    });
-    setIsStandModalOpen(true);
-  };
-
-  const handleOpenEditStand = (stand: MasterStand) => {
-    setEditingStand(stand);
-    setStandForm({
-      stand_code: stand.stand_code,
-      category: stand.category,
-      zone: stand.zone,
-      base_price: stand.base_price
-    });
-    setIsStandModalOpen(true);
-  };
-
-  const handleSaveStand = (e: React.FormEvent) => {
-    e.preventDefault();
-    const allStands = storage.getStands();
-
-    if (editingStand) {
-      const idx = allStands.findIndex(s => s.stand_id === editingStand.stand_id);
-      if (idx >= 0) {
-        allStands[idx] = {
-          ...allStands[idx],
-          stand_code: standForm.stand_code.toUpperCase(),
-          category: standForm.category,
-          zone: standForm.zone,
-          base_price: Number(standForm.base_price) || 150000
-        };
-      }
-    } else {
-      const newNumber = allStands.length + 1;
-      const newStand: MasterStand = {
-        stand_id: `STD-${String(newNumber).padStart(2, '0')}`,
-        stand_code: standForm.stand_code.toUpperCase(),
-        stand_number: newNumber,
-        category: standForm.category,
-        zone: standForm.zone,
-        base_price: Number(standForm.base_price) || 150000,
-        status: 'ACTIVE'
-      };
-      allStands.push(newStand);
-    }
-
-    setIsStandModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleDeleteStand = (standId: string, code: string) => {
-    if (!window.confirm(`Hapus master stand ${code}?`)) return;
-    const allStands = storage.getStands();
-    const idx = allStands.findIndex(s => s.stand_id === standId);
-    if (idx >= 0) {
-      allStands.splice(idx, 1);
-      onDataUpdated();
-    }
-  };
-
-  const handleToggleStandBookingStatus = (registrationId: string, currentStatus: string, standCode: string) => {
-    const allRegistrations = storage.getRegistrations();
-    const reg = allRegistrations.find(r => r.registration_id === registrationId);
-    if (!reg) return;
-
-    if (currentStatus === 'CONFIRMED' || currentStatus === 'RESERVED') {
-      if (window.confirm(`Lepaskan stand ${standCode}? Stand ini akan kembali TERSEDIA untuk umum.`)) {
-        reg.status = 'AVAILABLE';
-      }
-    } else {
-      reg.status = 'CONFIRMED';
-    }
-    onDataUpdated();
-  };
-
-  const handleAssistBooking = (e: React.FormEvent) => {
-    e.preventDefault();
-    const targetMember = safeMembers.find(m => m.member_id === assistForm.member_id);
-    const targetStand = safeStands.find(s => s.stand_id === assistForm.stand_id);
-    const targetEvent = safeEvents.find(ev => ev.event_id === assistForm.event_id) || safeEvents[0];
-
-    if (!targetMember || !targetStand || !targetEvent) {
-      alert('Pilih member, stand, dan event secara lengkap.');
-      return;
-    }
-
-    const bookingResult = storage.bookStand(targetEvent.event_id, targetStand.stand_id, targetMember);
-    if (!bookingResult.success) {
-      alert(bookingResult.message);
-      return;
-    }
-
-    if (assistForm.instant_confirm && bookingResult.registration) {
-      bookingResult.registration.status = 'CONFIRMED';
-    }
-
-    alert(`Stand ${targetStand.stand_code} berhasil dipesankan untuk ${targetMember.nama_lengkap}!`);
-    setIsAssistBookingOpen(false);
-    onDataUpdated();
-  };
-
-  // Handlers CRUD Member Form Biasa
-  const handleOpenAddMember = () => {
-    setEditingMember(null);
-    setMemberForm({
-      nama_lengkap: '',
-      nama_usaha: '',
-      kategori_usaha: 'KULINER',
-      nomor_hp: '',
-      email: '',
-      alamat: ''
-    });
-    setIsMemberModalOpen(true);
-  };
-
-  const handleOpenEditMember = (m: Member) => {
-    setEditingMember(m);
-    setMemberForm({
-      nama_lengkap: m.nama_lengkap || '',
-      nama_usaha: m.nama_usaha || '',
-      kategori_usaha: m.kategori_usaha || 'KULINER',
-      nomor_hp: m.nomor_hp || '',
-      email: m.email || '',
-      alamat: m.alamat || ''
-    });
-    setIsMemberModalOpen(true);
-  };
-
-  const handleSaveMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingMember) {
-      storage.saveMember({
-        ...editingMember,
-        ...memberForm,
-        nik: ''
-      });
-    } else {
-      const newId = `MBR-${String(safeMembers.length + 1).padStart(4, '0')}`;
-      storage.saveMember({
-        member_id: newId,
-        nik: '',
-        ...memberForm,
-        whatsapp: memberForm.nomor_hp,
-        status_keanggotaan: 'ACTIVE',
-        created_at: new Date().toISOString()
-      });
-    }
-    setIsMemberModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleDeleteMember = (memberId: string, name: string) => {
-    if (!window.confirm(`Yakin ingin menghapus data anggota: ${name}?`)) return;
-    const allMembers = storage.getMembers();
-    const idx = allMembers.findIndex(m => m.member_id === memberId);
-    if (idx >= 0) {
-      allMembers.splice(idx, 1);
-      onDataUpdated();
-    }
-  };
-
-  // Handlers Event
-  const handleOpenAddEvent = () => {
-    setEditingEvent(null);
-    setEventForm({
-      title: '',
-      description: '',
-      event_date: new Date().toISOString().split('T')[0],
-      start_time: '06:00',
-      end_time: '12:00',
-      location: 'Tepian Sambaliung, Berau',
-      status: 'UPCOMING',
-      total_stands: 64
-    });
-    setIsEventModalOpen(true);
-  };
-
-  const handleOpenEditEvent = (ev: EventItem) => {
-    setEditingEvent(ev);
-    setEventForm({
-      title: ev.title || '',
-      description: ev.description || '',
-      event_date: ev.event_date || '',
-      start_time: ev.start_time || '06:00',
-      end_time: ev.end_time || '12:00',
-      location: ev.location || '',
-      status: ev.status || 'UPCOMING',
-      total_stands: ev.total_stands || 64
-    });
-    setIsEventModalOpen(true);
-  };
-
-  const handleSaveEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    const allEvents = storage.getEvents();
-    if (editingEvent) {
-      const idx = allEvents.findIndex(ev => ev.event_id === editingEvent.event_id);
-      if (idx >= 0) {
-        allEvents[idx] = { ...allEvents[idx], ...eventForm };
-      }
-    } else {
-      const newEvent: EventItem = {
-        event_id: `EVT-${Date.now()}`,
-        ...eventForm,
-        timezone: 'Asia/Makassar',
-        created_at: new Date().toISOString()
-      };
-      allEvents.push(newEvent);
-    }
-    setIsEventModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleDeleteEvent = (eventId: string, title: string) => {
-    if (!window.confirm(`Hapus event "${title}"?`)) return;
-    const allEvents = storage.getEvents();
-    const idx = allEvents.findIndex(ev => ev.event_id === eventId);
-    if (idx >= 0) {
-      allEvents.splice(idx, 1);
-      onDataUpdated();
-    }
-  };
-
-  const handleSaveSaving = (e: React.FormEvent) => {
-    e.preventDefault();
-    const targetMember = safeMembers.find(m => m.member_id === savingForm.member_id);
-    if (!targetMember) return;
-
-    storage.addSaving({
-      member_id: targetMember.member_id,
-      member_name: targetMember.nama_lengkap,
-      saving_type: savingForm.saving_type,
-      amount: Number(savingForm.amount) || 0
-    });
-    setIsSavingModalOpen(false);
-    onDataUpdated();
-  };
-
-  const handleVerifyPayment = (paymentId: string, status: 'VERIFIED' | 'REJECTED') => {
-    storage.verifyPayment(
-      paymentId, 
-      session?.user?.nama_lengkap || session?.user?.username || 'Admin', 
-      status, 
-      status === 'REJECTED' ? rejectReason : undefined
+    storage.updateKoperasiConfig(
+      {
+        simpanan_pokok_nominal: Number(coopPokok),
+        simpanan_pokok_cicilan_nominal: Number(coopPokokCicilan),
+        simpanan_wajib_nominal: Number(coopWajib),
+        nama_bank: coopBank,
+        nomor_rekening: coopRek,
+        atas_nama_rekening: coopAtasNama,
+        nomor_wa_konfirmasi: coopWa,
+        catatan_iuran: coopCatatan,
+      },
+      adminId
     );
-    setSelectedPayment(null);
-    setRejectReason('');
-    onDataUpdated();
+    setCoopNotice('Pengaturan besaran simpanan pokok dan wajib berhasil disimpan!');
+    setTimeout(() => setCoopNotice(null), 4000);
+  };
+
+  const handleToggleMemberKoperasi = (memberId: string, currentIsCoop: boolean) => {
+    const nextVal = !currentIsCoop;
+    const res = storage.toggleMemberKoperasiStatus(memberId, nextVal, adminId);
+    setActionNotice(res.message);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  // Data from Storage
+  const stats = storage.getAggregatedStats();
+  const payments = storage.getPayments();
+  const events = storage.getEvents();
+  const members = storage.getMembers();
+  const registrations = storage.getRegistrations();
+  const savings = storage.getSavings();
+  const salesReports = storage.getSalesReports();
+  const auditLogs = storage.getAuditLogs();
+  const documents = storage.getDocuments();
+
+  const activeEvent = events[0];
+
+  // Filtered Payments
+  const filteredPayments = payments.filter((p) => {
+    if (paymentFilter !== 'ALL' && p.verification_status !== paymentFilter) return false;
+    if (!searchQuery) return true;
+    const member = members.find((m) => m.member_id === p.member_id);
+    const query = searchQuery.toLowerCase();
+    return (
+      p.payment_id.toLowerCase().includes(query) ||
+      p.member_id.toLowerCase().includes(query) ||
+      (member?.nama_lengkap.toLowerCase().includes(query) ?? false) ||
+      (member?.nama_usaha.toLowerCase().includes(query) ?? false)
+    );
+  });
+
+  const pendingPaymentsCount = payments.filter((p) => p.verification_status === 'PENDING').length;
+  const pendingDocsCount = documents.filter((d) => d.verification_status === 'PENDING').length;
+
+  const showToast = (msg: string) => {
+    setActionNotice(msg);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleConfirmDeleteMember = () => {
+    if (!memberToDelete) return;
+    const res = storage.deleteMember(memberToDelete.member_id, adminId);
+    if (res.success) {
+      showToast(res.message);
+    }
+    setMemberToDelete(null);
+  };
+
+  const handleConfirmDeleteStand = () => {
+    if (!standToDelete) return;
+    const ok = storage.deleteRegistration(standToDelete.registration_id, adminId);
+    if (ok) {
+      showToast(`Alokasi Stand ${standToDelete.stand_code} berhasil dilepaskan.`);
+    }
+    setStandToDelete(null);
+  };
+
+  const handleConfirmDeletePayment = () => {
+    if (!paymentToDelete) return;
+    const ok = storage.deletePayment(paymentToDelete.payment_id, adminId);
+    if (ok) {
+      showToast(`Catatan pembayaran ${paymentToDelete.payment_id} berhasil dihapus.`);
+    }
+    setPaymentToDelete(null);
+  };
+
+  const handleConfirmDeleteSaving = () => {
+    if (!savingToDelete) return;
+    const ok = storage.deleteSaving(savingToDelete.saving_id, adminId);
+    if (ok) {
+      showToast(`Catatan simpanan ${savingToDelete.saving_id} berhasil dihapus.`);
+    }
+    setSavingToDelete(null);
+  };
+
+  const handleConfirmDeleteSales = () => {
+    if (!salesToDelete) return;
+    const ok = storage.deleteSalesReport(salesToDelete.sales_report_id, adminId);
+    if (ok) {
+      showToast(`Laporan omzet ${salesToDelete.sales_report_id} berhasil dihapus.`);
+    }
+    setSalesToDelete(null);
+  };
+
+  const handleConfirmDeleteAnnouncement = () => {
+    if (!announcementToDelete) return;
+    const ok = storage.deleteAnnouncement(announcementToDelete.announcement_id, adminId);
+    if (ok) {
+      showToast(`Pengumuman "${announcementToDelete.title}" berhasil dihapus.`);
+    }
+    setAnnouncementToDelete(null);
+  };
+
+  const handleOpenAddAnnouncement = () => {
+    setAnnouncementToEdit(null);
+    setAnnTitle('');
+    setAnnCategory('EVENT');
+    setAnnContent('');
+    setAnnImageUrl('');
+    setAnnStatus('PUBLISHED');
+    setAnnPublishDate(new Date().toISOString().split('T')[0]);
+    setIsAddAnnouncementOpen(true);
+  };
+
+  const handleOpenEditAnnouncement = (item: Announcement) => {
+    setAnnouncementToEdit(item);
+    setAnnTitle(item.title);
+    setAnnCategory(item.category);
+    setAnnContent(item.content);
+    setAnnImageUrl(item.image_url || '');
+    setAnnStatus(item.status === 'ARCHIVED' ? 'DRAFT' : item.status);
+    setAnnPublishDate(item.publish_date || new Date().toISOString().split('T')[0]);
+    setIsAddAnnouncementOpen(true);
+  };
+
+  const handleSaveAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annTitle.trim() || !annContent.trim()) {
+      showToast('Judul dan isi pengumuman wajib diisi');
+      return;
+    }
+
+    if (announcementToEdit) {
+      storage.updateAnnouncement(
+        announcementToEdit.announcement_id,
+        {
+          title: annTitle.trim(),
+          category: annCategory,
+          content: annContent.trim(),
+          image_url: annImageUrl.trim() || undefined,
+          status: annStatus,
+          publish_date: annPublishDate || new Date().toISOString().split('T')[0],
+        },
+        adminId
+      );
+      showToast(`Redaksi pengumuman "${annTitle}" berhasil diperbarui.`);
+    } else {
+      storage.addAnnouncement(
+        {
+          title: annTitle.trim(),
+          category: annCategory,
+          content: annContent.trim(),
+          image_url: annImageUrl.trim() || undefined,
+          status: annStatus,
+          publish_date: annPublishDate || new Date().toISOString().split('T')[0],
+          created_by: adminId,
+        },
+        adminId
+      );
+      showToast(`Pengumuman baru "${annTitle}" berhasil diterbitkan.`);
+    }
+
+    setIsAddAnnouncementOpen(false);
+    setAnnouncementToEdit(null);
+  };
+
+  const handleApproveDocument = (docId: string) => {
+    const ok = storage.verifyDocument(docId, adminId, true);
+    if (ok) {
+      showToast('Dokumen legalitas berhasil diverifikasi.');
+    }
+  };
+
+  const handleRejectDocument = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectingDocId) return;
+    const ok = storage.verifyDocument(rejectingDocId, adminId, false, docRejectReason);
+    if (ok) {
+      showToast('Dokumen legalitas telah ditolak.');
+    }
+    setRejectingDocId(null);
+    setDocRejectReason('');
+  };
+
+  const handleExportCSV = () => {
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      'ID_ANGGOTA,NAMA_LENGKAP,NAMA_USAHA,KATEGORI,STATUS,WHATSAPP\n' +
+      members
+        .map(
+          (m) =>
+            `"${m.member_id}","${m.nama_lengkap}","${m.nama_usaha}","${m.kategori_usaha}","${m.status_keanggotaan}","${m.whatsapp}"`
+        )
+        .join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Koperasi_Berau_Data_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('File CSV berhasil diunduh.');
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/60 pb-16 font-sans">
-      {/* Top Banner Admin */}
-      <div className="bg-slate-900 text-white border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {session?.user?.role || 'SUPER_ADMIN'}
-                </span>
-                <span className="text-slate-400 text-xs">• WITA (Berau)</span>
+    <div className="space-y-6 pb-16">
+      {/* Toast Notice */}
+      {actionNotice && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 bg-slate-900 text-white rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <p className="text-xs font-bold">{actionNotice}</p>
+        </div>
+      )}
+
+      {/* Top Bento Header & Navigation Tabs */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-purple-900 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                Panel Super Admin Koperasi
+              </span>
+              <span className="text-xs text-slate-400 font-bold">• Tingkat Otoritas Penuh (CRUD)</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Dashboard Manajemen & Keuangan Koperasi
+            </h2>
+            <p className="text-xs text-slate-500">
+              Pengelolaan 64 Stand Banuarasa, Verifikasi Pembayaran & Dokumen, Manajemen Anggota, dan Laporan Kas.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {onOpenNoticeBoard && (
+              <button
+                id="btn-admin-open-bara-board"
+                onClick={onOpenNoticeBoard}
+                className="px-3.5 py-2.5 bg-gradient-to-r from-slate-900 to-emerald-950 hover:from-black hover:to-emerald-900 text-white border border-amber-400 text-xs font-black rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                title="Buka Papan Pemberitahuan Resmi Bara"
+              >
+                <div className="w-5 h-5 rounded-full overflow-hidden border border-amber-300 shrink-0">
+                  <img src={BARA_ASSETS.mascot} alt="Bara" className="w-full h-full object-cover" />
+                </div>
+                <span>Papan Bara</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </button>
+            )}
+            {onOpenGoogleWorkspaceModal && (
+              <button
+                id="btn-admin-google-workspace"
+                onClick={onOpenGoogleWorkspaceModal}
+                className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Cloud className="w-4 h-4 text-emerald-600" />
+                <span>Google Workspace Hub</span>
+              </button>
+            )}
+            {onOpenChangePassword && (
+              <button
+                id="btn-admin-change-password"
+                onClick={() => onOpenChangePassword(null, false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                title="Ganti Kata Sandi Master Super Admin"
+              >
+                <KeyRound className="w-4 h-4 text-emerald-600" />
+                <span>Rubah Sandi Admin</span>
+              </button>
+            )}
+            <button
+              onClick={() => setIsCarouselsModalOpen(true)}
+              className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              title="Kelola Carousel Iklan Produk Anggota & Logo Perusahaan Mitra"
+            >
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              <span>Kelola Iklan & Mitra</span>
+            </button>
+            <button
+              onClick={onOpenQRScanner}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              <span>Scan QR Check-In</span>
+            </button>
+            <button
+              onClick={() => onOpenStandMap(activeEvent)}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Denah 64 Stand</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Real Links Direct Action Banner */}
+        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 font-medium">
+            <span className="bg-emerald-500 text-slate-950 font-black px-2 py-0.5 rounded text-[10px] uppercase">
+              Cloud Database
+            </span>
+            <span className="text-slate-300">Tautan repositori data resmi Banuarasa:</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href={GOOGLE_SPREADSHEET_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Google Spreadsheet Resmi</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+
+            <a
+              href={GOOGLE_DRIVE_FOLDER_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Google Drive Folder Resmi</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </div>
+
+        {/* Mobile & Tablet Priority: Dropdown Menu Selector (Hemat Scrolling) */}
+        <div className="lg:hidden space-y-1.5 pt-1">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+            <span className="flex items-center gap-1 text-slate-900">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
+              <span>Pilih Bagian / Tab:</span>
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md">
+              10 Menu Tersedia
+            </span>
+          </div>
+          <div className="relative">
+            <select
+              value={activeAdminTab}
+              onChange={(e) => setActiveAdminTab(e.target.value as any)}
+              className="w-full appearance-none px-4 py-3 bg-slate-900 text-amber-300 border-2 border-amber-400 font-black text-xs rounded-2xl shadow-sm focus:outline-hidden pr-10 cursor-pointer"
+            >
+              {[
+                { id: 'OVERVIEW', label: '🧭 Ringkasan Eksekutif' },
+                { id: 'ANNOUNCEMENTS', label: '📢 Papan Pengumuman Bara' },
+                { id: 'PAYMENTS', label: `💳 Verifikasi Pembayaran (${pendingPaymentsCount})` },
+                { id: 'STANDS', label: '🎪 Manajemen 64 Stand' },
+                { id: 'MEMBERS', label: `👥 Anggota & Legalitas (${members.length})` },
+                { id: 'SAVINGS', label: '💰 Buku Kas Simpanan' },
+                { id: 'SALES', label: '📈 Laporan Omzet UMKM' },
+                { id: 'CARD_STUDIO', label: '✨ Desain KTA (Kartu Anggota)' },
+                { id: 'BRANDING', label: '🖼️ Logo, Banner & Media' },
+                { id: 'AUDIT', label: '📋 Audit Logs & Ekspor' },
+              ].map((item) => (
+                <option key={item.id} value={item.id} className="bg-slate-900 text-white font-bold py-1">
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-amber-300 absolute right-3.5 top-3.5 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* Sub-Nav Bento Tabs (Desktop / Large Tablet Scrollable) */}
+        <div className="hidden lg:flex items-center gap-2 pt-1 overflow-x-auto">
+          {[
+            { id: 'OVERVIEW', label: 'Ringkasan Eksekutif', icon: ShieldCheck },
+            { id: 'ANNOUNCEMENTS', label: 'Papan Pengumuman Bara', icon: Megaphone },
+            { id: 'CARD_STUDIO', label: 'Desain KTA (Kartu Anggota)', icon: Sparkles },
+            { id: 'PAYMENTS', label: `Verifikasi Bayar (${pendingPaymentsCount})`, icon: CreditCard },
+            { id: 'STANDS', label: 'Manajemen 64 Stand', icon: Calendar },
+            { id: 'MEMBERS', label: `Anggota & Legalitas (${members.length})`, icon: Users },
+            { id: 'SAVINGS', label: 'Buku Kas Simpanan', icon: DollarSign },
+            { id: 'SALES', label: 'Laporan Omzet UMKM', icon: TrendingUp },
+            { id: 'BRANDING', label: 'Logo, Banner & Media', icon: ImageIcon },
+            { id: 'AUDIT', label: 'Audit Logs & Ekspor', icon: FileText },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeAdminTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveAdminTab(tab.id as any)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* OVERVIEW TAB */}
+      {activeAdminTab === 'OVERVIEW' && (
+        <div className="space-y-6">
+          {/* 4 Primary Bento Metrics: Koperasi vs UMKM strictly separated */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* Card 1: Pendapatan Kas Koperasi */}
+            <div className="bg-emerald-900 text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">
+                    Kas Koperasi
+                  </span>
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                </div>
+                <p className="text-xs text-emerald-200 font-medium">Total Kas Masuk Koperasi</p>
+                <p className="text-2xl font-black text-white mt-1">
+                  Rp{stats.totalKasMasukKoperasi.toLocaleString('id-ID')}
+                </p>
               </div>
-              <h1 className="text-2xl font-bold mt-1 text-slate-100">
-                Pusat Kendali Operasional Banuarasa
-              </h1>
-              <p className="text-sm text-slate-400">
-                Super Admin: <strong className="text-slate-200">{session?.user?.nama_lengkap || session?.user?.username || 'Super Admin'}</strong>
+              <div className="mt-4 pt-3 border-t border-emerald-800/80 text-[10px] text-emerald-200 flex justify-between">
+                <span>Stand: Rp{stats.totalPendapatanPartisipasiStand.toLocaleString('id-ID')}</span>
+                <span>Simpanan: Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+
+            {/* Card 2: Total Omzet Penjualan UMKM */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    Omzet UMKM
+                  </span>
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-xs text-slate-500 font-medium">Total Omzet Transaksi Tenant</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">
+                  Rp{stats.totalOmzetUMKM.toLocaleString('id-ID')}
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                <span>Laba: Rp{stats.totalLabaBersihUMKM.toLocaleString('id-ID')}</span>
+                <span className="font-bold text-emerald-700">{stats.totalProdukTerjual} Item Terjual</span>
+              </div>
+            </div>
+
+            {/* Card 3: Stand Status */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    Okupansi Stand
+                  </span>
+                  <Store className="w-5 h-5 text-amber-600" />
+                </div>
+                <p className="text-xs text-slate-500 font-medium">Stand Terisi (Banuarasa #1)</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">
+                  {stats.standTerisi} <span className="text-sm font-bold text-slate-400">/ 64 Stand</span>
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                <span className="text-emerald-700 font-bold">{stats.standAvailable} Stand Kosong</span>
+                <span>{Math.round((stats.standTerisi / 64) * 100)}% Terisi</span>
+              </div>
+            </div>
+
+            {/* Card 4: Anggota Aktif */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    Keanggotaan
+                  </span>
+                  <Users className="w-5 h-5 text-purple-600" />
+                </div>
+                <p className="text-xs text-slate-500 font-medium">Total Anggota Terdaftar</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">
+                  {stats.totalAnggota} <span className="text-sm font-bold text-slate-400">Pelaku UMKM</span>
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 flex justify-between">
+                <span className="text-purple-700 font-bold">{stats.anggotaAktif} Anggota Aktif</span>
+                <span>{pendingPaymentsCount} Antrean Bayar</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 mb-1">Verifikasi Pembayaran</h4>
+                <p className="text-xs text-slate-500 mb-3">
+                  Terdapat {pendingPaymentsCount} bukti transfer menanti persetujuan pengurus.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveAdminTab('PAYMENTS')}
+                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
+              >
+                Buka Antrean Verifikasi →
+              </button>
+            </div>
+
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 mb-1">Direktori Anggota UMKM</h4>
+                <p className="text-xs text-slate-500 mb-3">
+                  Kelola profil anggota, verifikasi NIB/Halal, dan kelola akun demo/anggota baru.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveAdminTab('MEMBERS')}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors"
+              >
+                Kelola Anggota & Hapus Akun →
+              </button>
+            </div>
+
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 mb-1">Audit Trail & Laporan</h4>
+                <p className="text-xs text-slate-500 mb-3">
+                  Ekspor rekaman kas simpanan dan omzet mingguan ke file spreadsheet.
+                </p>
+              </div>
+              <button
+                onClick={handleExportCSV}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>Unduh File CSV Anggota</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENTS TAB */}
+      {activeAdminTab === 'PAYMENTS' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Verifikasi Pembayaran Masuk</h3>
+              <p className="text-xs text-slate-500">
+                Pemeriksaan bukti transfer bank dan QRIS untuk biaya stand dan simpanan anggota.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              {isSuperAdmin && (
-                <>
-                  <button
-                    onClick={handleOpenAddArticle}
-                    className="px-4 py-2.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
-                  >
-                    <span>📰</span>
-                    <span>Tulis Berita</span>
-                  </button>
-                  <button
-                    onClick={() => setIsAssistBookingOpen(true)}
-                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5"
-                  >
-                    <span>⚡</span>
-                    <span>Pesan Stand Tenant</span>
-                  </button>
-                </>
-              )}
+            {/* Actions: Filter Buttons & Tambah Pembayaran Manual */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => {
+                  setPaymentToEdit(null);
+                  setIsAddPaymentOpen(true);
+                }}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Pembayaran</span>
+              </button>
 
-              {onOpenScanner && (
-                <button
-                  onClick={onOpenScanner}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                >
-                  📷 Scan Barcode
-                </button>
-              )}
+              <div className="flex items-center gap-1">
+                {(['PENDING', 'VERIFIED', 'REJECTED', 'ALL'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setPaymentFilter(filter)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                      paymentFilter === filter
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {filter === 'ALL' ? 'Semua' : filter}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Navigasi Tab */}
-          <div className="flex overflow-x-auto gap-2 mt-6 pt-2 border-t border-slate-800 text-sm">
-            {[
-              { id: 'overview', label: 'Ringkasan Eksekutif' },
-              { id: 'members', label: `Anggota & KTA (${safeMembers.length})` },
-              { id: 'savings', label: 'Keuangan Simpanan (Pokok & Wajib)' },
-              { id: 'reports', label: 'Rekap Penjualan Stand & Event' },
-              { id: 'stands', label: `Stand & Booking Tenant` },
-              { id: 'payments', label: `Verifikasi Bayar (${safePayments.length})` },
-              { id: 'editorials', label: `Kabar Berita (${safeArticles.length})` },
-              { id: 'events', label: `Kelola Event (${safeEvents.length})` },
-              { id: 'audit', label: 'Audit Trail' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition ${
-                  activeTab === tab.id
-                    ? 'bg-emerald-600 text-white font-extrabold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Search Box */}
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari ID Pembayaran, Nama Anggota, atau Nama Usaha..."
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+          </div>
+
+          {/* Payment List Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                  <th className="p-3">ID Pembayaran</th>
+                  <th className="p-3">Nama Anggota / Usaha</th>
+                  <th className="p-3">Jenis & Metode</th>
+                  <th className="p-3">Nominal</th>
+                  <th className="p-3">Tanggal</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Aksi Super Admin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-400">
+                      Tidak ada pembayaran dengan filter ini.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPayments.map((pay) => {
+                    const member = members.find((m) => m.member_id === pay.member_id);
+                    return (
+                      <tr key={pay.payment_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-mono font-bold text-slate-700">{pay.payment_id}</td>
+                        <td className="p-3">
+                          <p className="font-bold text-slate-900">{member?.nama_lengkap || pay.member_id}</p>
+                          <p className="text-[10px] text-slate-500">{member?.nama_usaha}</p>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-bold text-slate-800">{pay.payment_type.replace(/_/g, ' ')}</span>
+                          <p className="text-[10px] text-slate-500">{pay.payment_method}</p>
+                        </td>
+                        <td className="p-3 font-black text-slate-900">
+                          Rp{pay.amount.toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3 text-slate-500">{pay.payment_date}</td>
+                        <td className="p-3">
+                          <span
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                              pay.verification_status === 'VERIFIED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : pay.verification_status === 'PENDING'
+                                ? 'bg-amber-100 text-amber-900'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {pay.verification_status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5">
+                          <button
+                            onClick={() => onOpenPaymentInspector(pay)}
+                            className="px-2.5 py-1 bg-slate-900 hover:bg-black text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Periksa bukti bayar"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Lihat</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPaymentToEdit(pay);
+                              setIsAddPaymentOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Ubah data pembayaran"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Ubah</span>
+                          </button>
+                          <button
+                            onClick={() => setPaymentToDelete(pay)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Hapus pembayaran"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* STANDS TAB */}
+      {activeAdminTab === 'STANDS' && (
+        <div className="space-y-6">
+          {/* Superadmin Event Details Card: Waktu, Tempat, dan Tanggal Pelaksanaan */}
+          <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-950 rounded-3xl border border-emerald-500/30 p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-500/40">
+                    Pengaturan Event Weekend Market
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-500/40">
+                    Status: {activeEvent?.event_status || 'ACTIVE'}
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  {activeEvent?.event_name || 'Banuarasa Weekend Market Edisi #24'}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tanggal Pelaksanaan</p>
+                      <p className="font-black text-white">{activeEvent?.event_date || '2026-09-05'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Waktu / Jam Operasional</p>
+                      <p className="font-black text-white">{activeEvent?.start_time || '06:00'} - {activeEvent?.end_time || '12:00'} WITA</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700">
+                    <Building2 className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Tempat / Lokasi</p>
+                      <p className="font-bold text-white truncate max-w-[180px]">{activeEvent?.location || 'Jl. Dr. Murjani I, Tanjung Redeb'}</p>
+                    </div>
+                  </div>
+                </div>
+                {activeEvent?.description && (
+                  <p className="text-slate-300 text-xs pt-1">{activeEvent.description}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
+                <button
+                  onClick={() => setIsEditEventOpen(true)}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] cursor-pointer"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  <span>Ubah Informasi Event Stand</span>
+                </button>
+                <button
+                  onClick={() => onOpenStandMap(activeEvent)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>Lihat Peta Visual Stand</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Stand Table Container */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  Daftar 64 Stand & Penyewa - {activeEvent?.event_name}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Data 64 stand resmi Banuarasa Weekend Market beserta tenant UMKM yang terdaftar di Google Spreadsheet.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    setStandToEdit(null);
+                    setIsAssignStandOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Alokasi Stand Manual</span>
+                </button>
+                <button
+                  onClick={() => onOpenStandMap(activeEvent)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
+                >
+                  Buka Peta Visual 64 Stand
+                </button>
+              </div>
+            </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                  <th className="p-3">Kode Stand</th>
+                  <th className="p-3">Biaya Stand</th>
+                  <th className="p-3">Penyewa (Member ID)</th>
+                  <th className="p-3">Nama Usaha</th>
+                  <th className="p-3">Status Registrasi</th>
+                  <th className="p-3">Status Check-In</th>
+                  <th className="p-3 text-right">Aksi Super Admin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {registrations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-400">
+                      Belum ada stand yang terisi. Semua 64 stand siap di-booking!
+                    </td>
+                  </tr>
+                ) : (
+                  registrations.map((reg) => {
+                    const member = members.find((m) => m.member_id === reg.member_id);
+                    return (
+                      <tr key={reg.registration_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-black text-slate-900 text-sm">Stand {reg.stand_code}</td>
+                        <td className="p-3 font-bold text-slate-800">
+                          Rp{reg.stand_price.toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3">
+                          <p className="font-bold text-slate-900">{member?.nama_lengkap || reg.member_id}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">{reg.member_id}</p>
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700">{member?.nama_usaha || '-'}</td>
+                        <td className="p-3">
+                          <span
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                              reg.registration_status === 'CONFIRMED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : reg.registration_status === 'WAITING_PAYMENT'
+                                ? 'bg-amber-100 text-amber-900'
+                                : 'bg-sky-100 text-sky-800'
+                            }`}
+                          >
+                            {reg.registration_status}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                              reg.check_in_status === 'CHECKED_IN'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {reg.check_in_status === 'CHECKED_IN' ? 'HADIR DI LOKASI' : 'BELUM HADIR'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5">
+                          <button
+                            onClick={() => {
+                              setStandToEdit(reg);
+                              setIsAssignStandOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Ubah data stand"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Ubah</span>
+                          </button>
+                          <button
+                            onClick={() => setStandToDelete(reg)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Lepas alokasi stand ini"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Lepas</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+    )}
 
-      {/* Konten Tab */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        
-        {/* TAB 1: OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Simpanan Pokok</span>
-                <p className="text-xl font-black text-indigo-700 mt-1">
-                  Rp {(stats.totalSimpananPokok / 1000).toLocaleString('id-ID')}k
-                </p>
-                <span className="text-[10px] text-slate-400">Total modal awal anggota</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Simpanan Wajib</span>
-                <p className="text-xl font-black text-indigo-600 mt-1">
-                  Rp {(stats.totalSimpananWajib / 1000).toLocaleString('id-ID')}k
-                </p>
-                <span className="text-[10px] text-slate-400">Akumulasi iuran bulanan</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Total Omzet Event</span>
-                <p className="text-xl font-black text-emerald-600 mt-1">
-                  Rp {(stats.totalOmzet / 1000).toLocaleString('id-ID')}k
-                </p>
-                <span className="text-[10px] text-slate-400">Seluruh stand & event</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Stand Terisi</span>
-                <p className="text-xl font-black text-slate-800 mt-1">{stats.confirmedStands} Stand</p>
-                <span className="text-[10px] text-slate-400">Status terkonfirmasi</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Verifikasi Bayar</span>
-                <p className="text-xl font-black text-amber-600 mt-1">{stats.pendingPayments} Antrean</p>
-                <span className="text-[10px] text-slate-400">Perlu disetujui</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-500">Total Anggota</span>
-                <p className="text-xl font-black text-slate-800 mt-1">{stats.totalMembers} UMKM</p>
-                <span className="text-[10px] text-slate-400">Terdaftar di sistem</span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-base font-bold text-slate-800">Menunggu Verifikasi Pembayaran & Bukti Transfer</h2>
-                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
-                  {safePayments.filter(p => p?.verification_status === 'PENDING').length} Antrean
-                </span>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {safePayments.filter(p => p?.verification_status === 'PENDING').length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-500">Tidak ada bukti transfer yang perlu diverifikasi saat ini.</p>
-                ) : (
-                  safePayments.filter(p => p?.verification_status === 'PENDING').map(pay => (
-                    <div key={pay.payment_id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{pay.member_name}</span>
-                          <span className="text-xs text-slate-400">({pay.payment_id})</span>
-                        </div>
-                        <p className="text-sm text-slate-600 mt-0.5">
-                          Tipe: <strong className="text-slate-800">{pay.payment_type}</strong> — Rp {(pay.amount || 0).toLocaleString('id-ID')} via {pay.payment_method}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">Tanggal: {pay.payment_date}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedPayment(pay)}
-                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                        >
-                          Lihat Bukti
-                        </button>
-                        <button
-                          onClick={() => handleVerifyPayment(pay.payment_id, 'VERIFIED')}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
-                        >
-                          Setujui
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: MEMBERS (DILENGKAPI TOMBOL LIHAT PROFIL & EDIT KTA) */}
-        {activeTab === 'members' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
+    {/* MEMBERS DIRECTORY TAB (WITH CRUD ACTIONS) */}
+      {activeAdminTab === 'MEMBERS' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-bold text-slate-800">Manajemen Anggota UMKM</h2>
-                <p className="text-xs text-slate-400">Superadmin dapat melihat profil lengkap serta mendesain ulang KTA anggota</p>
+                <h3 className="text-lg font-black text-slate-900">Direktori Anggota UMKM ({members.length})</h3>
+                <p className="text-xs text-slate-500">
+                  Super Admin berhak menambah, mengubah profil, dan menghapus data anggota koperasi.
+                </p>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <input
-                  type="text"
-                  placeholder="Cari anggota / usaha / ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-emerald-500 w-full sm:w-64"
-                />
-                {isSuperAdmin && (
-                  <button
-                    onClick={handleOpenAddMember}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition whitespace-nowrap"
-                  >
-                    + Tambah Anggota
-                  </button>
-                )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setMemberToEdit(null);
+                    setIsAddMemberOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-purple-900 hover:bg-purple-950 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Anggota</span>
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh CSV</span>
+                </button>
               </div>
             </div>
+
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                  <tr>
-                    <th className="px-4 py-3">ID Anggota</th>
-                    <th className="px-4 py-3">Nama Anggota</th>
-                    <th className="px-4 py-3">Nama Usaha UMKM</th>
-                    <th className="px-4 py-3">Kategori</th>
-                    <th className="px-4 py-3">Kontak HP/WA</th>
-                    <th className="px-4 py-3">Status</th>
-                    {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi Superadmin</th>}
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                    <th className="p-3">No. Anggota</th>
+                    <th className="p-3">Nama Anggota</th>
+                    <th className="p-3">Nama Usaha / Brand</th>
+                    <th className="p-3">Kategori</th>
+                    <th className="p-3">No. WhatsApp</th>
+                    <th className="p-3">Status Akun</th>
+                    <th className="p-3">Status Koperasi (KBMB)</th>
+                    <th className="p-3 text-right">Aksi Super Admin</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {safeMembers
-                    .filter(m => 
-                      (m?.nama_lengkap || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (m?.nama_usaha || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      (m?.member_id || '').toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map(m => (
-                      <tr key={m.member_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs font-bold text-slate-800">
-                          {m.member_id}
+                  {members.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        Tidak ada anggota terdaftar. Klik 'Tambah Anggota' di atas.
+                      </td>
+                    </tr>
+                  ) : (
+                    members.map((m) => {
+                      const isCoop =
+                        m.is_cooperative_member !== undefined
+                          ? Boolean(m.is_cooperative_member)
+                          : (m.tipe_keanggotaan !== 'PASAR_ONLY' && m.status_koperasi !== 'BELUM_AKTIF');
+
+                      return (
+                      <tr key={m.member_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-mono font-bold text-emerald-700">{m.nomor_anggota}</td>
+                        <td className="p-3">
+                          <p className="font-bold text-slate-900">{m.nama_lengkap}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{m.member_id}</p>
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-900">{m.nama_lengkap}</td>
-                        <td className="px-4 py-3">{m.nama_usaha}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
-                            {m.kategori_usaha}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div>{m.nomor_hp}</div>
-                          <div className="text-slate-400">{m.email}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            m.status_keanggotaan === 'ACTIVE'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
+                        <td className="p-3 text-slate-700 font-medium">{m.nama_usaha}</td>
+                        <td className="p-3 text-slate-500">{m.kategori_usaha}</td>
+                        <td className="p-3 font-mono text-slate-600">{m.whatsapp}</td>
+                        <td className="p-3">
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                             {m.status_keanggotaan}
                           </span>
                         </td>
-                        {isSuperAdmin && (
-                          <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
-                            {/* Tombol Lihat Profil Anggota */}
-                            <button
-                              onClick={() => handleOpenViewProfile(m)}
-                              className="px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
-                              title="Lihat Profil Lengkap & Riwayat Anggota"
+                        <td className="p-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                                isCoop
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}
                             >
-                              👤 Profil
-                            </button>
-                            {/* Tombol Editing KTA Anggota */}
+                              <Building2 className="w-2.5 h-2.5" />
+                              <span>{isCoop ? 'Anggota Koperasi' : 'Bukan Anggota'}</span>
+                            </span>
+                            <span className="text-[9px] text-slate-400">
+                              {isCoop ? 'Wajib Simpanan Pokok & Wajib' : 'Hanya Stand Pasar (Bebas Iuran)'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                          {/* Quick Toggle Status Koperasi Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMemberKoperasi(m.member_id, isCoop)}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer border ${
+                              isCoop
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                            }`}
+                            title={
+                              isCoop
+                                ? 'Ubah menjadi Bukan Anggota Koperasi (Bebas Iuran)'
+                                : 'Tetapkan sebagai Anggota Koperasi Penuh (Kewajiban Iuran Aktif)'
+                            }
+                          >
+                            <Building2 className="w-3 h-3 text-amber-600" />
+                            <span>{isCoop ? 'Ubah ke Non-Koperasi' : 'Jadikan Anggota'}</span>
+                          </button>
+                          <a
+                            href={`https://wa.me/${String(m.whatsapp || m.nomor_hp || '').replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs transition-colors inline-block"
+                          >
+                            WA
+                          </a>
+
+                          {onOpenBarcodeModal && (
                             <button
-                              onClick={() => handleOpenKTAStudio(m)}
-                              className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                              title="Edit Tampilan & Desain KTA Anggota"
+                              onClick={() => onOpenBarcodeModal(m)}
+                              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-500/30"
+                              title="Generate Barcode 1D & QR Code Anggota"
                             >
-                              🎴 Edit KTA
+                              <QrCode className="w-3 h-3 text-amber-600" />
+                              <span>Barcode</span>
                             </button>
+                          )}
+
+                          {onOpenChangePassword && (
                             <button
-                              onClick={() => handleDeleteMember(m.member_id, m.nama_lengkap)}
-                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                              onClick={() => onOpenChangePassword(m, true)}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-amber-200/60"
+                              title="Reset / Ganti Kata Sandi Anggota"
                             >
-                              Hapus
+                              <KeyRound className="w-3 h-3 text-amber-600" />
+                              <span>Sandi</span>
                             </button>
-                          </td>
-                        )}
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setMemberToEdit(m);
+                              setIsAddMemberOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Ubah Profil Anggota"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Ubah</span>
+                          </button>
+
+                          <button
+                            id={`btn-delete-member-${m.member_id}`}
+                            onClick={() => setMemberToDelete(m)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Hapus Anggota oleh Super Admin"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </td>
                       </tr>
-                    ))}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
 
-        {/* TAB 3: KEUANGAN SIMPANAN */}
-        {activeTab === 'savings' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Simpanan Pokok</span>
-                <p className="text-2xl font-black text-indigo-700 mt-1">Rp {stats.totalSimpananPokok.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Simpanan awal wajib anggota</p>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Simpanan Wajib</span>
-                <p className="text-2xl font-black text-indigo-600 mt-1">Rp {stats.totalSimpananWajib.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Iuran berkala bulanan seluruh anggota</p>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Kas Koperasi</span>
-                <p className="text-2xl font-black text-emerald-700 mt-1">Rp {stats.grandTotalSimpanan.toLocaleString('id-ID')}</p>
-                <p className="text-[11px] text-slate-500 mt-1">Akumulasi total simpanan anggota</p>
-              </div>
+          {/* Legalitas Documents Verification Table */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                Verifikasi Dokumen Legalitas UMKM ({documents.length})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pemeriksaan Nomor Induk Berusaha (NIB) dan Sertifikat Halal binaan koperasi di Google Drive.
+              </p>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-base font-bold text-slate-800">Rincian Transaksi Simpanan Anggota</h2>
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => setIsSavingModalOpen(true)}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                  >
-                    + Catat Simpanan Manual
-                  </button>
-                )}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                    <tr>
-                      <th className="px-4 py-3">ID Transaksi</th>
-                      <th className="px-4 py-3">Nama Anggota</th>
-                      <th className="px-4 py-3">Jenis Simpanan</th>
-                      <th className="px-4 py-3">Jumlah Masuk</th>
-                      <th className="px-4 py-3">Waktu Pencatatan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {safeSavings.map(s => (
-                      <tr key={s.saving_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs">{s.saving_id}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{s.member_name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                            s.saving_type === 'SIMPANAN_POKOK' ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'
-                          }`}>
-                            {s.saving_type === 'SIMPANAN_POKOK' ? 'SIMPANAN POKOK' : 'SIMPANAN WAJIB'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-black text-indigo-700">Rp {(s.amount || 0).toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">
-                          {s.created_at ? new Date(s.created_at).toLocaleString('id-ID') : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: REKAP PENJUALAN MINGGUAN */}
-        {activeTab === 'reports' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">Laporan Penjualan Berdasarkan Stand & Event Mingguan</h2>
-                  <p className="text-xs text-slate-500">Omzet kumulatif dan performa penjualan mingguan UMKM</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    value={filterEventTitle}
-                    onChange={e => setFilterEventTitle(e.target.value)}
-                    className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white font-semibold focus:outline-emerald-500"
-                  >
-                    <option value="ALL">Semua Event Mingguan</option>
-                    {uniqueEventsList.map(ev => (
-                      <option key={ev} value={ev}>{ev}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={filterStandCode}
-                    onChange={e => setFilterStandCode(e.target.value)}
-                    className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white font-semibold focus:outline-emerald-500"
-                  >
-                    <option value="ALL">Semua Nomor Stand</option>
-                    {uniqueStandsList.map(st => (
-                      <option key={st} value={st}>Stand {st}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                    <tr>
-                      <th className="px-4 py-3">Event Mingguan</th>
-                      <th className="px-4 py-3">Kode Stand</th>
-                      <th className="px-4 py-3">Tenant / Anggota</th>
-                      <th className="px-4 py-3">Tanggal Penjualan</th>
-                      <th className="px-4 py-3">Total Omzet</th>
-                      <th className="px-4 py-3">Catatan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredSalesReports.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-10 text-slate-400">Tidak ada data penjualan yang cocok dengan filter.</td>
-                      </tr>
-                    ) : (
-                      filteredSalesReports.map(rep => (
-                        <tr key={rep.sales_report_id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-semibold text-slate-900">{rep.event_title}</td>
-                          <td className="px-4 py-3 font-black text-emerald-600 text-base">{rep.stand_code}</td>
-                          <td className="px-4 py-3">
-                            <div className="font-bold text-slate-800">{rep.member_name}</div>
-                            <div className="text-[11px] text-slate-400">ID: {rep.member_id}</div>
-                          </td>
-                          <td className="px-4 py-3 text-xs">{rep.report_date}</td>
-                          <td className="px-4 py-3 font-black text-slate-900 text-base">
-                            Rp {(rep.total_turnover || 0).toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{rep.notes || '-'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: STANDS */}
-        {activeTab === 'stands' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50">
-                <div>
-                  <h2 className="text-base font-bold text-slate-800">Master Stand & Harga Sewa</h2>
-                  <p className="text-xs text-slate-500">Super Admin dapat memberi nama, mengatur zona, dan menentukan harga tiap stand</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isSuperAdmin && (
-                    <>
-                      <button
-                        onClick={() => setIsAssistBookingOpen(true)}
-                        className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl shadow-xs transition"
-                      >
-                        ⚡ Bookingkan untuk Tenant
-                      </button>
-                      <button
-                        onClick={handleOpenAddStand}
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                      >
-                        + Tambah Stand Baru
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="overflow-x-auto max-h-[380px]">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3">Nama / Kode Stand</th>
-                      <th className="px-4 py-3">Zona</th>
-                      <th className="px-4 py-3">Kategori</th>
-                      <th className="px-4 py-3">Harga Sewa Stand</th>
-                      <th className="px-4 py-3">Status</th>
-                      {isSuperAdmin && <th className="px-4 py-3 text-right">Aksi Superadmin</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {safeStands.map(s => (
-                      <tr key={s.stand_id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-bold text-slate-900 text-base">{s.stand_code}</td>
-                        <td className="px-4 py-3 text-xs">{s.zone}</td>
-                        <td className="px-4 py-3 text-xs">{s.category}</td>
-                        <td className="px-4 py-3 font-bold text-emerald-600 text-sm">
-                          Rp {(s.base_price || 0).toLocaleString('id-ID')}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">{s.status}</span>
-                        </td>
-                        {isSuperAdmin && (
-                          <td className="px-4 py-3 text-right space-x-2">
-                            <button
-                              onClick={() => handleOpenEditStand(s)}
-                              className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                            >
-                              ✏️ Atur Nama & Harga
-                            </button>
-                            <button
-                              onClick={() => handleDeleteStand(s.stand_id, s.stand_code)}
-                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition"
-                            >
-                              Hapus
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-              <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                <h2 className="text-base font-bold text-slate-800">Status Booking Stand Tenant</h2>
-                <p className="text-xs text-slate-500">Super Admin dapat mengonfirmasi stand langsung atau melepaskannya kembali ke publik</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                    <tr>
-                      <th className="px-4 py-3">Stand</th>
-                      <th className="px-4 py-3">Nama Tenant / Usaha</th>
-                      <th className="px-4 py-3">Event</th>
-                      <th className="px-4 py-3">Biaya</th>
-                      <th className="px-4 py-3">Status Saat Ini</th>
-                      {isSuperAdmin && <th className="px-4 py-3 text-right">Kontrol Status</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {safeRegistrations.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-8 text-slate-400">Belum ada tenant yang memesan stand.</td>
-                      </tr>
-                    ) : (
-                      safeRegistrations.map(r => (
-                        <tr key={r.registration_id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-bold text-emerald-600 text-base">{r.stand_code}</td>
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-slate-800">{r.member_name}</div>
-                            <div className="text-xs text-slate-400">{r.nama_usaha}</div>
-                          </td>
-                          <td className="px-4 py-3 text-xs">{r.event_title}</td>
-                          <td className="px-4 py-3 font-medium">Rp {(r.total_fee || 0).toLocaleString('id-ID')}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                              r.status === 'CONFIRMED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.status === 'RESERVED'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {r.status}
-                            </span>
-                          </td>
-                          {isSuperAdmin && (
-                            <td className="px-4 py-3 text-right">
-                              {r.status === 'CONFIRMED' || r.status === 'RESERVED' ? (
-                                <button
-                                  onClick={() => handleToggleStandBookingStatus(r.registration_id, r.status, r.stand_code)}
-                                  className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition"
-                                >
-                                  Lepaskan Stand
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleToggleStandBookingStatus(r.registration_id, r.status, r.stand_code)}
-                                  className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                                >
-                                  Set Terkonfirmasi
-                                </button>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: PAYMENTS */}
-        {activeTab === 'payments' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800">Seluruh Riwayat Pembayaran</h2>
-            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                  <tr>
-                    <th className="px-4 py-3">ID Pembayaran</th>
-                    <th className="px-4 py-3">Nama Anggota</th>
-                    <th className="px-4 py-3">Tipe</th>
-                    <th className="px-4 py-3">Nominal</th>
-                    <th className="px-4 py-3">Metode</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Verifikator</th>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                    <th className="p-3">ID Dokumen</th>
+                    <th className="p-3">Anggota</th>
+                    <th className="p-3">Jenis Dokumen</th>
+                    <th className="p-3">Nomor Legalitas</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Aksi Verifikasi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {safePayments.map(p => (
-                    <tr key={p.payment_id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-xs">{p.payment_id}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{p.member_name}</td>
-                      <td className="px-4 py-3 text-xs">{p.payment_type}</td>
-                      <td className="px-4 py-3 font-bold text-slate-800">Rp {(p.amount || 0).toLocaleString('id-ID')}</td>
-                      <td className="px-4 py-3 text-xs">{p.payment_method}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          p.verification_status === 'VERIFIED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : p.verification_status === 'PENDING'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {p.verification_status}
-                        </span>
+                  {documents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-slate-400">
+                        Tidak ada dokumen legalitas yang diunggah.
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{p.verified_by || '-'}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    documents.map((doc) => {
+                      const member = members.find((m) => m.member_id === doc.member_id);
+                      return (
+                        <tr key={doc.document_id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 font-mono font-bold text-slate-700">{doc.document_id}</td>
+                          <td className="p-3">
+                            <p className="font-bold text-slate-900">{member?.nama_lengkap || doc.member_id}</p>
+                            <p className="text-[10px] text-slate-500">{member?.nama_usaha}</p>
+                          </td>
+                          <td className="p-3 font-bold text-slate-800">{doc.document_type}</td>
+                          <td className="p-3 font-mono text-slate-600">{doc.document_number}</td>
+                          <td className="p-3">
+                            <span
+                              className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                                doc.verification_status === 'VERIFIED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : doc.verification_status === 'PENDING'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {doc.verification_status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right space-x-1.5">
+                            {doc.verification_status === 'PENDING' && (
+                              <>
+                                <button
+                                  onClick={() => handleApproveDocument(doc.document_id)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>Setujui</span>
+                                </button>
+                                <button
+                                  onClick={() => setRejectingDocId(doc.document_id)}
+                                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>Tolak</span>
+                                </button>
+                              </>
+                            )}
+                            {doc.drive_url && (
+                              <a
+                                href={doc.drive_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>Lihat File</span>
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB 7: BERITA & EDITORIAL */}
-        {activeTab === 'editorials' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50/50">
-              <div>
-                <h2 className="text-base font-bold text-slate-800">Manajemen Kabar & Editorial Banuarasa</h2>
-                <p className="text-xs text-slate-500">Kelola artikel publikasi untuk pengunjung website</p>
-              </div>
-              {isSuperAdmin && (
-                <button
-                  onClick={handleOpenAddArticle}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                >
-                  + Tulis Artikel Baru
-                </button>
-              )}
-            </div>
-            <div className="divide-y divide-slate-100">
-              {safeArticles.map(art => (
-                <div key={art.article_id} className="p-5 flex justify-between items-center hover:bg-slate-50">
-                  <div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">{art.tag}</span>
-                    <h3 className="text-base font-bold text-slate-900 mt-1">{art.title}</h3>
-                    <p className="text-xs text-slate-400">{art.published_at} • {art.author}</p>
-                  </div>
-                  {isSuperAdmin && (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleOpenEditArticle(art)} className="px-3 py-1 text-xs bg-slate-100 rounded-lg">Edit</button>
-                      <button onClick={() => handleDeleteArticle(art.article_id, art.title)} className="px-3 py-1 text-xs bg-red-50 text-red-600 rounded-lg">Hapus</button>
-                    </div>
-                  )}
+      {/* SAVINGS TAB */}
+      {activeAdminTab === 'SAVINGS' && (
+        <div className="space-y-6">
+          {/* Form Pengaturan Besaran Simpanan Pokok & Wajib oleh Admin */}
+          <div className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-6 sm:p-7 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                  <Building2 className="w-5 h-5" />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 8: EVENTS */}
-        {activeTab === 'events' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800">Daftar Agenda Acara Banuarasa</h2>
-              {isSuperAdmin && (
-                <button onClick={handleOpenAddEvent} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl">
-                  + Tambah Event Baru
-                </button>
-              )}
-            </div>
-            <div className="divide-y divide-slate-100">
-              {safeEvents.map(ev => (
-                <div key={ev.event_id} className="p-4 flex justify-between items-center">
-                  <div>
-                    <h3 className="font-bold text-slate-900">{ev.title}</h3>
-                    <p className="text-xs text-slate-400">{ev.event_date} • {ev.location} • {ev.total_stands} Stand</p>
-                  </div>
-                  {isSuperAdmin && (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleOpenEditEvent(ev)} className="px-3 py-1 text-xs bg-slate-100 rounded-lg">Edit</button>
-                      <button onClick={() => handleDeleteEvent(ev.event_id, ev.title)} className="px-3 py-1 text-xs bg-red-50 text-red-600 rounded-lg">Hapus</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 9: AUDIT TRAIL */}
-        {activeTab === 'audit' && (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800">Audit Trail (Aktivitas Sistem)</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-100">
-                  <tr>
-                    <th className="px-4 py-3">Waktu (WITA)</th>
-                    <th className="px-4 py-3">Pelaku</th>
-                    <th className="px-4 py-3">Aksi</th>
-                    <th className="px-4 py-3">Detail</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-mono text-xs">
-                  {safeAuditLogs.map(log => (
-                    <tr key={log.log_id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{log.timestamp_wita}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800 font-sans">{log.actor_name}</td>
-                      <td className="px-4 py-3 text-emerald-700 font-bold">{log.action}</td>
-                      <td className="px-4 py-3 text-slate-600 font-sans">{log.details}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* -------------------------------------------------- */}
-      {/* MODAL 1: LIHAT & EDIT PROFIL ANGGOTA (SUPERADMIN)   */}
-      {/* -------------------------------------------------- */}
-      {viewingProfileMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl my-6 border border-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Profil Anggota UMKM</h3>
-                <p className="text-xs text-slate-400 font-mono">ID: {viewingProfileMember.member_id}</p>
-              </div>
-              <button
-                onClick={() => setViewingProfileMember(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            {!isEditingInProfileModal ? (
-              // TAMPILAN INSPEKSI DETAIL PROFIL
-              <div className="space-y-4 text-xs">
-                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <div className="w-16 h-16 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-2xl font-black flex-shrink-0 overflow-hidden">
-                    {viewingProfileMember.avatar_url ? (
-                      <img src={viewingProfileMember.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      (viewingProfileMember.nama_lengkap || 'M').charAt(0)
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="text-base font-black text-slate-900">{viewingProfileMember.nama_lengkap}</h4>
-                    <p className="text-xs font-bold text-emerald-700">{viewingProfileMember.nama_usaha}</p>
-                    <span className="mt-1 inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      {viewingProfileMember.status_keanggotaan}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 bg-white p-4 rounded-2xl border border-slate-200">
-                  <div>
-                    <span className="text-slate-400 block">Kategori Usaha</span>
-                    <strong className="text-slate-800 text-sm">{viewingProfileMember.kategori_usaha}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">No. WhatsApp / HP</span>
-                    <strong className="text-slate-800 text-sm font-mono">{viewingProfileMember.nomor_hp}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Email Terdaftar</span>
-                    <strong className="text-slate-800 text-sm">{viewingProfileMember.email || '-'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Domisili di Berau</span>
-                    <strong className="text-slate-800 text-sm">{viewingProfileMember.alamat || '-'}</strong>
-                  </div>
-                  <div className="col-span-2 pt-2 border-t border-slate-100">
-                    <span className="text-slate-400 block">Waktu Registrasi Akun</span>
-                    <span className="text-slate-600 font-mono">
-                      {viewingProfileMember.created_at ? new Date(viewingProfileMember.created_at).toLocaleString('id-ID') : '-'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => setIsEditingInProfileModal(true)}
-                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition"
-                  >
-                    ✏️ Edit Data Profil
-                  </button>
-                  <button
-                    onClick={() => {
-                      const target = viewingProfileMember;
-                      setViewingProfileMember(null);
-                      handleOpenKTAStudio(target);
-                    }}
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition"
-                  >
-                    🎴 Buka Studio KTA
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // FORM EDIT DATA PROFIL ANGGOTA
-              <form onSubmit={handleSaveProfileFromModal} className="space-y-3 text-xs">
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap Pemilik</label>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Pengaturan Kewajiban Simpanan Koperasi (Form Admin)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Tentukan jumlah simpanan pokok (bisa dicicil) dan simpanan wajib bulanan untuk seluruh anggota koperasi.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 self-start sm:self-center">
+                Berlaku untuk Anggota Koperasi
+              </span>
+            </div>
+
+            {coopNotice && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-900 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{coopNotice}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCoopConfig} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Total Simpanan Pokok (Rp) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
                   <input
-                    type="text"
+                    type="number"
+                    min={0}
+                    step={1000}
                     required
-                    value={viewingProfileMember.nama_lengkap}
-                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, nama_lengkap: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
+                    value={coopPokok}
+                    onChange={(e) => setCoopPokok(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Nama Usaha UMKM</label>
-                  <input
-                    type="text"
-                    required
-                    value={viewingProfileMember.nama_usaha}
-                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, nama_usaha: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Kategori Produk</label>
-                    <select
-                      value={viewingProfileMember.kategori_usaha}
-                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, kategori_usaha: e.target.value as StandCategory })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
-                    >
-                      <option value="KULINER">KULINER</option>
-                      <option value="KERAJINAN">KERAJINAN</option>
-                      <option value="FASHION">FASHION</option>
-                      <option value="JASA">JASA</option>
-                      <option value="UMUM">UMUM</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Status Keanggotaan</label>
-                    <select
-                      value={viewingProfileMember.status_keanggotaan}
-                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, status_keanggotaan: e.target.value as any })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold"
-                    >
-                      <option value="ACTIVE">ACTIVE (Aktif)</option>
-                      <option value="PENDING_VERIFICATION">PENDING_VERIFICATION</option>
-                      <option value="SUSPENDED">SUSPENDED (Ditangguhkan)</option>
-                      <option value="INACTIVE">INACTIVE (Non-Aktif)</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">No. WhatsApp / HP</label>
-                    <input
-                      type="text"
-                      required
-                      value={viewingProfileMember.nomor_hp}
-                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, nomor_hp: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={viewingProfileMember.email}
-                      onChange={e => setViewingProfileMember({ ...viewingProfileMember, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Alamat di Berau</label>
-                  <input
-                    type="text"
-                    value={viewingProfileMember.alamat}
-                    onChange={e => setViewingProfileMember({ ...viewingProfileMember, alamat: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                  />
-                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Dibayar sekali saat awal bergabung (bisa dicicil).</p>
+              </div>
 
-                <div className="flex gap-2 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingInProfileModal(false)}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl"
-                  >
-                    Batal
-                  </button>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Nominal Cicilan Pokok / Transaksi (Rp)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    required
+                    value={coopPokokCicilan}
+                    onChange={(e) => setCoopPokokCicilan(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Rekomendasi cicilan: {Math.ceil(coopPokok / (coopPokokCicilan || 1))}x setoran.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Simpanan Wajib per Bulan (Rp) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    required
+                    value={coopWajib}
+                    onChange={(e) => setCoopWajib(Number(e.target.value))}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Kewajiban rutin bulanan seluruh anggota aktif.</p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">Nama Bank & Rekening</label>
+                <input
+                  type="text"
+                  required
+                  value={coopBank}
+                  onChange={(e) => setCoopBank(e.target.value)}
+                  placeholder="Bank Kaltimtara / BSI"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
+                />
+                <input
+                  type="text"
+                  required
+                  value={coopRek}
+                  onChange={(e) => setCoopRek(e.target.value)}
+                  placeholder="Nomor Rekening"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <label className="block text-xs font-black text-slate-700 mb-1">Atas Nama Rekening & Kontak WA</label>
+                <input
+                  type="text"
+                  required
+                  value={coopAtasNama}
+                  onChange={(e) => setCoopAtasNama(e.target.value)}
+                  placeholder="Koperasi Berau Melangkah Bersama"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
+                />
+                <input
+                  type="text"
+                  value={coopWa}
+                  onChange={(e) => setCoopWa(e.target.value)}
+                  placeholder="6281234567890 (WA Konfirmasi)"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1">Catatan Tambahan untuk Anggota</label>
+                  <input
+                    type="text"
+                    value={coopCatatan}
+                    onChange={(e) => setCoopCatatan(e.target.value)}
+                    placeholder="Contoh: Simpanan Pokok dapat dicicil maksimal 5 kali..."
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                  />
+                </div>
+                <div className="mt-3 text-right">
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-xs"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Simpan Perubahan
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>SIMPAN PENGATURAN SIMPANAN</span>
                   </button>
                 </div>
-              </form>
-            )}
+              </div>
+            </form>
           </div>
-        </div>
-      )}
 
-      {/* -------------------------------------------------- */}
-      {/* MODAL 2: EDITING KTA ANGGOTA (KTA STUDIO)          */}
-      {/* -------------------------------------------------- */}
-      {selectedMemberForKTA && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden my-6 border border-slate-200 flex flex-col lg:flex-row max-h-[92vh]">
-            
-            {/* PANEL KIRI: PREVIEW KTA */}
-            <div className="lg:w-7/12 p-6 sm:p-8 bg-slate-100/80 border-r border-slate-200 flex flex-col justify-between overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-                    KTA Studio Editor
-                  </span>
-                  <button onClick={() => window.print()} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl shadow-2xs">
-                    🖨️ Cetak Kartu
-                  </button>
-                </div>
-
-                <div 
-                  id="kta-canvas-preview"
-                  style={{
-                    background: 
-                      ktaDesignConfig.themePreset === 'EMERALD'
-                        ? 'linear-gradient(135deg, #064e3b 0%, #0f172a 100%)'
-                        : ktaDesignConfig.themePreset === 'DARK_VIP'
-                        ? 'linear-gradient(135deg, #1e1b4b 0%, #09090b 100%)'
-                        : ktaDesignConfig.themePreset === 'SLATE_CLEAN'
-                        ? 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'
-                        : 'linear-gradient(135deg, #022c22 0%, #0f172a 100%)'
+                <h3 className="text-lg font-black text-slate-900">Buku Kas Simpanan Anggota</h3>
+                <p className="text-xs text-slate-500">
+                  Pencatatan Simpanan Pokok, Simpanan Wajib bulanan, dan Simpanan Sukarela.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSavingToEdit(null);
+                    setIsAddSavingOpen(true);
                   }}
-                  className={`relative w-full rounded-2xl p-6 shadow-2xl border transition-all duration-300 overflow-hidden min-h-[260px] flex flex-col justify-between ${
-                    ktaDesignConfig.themePreset === 'SLATE_CLEAN' ? 'text-slate-900 border-slate-300' : 'text-white border-white/15'
-                  }`}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
-                  {ktaDesignConfig.bgImageUrl && (
-                    <div 
-                      className="absolute inset-0 bg-cover bg-center pointer-events-none transition-opacity duration-200"
-                      style={{ backgroundImage: `url(${ktaDesignConfig.bgImageUrl})`, opacity: ktaDesignConfig.bgOpacity / 100 }}
-                    />
-                  )}
-
-                  <div className={`absolute inset-0 pointer-events-none ${ktaDesignConfig.overlayColor === 'DARK' ? 'bg-black/35' : 'bg-white/20'}`} />
-
-                  <div className="relative z-10 flex items-center justify-between border-b border-current/15 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center font-black text-slate-950 text-sm shadow-xs">B</div>
-                      <div>
-                        <span className="text-xs font-black tracking-wider uppercase block leading-tight">BANUARASA</span>
-                        <span className="text-[9px] font-semibold opacity-75 tracking-wider block">{ktaDesignConfig.customTitle}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        {selectedMemberForKTA.status_keanggotaan}
-                      </span>
-                      {ktaDesignConfig.showRegId && (
-                        <span className="block text-[9px] font-mono opacity-60 mt-0.5">{selectedMemberForKTA.member_id}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className={`relative z-10 mt-4 flex items-center gap-5 ${
-                    ktaDesignConfig.barcodePos === 'LEFT_PANEL' ? 'flex-row-reverse' : ''
-                  }`}>
-                    {/* Foto KTA */}
-                    <div className="w-20 h-24 rounded-xl border-2 border-current/30 overflow-hidden bg-slate-800/40 flex items-center justify-center flex-shrink-0">
-                      {selectedMemberForKTA.avatar_url ? (
-                        <img src={selectedMemberForKTA.avatar_url} alt="Foto" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-2xl font-black opacity-40">{(selectedMemberForKTA.nama_lengkap || 'M').charAt(0)}</span>
-                      )}
-                    </div>
-
-                    <div className="flex-1 space-y-1">
-                      <h4 className="text-base font-black leading-snug">{selectedMemberForKTA.nama_lengkap}</h4>
-                      <p className="text-xs font-bold opacity-90">{selectedMemberForKTA.nama_usaha}</p>
-                      <div className="pt-1 flex flex-wrap gap-1 text-[10px]">
-                        {ktaDesignConfig.showCategory && (
-                          <span className="px-2 py-0.5 rounded-md bg-white/10 font-semibold">🏷️ {selectedMemberForKTA.kategori_usaha}</span>
-                        )}
-                        {ktaDesignConfig.showAddress && (
-                          <span className="px-2 py-0.5 rounded-md bg-white/10">📍 {selectedMemberForKTA.alamat}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Barcode KTA */}
-                    {(ktaDesignConfig.barcodePos === 'BOTTOM_RIGHT' || ktaDesignConfig.barcodePos === 'LEFT_PANEL') && (
-                      <div className={`flex-shrink-0 bg-white p-1.5 shadow-md flex flex-col items-center ${
-                        ktaDesignConfig.barcodeShape === 'ROUNDED' 
-                          ? 'rounded-2xl border-2 border-emerald-500' 
-                          : ktaDesignConfig.barcodeShape === 'MINIMAL'
-                          ? 'rounded-none border-b-2 border-slate-900'
-                          : 'rounded-xl'
-                      }`}>
-                        <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
-                            JSON.stringify({ id: selectedMemberForKTA.member_id, nama: selectedMemberForKTA.nama_lengkap, usaha: selectedMemberForKTA.nama_usaha, app: 'BANUARASA' })
-                          )}`} 
-                          alt="QR Code" 
-                          className="w-16 h-16 object-contain" 
-                        />
-                        <span className="text-[7px] font-mono text-slate-800 font-bold mt-0.5">SCAN KTA</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {ktaDesignConfig.barcodePos === 'TOP_RIGHT' && (
-                    <div className="absolute top-14 right-6 z-20 bg-white p-1 rounded-lg shadow-md">
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(selectedMemberForKTA.member_id)}`} 
-                        alt="QR Code" 
-                        className="w-14 h-14" 
-                      />
-                    </div>
-                  )}
-
-                  <div className="relative z-10 mt-4 pt-2 border-t border-current/15 flex items-center justify-between text-[8px] opacity-70">
-                    <span>Kabupaten Berau • Kalimantan Timur</span>
-                    <span>Pindai barcode untuk memeriksa keabsahan data</span>
-                  </div>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Setoran Simpanan</span>
+                </button>
+                <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-right">
+                  <p className="text-[10px] font-bold text-emerald-800 uppercase">Total Kas Simpanan</p>
+                  <p className="text-lg font-black text-emerald-950">
+                    Rp{stats.totalSemuaSimpanan.toLocaleString('id-ID')}
+                  </p>
                 </div>
               </div>
+            </div>
 
-              {ktaSaveAlert && (
-                <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl text-center">
-                  {ktaSaveAlert}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                  <th className="p-3">ID Simpanan</th>
+                  <th className="p-3">Anggota</th>
+                  <th className="p-3">Jenis Simpanan</th>
+                  <th className="p-3">Periode</th>
+                  <th className="p-3">Nominal</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Aksi Super Admin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {savings.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-400">
+                      Belum ada mutasi simpanan tercatat.
+                    </td>
+                  </tr>
+                ) : (
+                  savings.map((sav) => {
+                    const member = members.find((m) => m.member_id === sav.member_id);
+                    return (
+                      <tr key={sav.saving_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-mono font-bold text-slate-700">{sav.saving_id}</td>
+                        <td className="p-3 font-bold text-slate-900">{member?.nama_lengkap || sav.member_id}</td>
+                        <td className="p-3">{sav.saving_type.replace(/_/g, ' ')}</td>
+                        <td className="p-3 text-slate-500">{sav.period_month_year}</td>
+                        <td className="p-3 font-black text-emerald-700">
+                          Rp{sav.amount.toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3">
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            {sav.payment_status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5">
+                          <button
+                            onClick={() => {
+                              setSavingToEdit(sav);
+                              setIsAddSavingOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Ubah simpanan"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Ubah</span>
+                          </button>
+                          <button
+                            onClick={() => setSavingToDelete(sav)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Hapus simpanan"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* SALES REPORTS TAB */}
+      {activeAdminTab === 'SALES' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Laporan Omzet Penjualan UMKM</h3>
+              <p className="text-xs text-slate-500">
+                Monitoring perputaran ekonomi mingguan dari stand Banuarasa Weekend Market.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setSalesToEdit(null);
+                  setIsAddSalesOpen(true);
+                }}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Input Laporan Omzet</span>
+              </button>
+              <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 text-right">
+                <p className="text-[10px] font-bold text-blue-800 uppercase">Total Omzet UMKM</p>
+                <p className="text-lg font-black text-blue-950">
+                  Rp{stats.totalOmzetUMKM.toLocaleString('id-ID')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-bold bg-slate-50">
+                  <th className="p-3">ID Laporan</th>
+                  <th className="p-3">Tenant / Anggota</th>
+                  <th className="p-3">Stand</th>
+                  <th className="p-3">Omzet Kotor</th>
+                  <th className="p-3">Laba Bersih</th>
+                  <th className="p-3">Produk Terlaris</th>
+                  <th className="p-3">Porsi Terjual</th>
+                  <th className="p-3 text-right">Aksi Super Admin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {salesReports.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                      Belum ada laporan omzet yang dikirimkan.
+                    </td>
+                  </tr>
+                ) : (
+                  salesReports.map((sr) => {
+                    const member = members.find((m) => m.member_id === sr.member_id);
+                    return (
+                      <tr key={sr.sales_report_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-mono font-bold text-slate-700">{sr.sales_report_id}</td>
+                        <td className="p-3">
+                          <p className="font-bold text-slate-900">{member?.nama_usaha || sr.member_id}</p>
+                          <p className="text-[10px] text-slate-500">{member?.nama_lengkap}</p>
+                        </td>
+                        <td className="p-3 font-black text-emerald-700">{sr.registration_id}</td>
+                        <td className="p-3 font-black text-slate-900">
+                          Rp{sr.gross_sales.toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3 font-bold text-emerald-700">
+                          Rp{sr.net_profit.toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3 text-slate-800">{sr.notes || 'Menu Utama'}</td>
+                        <td className="p-3 font-semibold text-slate-600">{sr.total_items_sold} Item</td>
+                        <td className="p-3 text-right space-x-1.5">
+                          <button
+                            onClick={() => {
+                              setSalesToEdit(sr);
+                              setIsAddSalesOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Ubah laporan omzet"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Ubah</span>
+                          </button>
+                          <button
+                            onClick={() => setSalesToDelete(sr)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="Hapus laporan omzet"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIT LOGS & EXPORT TAB */}
+      {activeAdminTab === 'AUDIT' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Audit Trail & Google Sheets Export</h3>
+              <p className="text-xs text-slate-500">
+                Rekaman histori seluruh transaksi, mutasi simpanan, dan verifikasi admin.
+              </p>
+            </div>
+            <button
+              onClick={handleExportCSV}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Ekspor Data CSV</span>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {auditLogs.map((log) => (
+              <div
+                key={log.log_id}
+                className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-start justify-between gap-4 text-xs"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {log.action}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                      Modul: {log.module}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">User: {log.user_id}</span>
+                  </div>
+                  <p className="text-slate-700 text-xs leading-relaxed">{log.description}</p>
                 </div>
+                <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                  {new Date(log.timestamp).toLocaleString('id-ID')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* KTA STUDIO (MEMBER CARD DESIGNER) TAB */}
+      {activeAdminTab === 'CARD_STUDIO' && (
+        <AdminCardStudio
+          adminUsername={adminId}
+          onSaved={() => showToast('Desain KTA Digital berhasil diperbarui & disinkronkan ke seluruh sistem!')}
+        />
+      )}
+
+      {/* BRANDING, LOGO, BANNER & MEDIA ASSETS MANAGER TAB */}
+      {activeAdminTab === 'BRANDING' && (
+        <AdminMediaManager
+          adminUsername={adminId}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* ANNOUNCEMENTS (PAPAN PEMBERITAHUAN BARA) TAB */}
+      {activeAdminTab === 'ANNOUNCEMENTS' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-amber-50 via-orange-50/50 to-white rounded-3xl border border-amber-200/80 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-amber-400 bg-amber-100 p-1 shrink-0 shadow-sm">
+                <img src={BARA_ASSETS.mascot} alt="Bara" className="w-full h-full object-cover" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="bg-amber-600 text-white font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Redaksi Resmi Bara
+                  </span>
+                  <span className="text-xs text-amber-900 font-bold">Otoritas Superadmin</span>
+                </div>
+                <h3 className="text-lg font-black text-slate-900">Manajemen Redaksi Papan Pemberitahuan</h3>
+                <p className="text-xs text-slate-600 max-w-xl">
+                  Kelola dan sunting teks redaksi pengumuman resmi pasar mingguan, simpanan, dan panduan UMKM yang dibagikan maskot Bara kepada anggota.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {onOpenNoticeBoard && (
+                <button
+                  onClick={onOpenNoticeBoard}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-black text-amber-300 border border-amber-400 text-xs font-black rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Eye className="w-4 h-4 text-amber-400" />
+                  <span>Lihat Tampilan Live</span>
+                </button>
               )}
+              <button
+                onClick={handleOpenAddAnnouncement}
+                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tulis Pengumuman Baru</span>
+              </button>
+            </div>
+          </div>
 
-              <div className="mt-6 flex gap-2">
-                <button onClick={() => setSelectedMemberForKTA(null)} className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-slate-200 rounded-xl">
-                  Tutup
-                </button>
-                <button onClick={handleSaveKTAStudio} className="flex-1 py-2.5 text-xs font-black text-white bg-emerald-600 rounded-xl shadow-md">
-                  💾 Simpan Perubahan KTA
-                </button>
+          {/* List of Announcements */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-amber-600" />
+                <h4 className="text-sm font-black text-slate-900">
+                  Daftar Siaran & Pengumuman ({storage.getAnnouncements().length})
+                </h4>
               </div>
             </div>
 
-            {/* PANEL KANAN: PENGATURAN KTA STUDIO */}
-            <div className="lg:w-5/12 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
-              <div>
-                <h3 className="text-base font-black text-slate-800 mb-4">Pengaturan Studio KTA</h3>
-                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl text-[11px] font-bold text-slate-600 mb-5">
-                  {[
-                    { id: 'background', label: '🎨 Latar' },
-                    { id: 'barcode', label: '📱 Barcode' },
-                    { id: 'elements', label: '📋 Elemen' },
-                    { id: 'profile', label: '👤 Data' },
-                  ].map(t => (
+            <div className="space-y-3">
+              {storage.getAnnouncements().map((item) => (
+                <div
+                  key={item.announcement_id}
+                  className="p-4 rounded-2xl border border-slate-200 hover:border-amber-300 bg-slate-50/50 hover:bg-amber-50/20 transition-all flex flex-col md:flex-row md:items-start justify-between gap-4"
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900">
+                        {item.category}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        item.status === 'PUBLISHED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {item.status === 'PUBLISHED' ? 'Aktif Tayang' : 'Draf'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {item.publish_date || new Date().toISOString().split('T')[0]}
+                      </span>
+                    </div>
+
+                    <h5 className="text-sm font-black text-slate-900 leading-snug">
+                      {item.title}
+                    </h5>
+
+                    <p className="text-xs text-slate-600 whitespace-pre-line line-clamp-3">
+                      {item.content}
+                    </p>
+
+                    <div className="pt-1 text-[10px] text-slate-400 font-medium">
+                      ID: <span className="font-mono">{item.announcement_id}</span> • Penulis: <span className="font-mono">{item.created_by}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end md:self-start">
                     <button
-                      key={t.id}
-                      onClick={() => setKtaActiveControlTab(t.id as any)}
-                      className={`py-1.5 rounded-lg transition ${
-                        ktaActiveControlTab === t.id ? 'bg-white text-slate-900 shadow-2xs font-extrabold' : 'hover:text-slate-900'
-                      }`}
+                      onClick={() => handleOpenEditAnnouncement(item)}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                      title="Edit Redaksi Pengumuman Ini"
                     >
-                      {t.label}
+                      <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Edit Redaksi</span>
                     </button>
-                  ))}
+                    <button
+                      onClick={() => setAnnouncementToDelete(item)}
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                      title="Hapus Pengumuman Ini"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
+                    </button>
+                  </div>
                 </div>
-
-                {/* Tab Latar Belakang & Opacity */}
-                {ktaActiveControlTab === 'background' && (
-                  <div className="space-y-4 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1.5">Preset Tema Latar Belakang</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['EMERALD', 'BERAU_HERITAGE', 'DARK_VIP', 'SLATE_CLEAN'].map(preset => (
-                          <button
-                            key={preset}
-                            onClick={() => handleKtaPresetSelect(preset as any)}
-                            className={`p-2 rounded-xl text-left border font-semibold ${ktaDesignConfig.themePreset === preset ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900' : 'border-slate-200'}`}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                      <div className="flex justify-between">
-                        <label className="font-bold text-slate-700">Transparansi Latar Belakang</label>
-                        <span className="font-mono font-bold text-emerald-600">{ktaDesignConfig.bgOpacity}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={10}
-                        max={100}
-                        value={ktaDesignConfig.bgOpacity}
-                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, bgOpacity: Number(e.target.value) })}
-                        className="w-full accent-emerald-600 cursor-pointer"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Upload Gambar Latar Custom</label>
-                      <input type="file" accept="image/*" onChange={handleKtaBgUpload} className="w-full text-xs" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Tab Barcode */}
-                {ktaActiveControlTab === 'barcode' && (
-                  <div className="space-y-4 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1.5">Posisi Barcode</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'BOTTOM_RIGHT', label: '↘ Kanan Bawah' },
-                          { id: 'TOP_RIGHT', label: '↗ Kanan Atas' },
-                          { id: 'LEFT_PANEL', label: '↙ Kiri Bawah' },
-                        ].map(pos => (
-                          <button
-                            key={pos.id}
-                            type="button"
-                            onClick={() => setKtaDesignConfig({ ...ktaDesignConfig, barcodePos: pos.id as any })}
-                            className={`p-2.5 rounded-xl border font-semibold ${ktaDesignConfig.barcodePos === pos.id ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold' : 'border-slate-200'}`}
-                          >
-                            {pos.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1.5">Bentuk Barcode</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { id: 'SQUARE', label: 'Persegi' },
-                          { id: 'ROUNDED', label: 'Rounded' },
-                          { id: 'MINIMAL', label: 'Minimal' },
-                        ].map(shape => (
-                          <button
-                            key={shape.id}
-                            type="button"
-                            onClick={() => setKtaDesignConfig({ ...ktaDesignConfig, barcodeShape: shape.id as any })}
-                            className={`p-2 rounded-xl border text-center font-semibold ${ktaDesignConfig.barcodeShape === shape.id ? 'border-emerald-500 bg-emerald-50 font-bold' : 'border-slate-200'}`}
-                          >
-                            {shape.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Tab Elemen KTA */}
-                {ktaActiveControlTab === 'elements' && (
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Judul Sub-Header KTA</label>
-                      <input
-                        type="text"
-                        value={ktaDesignConfig.customTitle}
-                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, customTitle: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl font-semibold"
-                      />
-                    </div>
-                    <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 cursor-pointer">
-                      <span>Tampilkan Kategori Usaha</span>
-                      <input
-                        type="checkbox"
-                        checked={ktaDesignConfig.showCategory}
-                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, showCategory: e.target.checked })}
-                      />
-                    </label>
-                    <label className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 cursor-pointer">
-                      <span>Tampilkan Alamat Domisili</span>
-                      <input
-                        type="checkbox"
-                        checked={ktaDesignConfig.showAddress}
-                        onChange={e => setKtaDesignConfig({ ...ktaDesignConfig, showAddress: e.target.checked })}
-                      />
-                    </label>
-                  </div>
-                )}
-
-                {/* Tab Data Anggota di KTA */}
-                {ktaActiveControlTab === 'profile' && (
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-700 mb-1">Ganti Foto Profil Anggota di KTA</label>
-                      <input type="file" accept="image/*" onChange={handleKtaMemberPhotoUpload} className="w-full text-xs" />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap (Tercetak di KTA)</label>
-                      <input
-                        type="text"
-                        value={selectedMemberForKTA.nama_lengkap || ''}
-                        onChange={e => setSelectedMemberForKTA({ ...selectedMemberForKTA, nama_lengkap: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-600 mb-1">Nama Usaha (Tercetak di KTA)</label>
-                      <input
-                        type="text"
-                        value={selectedMemberForKTA.nama_usaha || ''}
-                        onChange={e => setSelectedMemberForKTA({ ...selectedMemberForKTA, nama_usaha: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL VERIFIKASI PEMBAYARAN */}
-      {selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Verifikasi Pembayaran</h3>
-            <div className="mt-3 p-3 bg-slate-50 rounded-xl text-xs space-y-1">
-              <p>Nama Anggota: <strong className="text-slate-800">{selectedPayment.member_name}</strong></p>
-              <p>Tipe: <strong className="text-slate-800">{selectedPayment.payment_type}</strong></p>
-              <p>Jumlah: <strong className="text-slate-800">Rp {(selectedPayment.amount || 0).toLocaleString('id-ID')}</strong></p>
+      {/* CRUD MODALS */}
+      <MemberCrudModal
+        isOpen={isAddMemberOpen}
+        onClose={() => {
+          setIsAddMemberOpen(false);
+          setMemberToEdit(null);
+        }}
+        memberToEdit={memberToEdit}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      <StandCrudModal
+        isOpen={isAssignStandOpen}
+        onClose={() => {
+          setIsAssignStandOpen(false);
+          setStandToEdit(null);
+        }}
+        standToEdit={standToEdit}
+        members={members}
+        eventId={activeEvent?.event_id || 'BWM-2026-001'}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      <PaymentCrudModal
+        isOpen={isAddPaymentOpen}
+        onClose={() => {
+          setIsAddPaymentOpen(false);
+          setPaymentToEdit(null);
+        }}
+        paymentToEdit={paymentToEdit}
+        members={members}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      <SavingCrudModal
+        isOpen={isAddSavingOpen}
+        onClose={() => {
+          setIsAddSavingOpen(false);
+          setSavingToEdit(null);
+        }}
+        savingToEdit={savingToEdit}
+        members={members}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      <SalesReportCrudModal
+        isOpen={isAddSalesOpen}
+        onClose={() => {
+          setIsAddSalesOpen(false);
+          setSalesToEdit(null);
+        }}
+        salesToEdit={salesToEdit}
+        members={members}
+        eventId={activeEvent?.event_id || 'BWM-2026-001'}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      {/* EVENT CRUD MODAL (SUPER ADMIN EVENT MANAGEMENT) */}
+      <EventCrudModal
+        isOpen={isEditEventOpen}
+        onClose={() => setIsEditEventOpen(false)}
+        eventToEdit={activeEvent}
+        adminId={adminId}
+        onSaved={showToast}
+      />
+
+      {/* CONFIRMATION MODAL: DELETE MEMBER */}
+      {memberToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Konfirmasi Hapus Anggota</h3>
+                <p className="text-xs text-slate-500">Tindakan Super Admin</p>
+              </div>
             </div>
-            {selectedPayment.proof_url && (
-              <div className="mt-3 text-center">
-                <a href={selectedPayment.proof_url} target="_blank" rel="noreferrer" className="text-xs text-emerald-600 underline font-bold">
-                  Buka Gambar Bukti Transfer di Tab Baru
-                </a>
+
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800 font-semibold">
+                Anda akan menghapus data anggota:
+              </p>
+              <div className="bg-white p-2.5 rounded-xl border border-rose-100">
+                <p className="font-black text-slate-900">{memberToDelete.nama_lengkap}</p>
+                <p className="text-slate-500 font-mono">{memberToDelete.member_id} • {memberToDelete.nomor_anggota}</p>
+                <p className="text-slate-600">{memberToDelete.nama_usaha}</p>
               </div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button onClick={() => setSelectedPayment(null)} className="flex-1 py-2 bg-slate-100 text-xs font-bold rounded-xl">Tutup</button>
-              <button onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'REJECTED')} className="flex-1 py-2 bg-red-600 text-white text-xs font-bold rounded-xl">Tolak</button>
-              <button onClick={() => handleVerifyPayment(selectedPayment.payment_id, 'VERIFIED')} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl">Setujui</button>
+              <p className="text-rose-800 font-medium leading-relaxed">
+                ⚠️ Seluruh stand event yang dipesan, produk UMKM, dokumen legalitas, dan bukti pembayaran anggota ini akan ikut dibersihkan dan stand terkait akan kembali kosong.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setMemberToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                id="btn-confirm-delete-member"
+                onClick={handleConfirmDeleteMember}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>HAPUS SEKARANG</span>
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL EVENT */}
-      {isEventModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-800">
-              {editingEvent ? 'Edit Acara' : 'Tambah Acara Baru'}
-            </h3>
-            <form onSubmit={handleSaveEvent} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Judul Event</label>
-                <input
-                  type="text"
-                  required
-                  value={eventForm.title}
-                  onChange={e => setEventForm({ ...eventForm, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
+      {/* CONFIRMATION MODAL: DELETE STAND */}
+      {standToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Tanggal Event</label>
-                <input
-                  type="date"
-                  required
-                  value={eventForm.event_date}
-                  onChange={e => setEventForm({ ...eventForm, event_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
+                <h3 className="text-base font-black text-slate-900">Lepaskan Alokasi Stand</h3>
+                <p className="text-xs text-slate-500">Stand {standToDelete.stand_code}</p>
               </div>
-              <div className="flex gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsEventModalOpen(false)}
-                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold"
-                >
-                  Simpan Acara
-                </button>
-              </div>
-            </form>
+            </div>
+
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800">
+                Alokasi <span className="font-bold">Stand {standToDelete.stand_code}</span> untuk anggota{' '}
+                <span className="font-mono font-bold">{standToDelete.member_id}</span> akan dihapus dan stand akan kembali menjadi <strong>AVAILABLE</strong>.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setStandToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeleteStand}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Lepas Stand</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL SIMPANAN MANUAL */}
-      {isSavingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-800">Catat Simpanan Anggota</h3>
-            <form onSubmit={handleSaveSaving} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Pilih Anggota</label>
-                <select
-                  required
-                  value={savingForm.member_id}
-                  onChange={e => setSavingForm({ ...savingForm, member_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="">-- Pilih Anggota --</option>
-                  {safeMembers.map(m => (
-                    <option key={m.member_id} value={m.member_id}>
-                      {m.nama_lengkap} ({m.member_id})
-                    </option>
-                  ))}
-                </select>
+      {/* CONFIRMATION MODAL: DELETE PAYMENT */}
+      {paymentToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Jenis Simpanan</label>
-                <select
-                  value={savingForm.saving_type}
-                  onChange={e => setSavingForm({ ...savingForm, saving_type: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="SIMPANAN_POKOK">Simpanan Pokok</option>
-                  <option value="SIMPANAN_WAJIB">Simpanan Wajib</option>
-                  <option value="SIMPANAN_SUKARELA">Simpanan Sukarela</option>
-                </select>
+                <h3 className="text-base font-black text-slate-900">Hapus Catatan Pembayaran</h3>
+                <p className="text-xs text-slate-500">ID: {paymentToDelete.payment_id}</p>
               </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Nominal (Rp)</label>
-                <input
-                  type="number"
-                  required
-                  value={savingForm.amount}
-                  onChange={e => setSavingForm({ ...savingForm, amount: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div className="flex gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsSavingModalOpen(false)}
-                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold"
-                >
-                  Simpan Transaksi
-                </button>
-              </div>
-            </form>
+            </div>
+
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800">
+                Anda akan menghapus transaksi sebesar{' '}
+                <span className="font-bold text-slate-900">Rp{paymentToDelete.amount.toLocaleString('id-ID')}</span> ({paymentToDelete.payment_type}).
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setPaymentToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeletePayment}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Pembayaran</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL BERITA */}
-      {isArticleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-2xl bg-white rounded-2xl p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  {editingArticle ? 'Edit Kabar & Editorial' : 'Buat Berita / Artikel Baru'}
-                </h3>
-                <p className="text-xs text-slate-500">Standar tata letak berita, upload gambar cover, dan publikasi</p>
+      {/* CONFIRMATION MODAL: DELETE SAVING */}
+      {savingToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Hapus Catatan Simpanan</h3>
+                <p className="text-xs text-slate-500">ID: {savingToDelete.saving_id}</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800">
+                Setoran simpanan sebesar{' '}
+                <span className="font-bold text-slate-900">Rp{savingToDelete.amount.toLocaleString('id-ID')}</span> ({savingToDelete.saving_type}) akan dihapus dari buku kas.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setSavingToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeleteSaving}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Simpanan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: DELETE SALES REPORT */}
+      {salesToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Hapus Laporan Omzet</h3>
+                <p className="text-xs text-slate-500">ID: {salesToDelete.sales_report_id}</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800">
+                Laporan omzet kotor sebesar{' '}
+                <span className="font-bold text-slate-900">Rp{salesToDelete.gross_sales.toLocaleString('id-ID')}</span> untuk stand {salesToDelete.registration_id} akan dihapus.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setSalesToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeleteSales}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Laporan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REJECT DOCUMENT REASON */}
+      {rejectingDocId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <form
+            onSubmit={handleRejectDocument}
+            className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <XCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Alasan Penolakan Dokumen</h3>
+                <p className="text-xs text-slate-500">ID: {rejectingDocId}</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Catatan Alasan Penolakan
+              </label>
+              <textarea
+                rows={3}
+                value={docRejectReason}
+                onChange={(e) => setDocRejectReason(e.target.value)}
+                placeholder="Contoh: Foto NIB buram / Nomor NIB tidak terdaftar di sistem OSS..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                required
+              />
+            </div>
+
+            <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setIsArticleModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                onClick={() => setRejectingDocId(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
-                ✕
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/20 transition-colors cursor-pointer"
+              >
+                Kirim Penolakan
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT ANNOUNCEMENT REDAKSI */}
+      {isAddAnnouncementOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-300 bg-amber-50 p-0.5 shrink-0">
+                  <img src={BARA_ASSETS.mascot} alt="Bara" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    {announcementToEdit ? 'Edit Redaksi Pengumuman Bara' : 'Tulis Pengumuman Baru'}
+                  </h3>
+                  <p className="text-xs text-slate-500">Superadmin Content Editorial</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddAnnouncementOpen(false);
+                  setAnnouncementToEdit(null);
+                }}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveArticle} className="mt-4 space-y-4 text-xs">
+            <form onSubmit={handleSaveAnnouncement} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Judul Berita</label>
+                <label className="block font-bold text-slate-700 mb-1">Judul Pengumuman *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Semarak Festival Kuliner Tradisional di Tepian Sambaliung"
-                  value={articleForm.title}
-                  onChange={e => setArticleForm({ ...articleForm, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-sm font-semibold border border-slate-200 rounded-xl focus:outline-emerald-500"
+                  value={annTitle}
+                  onChange={(e) => setAnnTitle(e.target.value)}
+                  placeholder="Contoh: Jadwal Registrasi Stand Banuarasa Minggu Depan"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Kategori / Tag</label>
+                  <label className="block font-bold text-slate-700 mb-1">Kategori</label>
                   <select
-                    value={articleForm.tag}
-                    onChange={e => setArticleForm({ ...articleForm, tag: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                    value={annCategory}
+                    onChange={(e) => setAnnCategory(e.target.value as any)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
                   >
-                    <option value="Budaya & Kuliner">Budaya & Kuliner</option>
-                    <option value="Ekonomi UMKM">Ekonomi UMKM</option>
-                    <option value="Panduan Usaha">Panduan Usaha</option>
-                    <option value="Info Komunitas">Info Komunitas</option>
-                    <option value="Pengumuman Resmi">Pengumuman Resmi</option>
+                    <option value="EVENT">Event & Pasar Mingguan</option>
+                    <option value="SIMPANAN">Simpanan & Kas Koperasi</option>
+                    <option value="UMKM">Panduan UMKM & Stand</option>
+                    <option value="GENERAL">Pengumuman Umum</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Penulis / Sumber</label>
-                  <input
-                    type="text"
-                    required
-                    value={articleForm.author}
-                    onChange={e => setArticleForm({ ...articleForm, author: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Status Publikasi</label>
+                  <select
+                    value={annStatus}
+                    onChange={(e) => setAnnStatus(e.target.value as any)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
+                  >
+                    <option value="PUBLISHED">Publikasikan Langsung (Aktif)</option>
+                    <option value="DRAFT">Simpan Sebagai Draf</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Gambar Cover Berita</label>
-                <div className="flex flex-col sm:flex-row gap-4 items-start">
-                  <div className="flex-1 w-full space-y-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-600 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-100 file:text-emerald-800"
-                    />
-                    <input
-                      type="url"
-                      placeholder="Atau masukkan tautan URL gambar..."
-                      value={articleForm.cover_image}
-                      onChange={e => setArticleForm({ ...articleForm, cover_image: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  {articleForm.cover_image && (
-                    <div className="w-28 h-20 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 flex-shrink-0">
-                      <img src={articleForm.cover_image} alt="Preview Cover" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                </div>
+                <label className="block font-bold text-slate-700 mb-1">Tanggal Terbit</label>
+                <input
+                  type="date"
+                  value={annPublishDate}
+                  onChange={(e) => setAnnPublishDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
+                />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Ringkasan / Subjudul Berita</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Tulis ringkasan singkat berita..."
-                  value={articleForm.excerpt}
-                  onChange={e => setArticleForm({ ...articleForm, excerpt: e.target.value })}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500"
-                ></textarea>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Isi Lengkap Berita (Layout Standar)</label>
-                <textarea
-                  rows={8}
-                  required
-                  placeholder="Tuliskan berita lengkap di sini. Gunakan tombol Enter untuk memisahkan paragraf..."
-                  value={articleForm.content}
-                  onChange={e => setArticleForm({ ...articleForm, content: e.target.value })}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-emerald-500 leading-relaxed font-sans"
-                ></textarea>
-              </div>
-
-              <div className="flex gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsArticleModalOpen(false)}
-                  className="flex-1 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs transition"
-                >
-                  Simpan & Publikasikan Berita
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL ASSIST BOOKING TENANT */}
-      {isAssistBookingOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-center gap-2 text-amber-600">
-              <span className="text-xl">⚡</span>
-              <h3 className="text-lg font-bold text-slate-900">Bantu Booking Stand Tenant</h3>
-            </div>
-            <form onSubmit={handleAssistBooking} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Pilih Tenant / Anggota</label>
-                <select
-                  required
-                  value={assistForm.member_id}
-                  onChange={e => setAssistForm({ ...assistForm, member_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="">-- Pilih Tenant --</option>
-                  {safeMembers.map(m => (
-                    <option key={m.member_id} value={m.member_id}>
-                      {m.nama_lengkap} — {m.nama_usaha} ({m.member_id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Pilih Stand</label>
-                <select
-                  required
-                  value={assistForm.stand_id}
-                  onChange={e => setAssistForm({ ...assistForm, stand_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="">-- Pilih Stand --</option>
-                  {safeStands.map(s => (
-                    <option key={s.stand_id} value={s.stand_id}>
-                      Stand {s.stand_code} ({s.zone} - Rp {(s.base_price || 0).toLocaleString('id-ID')})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Event Tujuan</label>
-                <select
-                  value={assistForm.event_id}
-                  onChange={e => setAssistForm({ ...assistForm, event_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  {safeEvents.map(ev => (
-                    <option key={ev.event_id} value={ev.event_id}>
-                      {ev.title} ({ev.event_date})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                  <input
-                    type="checkbox"
-                    checked={assistForm.instant_confirm}
-                    onChange={e => setAssistForm({ ...assistForm, instant_confirm: e.target.checked })}
-                    className="rounded text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-slate-800 font-semibold text-[11px]">
-                    Langsung Konfirmasi Penuh (Tandai Lunas)
-                  </span>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Redaksi Lengkap Pengumuman *
                 </label>
+                <textarea
+                  rows={5}
+                  required
+                  value={annContent}
+                  onChange={(e) => setAnnContent(e.target.value)}
+                  placeholder="Tuliskan isi pengumuman atau instruksi resmi di sini..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium leading-relaxed"
+                />
               </div>
-              <div className="flex gap-2 pt-3">
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">URL Gambar / Poster (Opsional)</label>
+                <input
+                  type="url"
+                  value={annImageUrl}
+                  onChange={(e) => setAnnImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAssistBookingOpen(false)}
-                  className="flex-1 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
+                  onClick={() => {
+                    setIsAddAnnouncementOpen(false);
+                    setAnnouncementToEdit(null);
+                  }}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl font-black"
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-md transition-colors cursor-pointer"
                 >
-                  Pesan Stand Sekarang
+                  {announcementToEdit ? 'Simpan Perubahan Redaksi' : 'Terbitkan Pengumuman'}
                 </button>
               </div>
             </form>
@@ -2217,163 +2303,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL MASTER STAND */}
-      {isStandModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-800">
-              {editingStand ? 'Atur Nama & Harga Stand' : 'Tambah Master Stand Baru'}
-            </h3>
-            <form onSubmit={handleSaveStand} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Nama / Kode Stand</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: A-01, B-12"
-                  value={standForm.stand_code}
-                  onChange={e => setStandForm({ ...standForm, stand_code: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold uppercase"
-                />
+      {/* CONFIRMATION MODAL: DELETE ANNOUNCEMENT */}
+      {announcementToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Zona Stand</label>
-                <select
-                  value={standForm.zone}
-                  onChange={e => setStandForm({ ...standForm, zone: e.target.value as StandZone })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                >
-                  <option value="ZONA_A">ZONA_A (Utama)</option>
-                  <option value="ZONA_B">ZONA_B (Kuliner Pesisir)</option>
-                  <option value="ZONA_C">ZONA_C (Kriya & Fashion)</option>
-                  <option value="TENGAH">TENGAH (Atrium / Panggung)</option>
-                </select>
+                <h3 className="text-base font-black text-slate-900">Hapus Pengumuman Bara</h3>
+                <p className="text-xs text-slate-500">ID: {announcementToDelete.announcement_id}</p>
               </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Harga Sewa Stand (Rp)</label>
-                <input
-                  type="number"
-                  required
-                  value={standForm.base_price}
-                  onChange={e => setStandForm({ ...standForm, base_price: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-emerald-600"
-                />
-              </div>
-              <div className="flex gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsStandModalOpen(false)}
-                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-xs"
-                >
-                  Simpan Stand
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
 
-      {/* MODAL TAMBAH ANGGOTA BARU */}
-      {isMemberModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-800">
-              {editingMember ? 'Edit Data Anggota' : 'Tambah Anggota Baru'}
-            </h3>
-            <form onSubmit={handleSaveMember} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Nama Lengkap</label>
-                <input
-                  type="text"
-                  required
-                  value={memberForm.nama_lengkap}
-                  onChange={e => setMemberForm({ ...memberForm, nama_lengkap: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Nama Usaha</label>
-                <input
-                  type="text"
-                  required
-                  value={memberForm.nama_usaha}
-                  onChange={e => setMemberForm({ ...memberForm, nama_usaha: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Kategori Usaha</label>
-                  <select
-                    value={memberForm.kategori_usaha}
-                    onChange={e => setMemberForm({ ...memberForm, kategori_usaha: e.target.value as StandCategory })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                  >
-                    <option value="KULINER">KULINER</option>
-                    <option value="KERAJINAN">KERAJINAN</option>
-                    <option value="FASHION">FASHION</option>
-                    <option value="JASA">JASA</option>
-                    <option value="UMUM">UMUM</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Nomor HP</label>
-                  <input
-                    type="text"
-                    required
-                    value={memberForm.nomor_hp}
-                    onChange={e => setMemberForm({ ...memberForm, nomor_hp: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={memberForm.email}
-                  onChange={e => setMemberForm({ ...memberForm, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Alamat</label>
-                <input
-                  type="text"
-                  required
-                  value={memberForm.alamat}
-                  onChange={e => setMemberForm({ ...memberForm, alamat: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                />
-              </div>
-              <div className="flex gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsMemberModalOpen(false)}
-                  className="flex-1 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold"
-                >
-                  Simpan Data
-                </button>
-              </div>
-            </form>
+            <div className="p-4 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs space-y-2">
+              <p className="text-slate-800">
+                Anda akan menghapus pengumuman: <span className="font-bold text-slate-900">"{announcementToDelete.title}"</span>.
+              </p>
+              <p className="text-rose-700">
+                Pengumuman ini tidak akan lagi tampil di Papan Pemberitahuan Bara bagi anggota dan pengunjung.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setAnnouncementToDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmDeleteAnnouncement}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Pengumuman</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
+      {/* CAROUSELS (MEMBER PRODUCT ADS & PARTNER LOGOS) MODAL */}
+      <AdminCarouselsManagerModal
+        isOpen={isCarouselsModalOpen}
+        onClose={() => setIsCarouselsModalOpen(false)}
+        adminUsername={adminId}
+        onSaved={showToast}
+      />
     </div>
   );
 };
-
-export default AdminDashboard;
