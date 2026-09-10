@@ -20,6 +20,7 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BaraMascotWidget } from './components/BaraMascotWidget';
 import { SplashIntroModal } from './components/SplashIntroModal';
 import { BarcodeGeneratorModal } from './components/BarcodeGeneratorModal';
+import { PublicMemberProfile } from './components/PublicMemberProfile';
 import { BaraNoticeBoardModal } from './components/BaraNoticeBoardModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { UserCheck, ShieldCheck } from 'lucide-react';
@@ -54,8 +55,6 @@ export const App: React.FC = () => {
 
   const [isStandMapOpen, setIsStandMapOpen] = useState(false);
   const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
-  const [standBookingMember, setStandBookingMember] = useState<Member | null>(null);
-  const [paymentMember, setPaymentMember] = useState<Member | null>(null);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentModalParams, setPaymentModalParams] = useState<{
@@ -111,10 +110,7 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // Sinkronisasi Google Sheets SENGAJA MANUAL ONLY.
-  // Tidak ada initial pull, interval, focus-sync, atau visibility-sync.
-  // Data terbaru dari Spreadsheet hanya ditarik ketika pengguna menekan
-  // tombol Refresh & Sync.
+  // Sinkronisasi Google Spreadsheet hanya dilakukan oleh tindakan manual pengguna.
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
@@ -144,15 +140,9 @@ export const App: React.FC = () => {
     setActiveTab('landing');
   };
 
-  const handleOpenStandMap = (event: EventItem, bookingMember?: Member | null) => {
+  const handleOpenStandMap = (event: EventItem) => {
     setSelectedEventForMap(event);
-    setStandBookingMember(bookingMember || null);
     setIsStandMapOpen(true);
-  };
-
-  const handleCloseStandMap = () => {
-    setIsStandMapOpen(false);
-    setStandBookingMember(null);
   };
 
   const handleOpenPaymentModal = (params: {
@@ -165,9 +155,7 @@ export const App: React.FC = () => {
   };
 
   const handleBookingSuccess = (reg: EventRegistration) => {
-    const bookedMember = storage.getMemberById(reg.member_id);
-    setPaymentMember(bookedMember || (currentUser?.role === 'MEMBER' ? currentMember : standBookingMember));
-    if (currentUser?.role === 'MEMBER') setActiveTab('member-dashboard');
+    setActiveTab('member-dashboard');
     handleOpenPaymentModal({
       registration: reg,
       paymentType: 'EVENT_PARTICIPATION',
@@ -180,6 +168,14 @@ export const App: React.FC = () => {
     setIsSuperAdminResettingMember(!!isReset);
     setIsChangePasswordOpen(true);
   };
+
+  const publicParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const publicMemberId = publicParams?.get('id') || '';
+  const isPublicProfileView = publicParams?.get('view') === 'member-profile' && !!publicMemberId;
+
+  if (isPublicProfileView) {
+    return <PublicMemberProfile memberId={publicMemberId} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-800 font-sans flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
@@ -292,11 +288,9 @@ export const App: React.FC = () => {
               currentUser.role === 'ADMIN_EVENT') ? (
               <AdminDashboard
                 adminId={currentUser.id || 'ADM-SUPER'}
-                adminRole={currentUser.role}
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
-                onOpenStandMapForMember={(event, member) => handleOpenStandMap(event, member)}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
                 onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
                 onOpenBarcodeModal={handleOpenBarcodeModal}
@@ -365,23 +359,18 @@ export const App: React.FC = () => {
       {isStandMapOpen && selectedEventForMap && (
         <StandMapModal
           isOpen={isStandMapOpen}
-          onClose={handleCloseStandMap}
+          onClose={() => setIsStandMapOpen(false)}
           event={selectedEventForMap}
-          currentMember={currentUser?.role === 'MEMBER' ? currentMember : null}
-          bookingMember={standBookingMember}
-          allowAdminBooking={currentUser?.role === 'SUPER_ADMIN'}
+          currentMember={currentMember}
           onBookingSuccess={handleBookingSuccess}
         />
       )}
 
-      {isPaymentModalOpen && (currentMember || paymentMember || standBookingMember) && (
+      {isPaymentModalOpen && currentMember && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => {
-            setIsPaymentModalOpen(false);
-            setPaymentMember(null);
-          }}
-          currentMember={currentMember || paymentMember || standBookingMember}
+          onClose={() => setIsPaymentModalOpen(false)}
+          currentMember={currentMember}
           registration={paymentModalParams.registration}
           paymentType={paymentModalParams.paymentType || 'EVENT_PARTICIPATION'}
           defaultAmount={paymentModalParams.defaultAmount || 50000}
