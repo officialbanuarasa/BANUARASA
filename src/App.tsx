@@ -54,6 +54,8 @@ export const App: React.FC = () => {
 
   const [isStandMapOpen, setIsStandMapOpen] = useState(false);
   const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
+  const [standBookingMember, setStandBookingMember] = useState<Member | null>(null);
+  const [paymentMember, setPaymentMember] = useState<Member | null>(null);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentModalParams, setPaymentModalParams] = useState<{
@@ -115,21 +117,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     handleRefreshData(true);
 
+    // Jangan menarik ulang data terlalu sering karena dapat mengganti draft/perubahan
+    // yang sedang diedit pengguna dengan snapshot Spreadsheet yang belum terbaru.
+    // Sinkronisasi otomatis dibuat 60 detik; refresh manual tetap tersedia di Navbar.
     const sheetSyncTimer = setInterval(() => {
       storage.syncFromGoogleSheets();
-    }, 5000);
-
-    const handleFocus = () => {
-      storage.syncFromGoogleSheets();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleFocus);
+    }, 60_000);
 
     return () => {
       clearInterval(sheetSyncTimer);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleFocus);
     };
   }, [handleRefreshData]);
 
@@ -161,9 +157,15 @@ export const App: React.FC = () => {
     setActiveTab('landing');
   };
 
-  const handleOpenStandMap = (event: EventItem) => {
+  const handleOpenStandMap = (event: EventItem, bookingMember?: Member | null) => {
     setSelectedEventForMap(event);
+    setStandBookingMember(bookingMember || null);
     setIsStandMapOpen(true);
+  };
+
+  const handleCloseStandMap = () => {
+    setIsStandMapOpen(false);
+    setStandBookingMember(null);
   };
 
   const handleOpenPaymentModal = (params: {
@@ -176,7 +178,9 @@ export const App: React.FC = () => {
   };
 
   const handleBookingSuccess = (reg: EventRegistration) => {
-    setActiveTab('member-dashboard');
+    const bookedMember = storage.getMemberById(reg.member_id);
+    setPaymentMember(bookedMember || (currentUser?.role === 'MEMBER' ? currentMember : standBookingMember));
+    if (currentUser?.role === 'MEMBER') setActiveTab('member-dashboard');
     handleOpenPaymentModal({
       registration: reg,
       paymentType: 'EVENT_PARTICIPATION',
@@ -305,6 +309,7 @@ export const App: React.FC = () => {
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
+                onOpenStandMapForMember={(event, member) => handleOpenStandMap(event, member)}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
                 onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
                 onOpenBarcodeModal={handleOpenBarcodeModal}
@@ -373,18 +378,23 @@ export const App: React.FC = () => {
       {isStandMapOpen && selectedEventForMap && (
         <StandMapModal
           isOpen={isStandMapOpen}
-          onClose={() => setIsStandMapOpen(false)}
+          onClose={handleCloseStandMap}
           event={selectedEventForMap}
-          currentMember={currentMember}
+          currentMember={currentUser?.role === 'MEMBER' ? currentMember : null}
+          bookingMember={standBookingMember}
+          allowAdminBooking={currentUser?.role === 'SUPER_ADMIN'}
           onBookingSuccess={handleBookingSuccess}
         />
       )}
 
-      {isPaymentModalOpen && currentMember && (
+      {isPaymentModalOpen && (currentMember || paymentMember || standBookingMember) && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          currentMember={currentMember}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setPaymentMember(null);
+          }}
+          currentMember={currentMember || paymentMember || standBookingMember}
           registration={paymentModalParams.registration}
           paymentType={paymentModalParams.paymentType || 'EVENT_PARTICIPATION'}
           defaultAmount={paymentModalParams.defaultAmount || 50000}
