@@ -17,6 +17,10 @@ export interface Member {
   nomor_hp: string;
   email: string;
   foto_profil_url: string;
+  kta_file_id?: string;
+  kta_file_url?: string;
+  barcode_value?: string;
+  qr_value?: string;
   nama_usaha: string;
   deskripsi_usaha: string;
   kategori_usaha: 'Kuliner' | 'Kriya' | 'Fashion' | 'Pertanian' | 'Jasa' | 'Lainnya';
@@ -213,6 +217,21 @@ export interface MemberSavingsSummary {
   isWajibCurrentMonthPaid: boolean;
   simpananSukarela: number;
   totalSimpanan: number;
+}
+
+export interface EventAttendance {
+  attendance_id: string;
+  event_id: string;
+  member_id: string;
+  registration_id?: string;
+  scan_code: string;
+  attendance_status: 'CHECKED_IN' | 'CHECKED_OUT';
+  check_in_time: string;
+  check_out_time?: string;
+  scanned_by?: string;
+  source: 'BARCODE' | 'QR' | 'MANUAL';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Announcement {
