@@ -22,6 +22,8 @@ interface StandMapModalProps {
   onClose: () => void;
   event: EventItem;
   currentMember?: Member | null;
+  bookingMember?: Member | null;
+  allowAdminBooking?: boolean;
   onBookingSuccess: (registration: EventRegistration) => void;
   onOpenAuthModal?: (mode: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER') => void;
 }
@@ -31,6 +33,8 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
   onClose,
   event,
   currentMember,
+  bookingMember,
+  allowAdminBooking = false,
   onBookingSuccess,
   onOpenAuthModal,
 }) => {
@@ -85,8 +89,13 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
 
   const handleConfirmReservation = async () => {
     if (!selectedStand) return;
-    if (!currentMember) {
-      setErrorMessage('Mode Inspeksi Admin: Hanya anggota UMKM yang dapat membooking stand.');
+    const targetMember = bookingMember || currentMember;
+    if (!targetMember) {
+      setErrorMessage('Pilih anggota terlebih dahulu untuk melakukan pemesanan stand.');
+      return;
+    }
+    if (bookingMember && !allowAdminBooking) {
+      setErrorMessage('Akun ini tidak memiliki izin melakukan pemesanan atas nama anggota.');
       return;
     }
     setIsSubmitting(true);
@@ -95,7 +104,7 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
     const result = await storage.reserveStand(
       event.event_id,
       selectedStand.stand_code,
-      currentMember.member_id,
+      targetMember.member_id,
       notes
     );
 
@@ -363,6 +372,11 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
                       {selectedStand.zone_name}
                     </span>
                   </div>
+                  {bookingMember && allowAdminBooking && (
+                    <p className="text-[10px] text-amber-300 font-bold mt-1">
+                      Dipesankan oleh Super Admin untuk: {bookingMember.nama_lengkap} ({bookingMember.member_id})
+                    </p>
+                  )}
                   <p className="text-xs text-slate-400">
                     Biaya Partisipasi Otomatis:{' '}
                     <span className="font-black text-emerald-400 text-sm">
@@ -387,7 +401,7 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
             >
               Batal
             </button>
-            {currentMember ? (
+            {(currentMember || (bookingMember && allowAdminBooking)) ? (
               <button
                 type="button"
                 disabled={!selectedStand || isSubmitting}
@@ -401,7 +415,7 @@ export const StandMapModal: React.FC<StandMapModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <span>KONFIRMASI BOOKING STAND</span>
+                    <span>{bookingMember && allowAdminBooking ? 'PESAN STAND UNTUK ANGGOTA' : 'KONFIRMASI BOOKING STAND'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
