@@ -280,15 +280,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         aria-label="Mulai di Banuarasa"
         className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5"
       >
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <div className="shrink-0 lg:w-52">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                 <Compass className="w-5 h-5" />
               </span>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Mulai di sini</p>
-                <h3 className="text-base font-black text-slate-900">Apa yang ingin kamu lakukan?</h3>
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Akses cepat</p>
+                <h3 className="text-sm sm:text-base font-black text-slate-900">Pilih ikon</h3>
               </div>
             </div>
           </div>
@@ -302,10 +302,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Store className="w-5 h-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-xs font-black text-slate-900">Pesan Stand</span>
-                <span className="block text-[10px] text-slate-500 truncate">Lihat 64 stand</span>
-              </span>
+              <span className="text-xs font-black text-slate-900">Stand</span>
             </button>
 
             <button
@@ -316,10 +313,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <ShoppingBag className="w-5 h-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-xs font-black text-slate-900">Cari Produk</span>
-                <span className="block text-[10px] text-slate-500 truncate">Katalog UMKM</span>
-              </span>
+              <span className="text-xs font-black text-slate-900">Produk</span>
             </button>
 
             <button
@@ -330,10 +324,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <UserPlus className="w-5 h-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-xs font-black text-slate-900">Jadi Anggota</span>
-                <span className="block text-[10px] text-slate-500 truncate">Daftar UMKM</span>
-              </span>
+              <span className="text-xs font-black text-slate-900">Anggota</span>
             </button>
 
             <button
@@ -344,10 +335,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Calendar className="w-5 h-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-xs font-black text-slate-900">Jadwal & Lokasi</span>
-                <span className="block text-[10px] text-slate-500 truncate">Waktu & rute</span>
-              </span>
+              <span className="text-xs font-black text-slate-900">Jadwal</span>
             </button>
           </div>
 
