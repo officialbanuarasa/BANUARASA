@@ -3,16 +3,12 @@
 
 const APPS_SCRIPT_URL_KEY = 'banuarasa_gas_url';
 const LEGACY_GAS_URL_KEY = 'kbm_gas_web_app_url_v3';
-
-// Endpoint Web App resmi Banuarasa. Digunakan sebagai fallback agar pengguna baru
-// dapat mendaftar tanpa harus mengatur URL Apps Script di localStorage terlebih dahulu.
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxGf-7guiIALE29-2lib-L0coaEjjpLLt-QPHDBaL9aROKw2fI_KRusREPVW1yVJiqV/exec';
 export const GOOGLE_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1ahwiRQRMTqneZhfFbcLTYyuO4No_Y_rOC61ALPSq2KE/edit';
 export const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1dwivnfJ6mIFFXwYjB__RBh5JLewwfZLN';
 
 export interface GasResponse<T = any> { success: boolean; message?: string; data?: T; result?: T; error?: string; }
 
-const getUrl = () => (localStorage.getItem(APPS_SCRIPT_URL_KEY) || localStorage.getItem(LEGACY_GAS_URL_KEY) || DEFAULT_GAS_URL).trim();
+const getUrl = () => (localStorage.getItem(APPS_SCRIPT_URL_KEY) || localStorage.getItem(LEGACY_GAS_URL_KEY) || '').trim();
 export const getSavedGasUrl = (): string => getUrl();
 export const saveGasUrl = (url: string): void => { localStorage.setItem(APPS_SCRIPT_URL_KEY, url.trim()); localStorage.setItem(LEGACY_GAS_URL_KEY, url.trim()); };
 
@@ -49,6 +45,10 @@ export async function syncRowToSpreadsheet(sheetName:string, id:string, data:any
   return callGoogleAppsScript(action,payload);
 }
 
+export async function createMember(member:any):Promise<GasResponse> {
+  return callGoogleAppsScript('createMember', member);
+}
+
 export async function deleteSpreadsheetRow(sheetName:string,id:string):Promise<GasResponse>{ return callGoogleAppsScript('deleteRow',{sheetName,id}); }
 
 export interface DriveUploadInput { fileName:string; fileUrl?:string; base64Data?:string; mimeType?:string; category:string; uploadedBy?:string; memberId?:string; eventId?:string; referenceId?:string; }
@@ -65,9 +65,26 @@ export function syncFileToGoogleDrive(input:DriveUploadInput): any {
 
 export async function uploadMemberPhoto(file:File,memberId:string,memberName:string){ return uploadFile(file,'FOTO_PROFIL',memberId,memberName); }
 export async function uploadMemberKta(file:File,memberId:string,memberName:string){ return uploadFile(file,'KTA_ANGGOTA',memberId,memberName); }
-export async function uploadFile(file:File,category:string,memberId:string,name?:string){
-  const base64=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});
-  return syncFileToGoogleDrive({fileName:file.name,fileUrl:base64,base64Data:base64,mimeType:file.type||'application/octet-stream',category,uploadedBy:name||memberId,memberId});
+export async function uploadFile(file:File,category:string,memberId:string,name?:string):Promise<GasResponse> {
+  const base64=await new Promise<string>((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result));
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+
+  // IMPORTANT: jangan gunakan syncFileToGoogleDrive() di sini karena fungsi
+  // tersebut bersifat fire-and-forget. Pendaftaran anggota membutuhkan hasil
+  // upload yang sebenarnya agar URL foto dapat disimpan ke Spreadsheet.
+  return callGoogleAppsScript('uploadFileToDrive',{
+    fileName:file.name,
+    fileUrl:base64,
+    base64Data:base64,
+    mimeType:file.type||'application/octet-stream',
+    category,
+    uploadedBy:name||memberId,
+    memberId
+  });
 }
 
 
@@ -84,7 +101,7 @@ export const pullStateFromGAS = fetchAllDataFromGas;
 export const getSyncStatus = () => ({connected:!!getUrl()});
 
 export const googleWorkspaceSync = {
-  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, deleteSpreadsheetRow, updateKoperasiConfig,
+  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, deleteSpreadsheetRow, updateKoperasiConfig,
   syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance,
   verifyMemberCode, testGasConnection, syncWithGoogleWorkspace:testGasConnection,
   pushStateToGAS, pullStateFromGAS, getSyncStatus,
