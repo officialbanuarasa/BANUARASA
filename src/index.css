@@ -1,1 +1,37 @@
 @import "tailwindcss";
+
+
+/* BANUARASA responsive foundation */
+html, body, #root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+img, svg, video, canvas { max-width: 100%; }
+
+button, input, select, textarea { max-width: 100%; }
+
+@media (max-width: 640px) {
+  body { font-size: 14px; }
+  .fixed.inset-0 { padding: 0.75rem; }
+  .fixed.inset-0 > form,
+  .fixed.inset-0 > div { max-width: calc(100vw - 1.5rem); }
+  .fixed.inset-0 form,
+  .fixed.inset-0 > div { max-height: calc(100dvh - 1.5rem); }
+  table { min-width: max-content; }
+  input, select, textarea { min-width: 0; }
+}
+
+@media (max-width: 380px) {
+  .fixed.inset-0 { padding: 0.5rem; }
+  .fixed.inset-0 > form,
+  .fixed.inset-0 > div { max-width: calc(100vw - 1rem); border-radius: 1.25rem; }
+}
