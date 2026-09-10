@@ -3,12 +3,16 @@
 
 const APPS_SCRIPT_URL_KEY = 'banuarasa_gas_url';
 const LEGACY_GAS_URL_KEY = 'kbm_gas_web_app_url_v3';
+
+// URL Web App Apps Script resmi BANUARASA.
+// Dipakai sebagai fallback agar browser/HP baru tidak bergantung pada localStorage.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxGf-7guiIALE29-2lib-L0coaEjjpLLt-QPHDBaL9aROKw2fI_KRusREPVW1yVJiqV/exec';
 export const GOOGLE_SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1ahwiRQRMTqneZhfFbcLTYyuO4No_Y_rOC61ALPSq2KE/edit';
 export const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1dwivnfJ6mIFFXwYjB__RBh5JLewwfZLN';
 
 export interface GasResponse<T = any> { success: boolean; message?: string; data?: T; result?: T; error?: string; }
 
-const getUrl = () => (localStorage.getItem(APPS_SCRIPT_URL_KEY) || localStorage.getItem(LEGACY_GAS_URL_KEY) || '').trim();
+const getUrl = () => (localStorage.getItem(APPS_SCRIPT_URL_KEY) || localStorage.getItem(LEGACY_GAS_URL_KEY) || DEFAULT_GAS_URL).trim();
 export const getSavedGasUrl = (): string => getUrl();
 export const saveGasUrl = (url: string): void => { localStorage.setItem(APPS_SCRIPT_URL_KEY, url.trim()); localStorage.setItem(LEGACY_GAS_URL_KEY, url.trim()); };
 
