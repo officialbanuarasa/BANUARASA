@@ -627,6 +627,48 @@ class StorageService {
     }
   }
 
+  /**
+   * Compatibility helpers used by legacy UI components.
+   * Keep all member persistence and audit logging in this service.
+   */
+  saveMember(member: Member): Member {
+    const members = this.getMembers();
+    const index = members.findIndex((m) => m.member_id === member.member_id);
+    const now = new Date().toISOString();
+    const normalized = {
+      ...member,
+      created_at: member.created_at || now,
+      updated_at: now,
+    } as Member;
+
+    if (index >= 0) {
+      members[index] = normalized;
+    } else {
+      members.push(normalized);
+    }
+
+    this.setItem(STORAGE_KEYS.MEMBERS, members);
+    return normalized;
+  }
+
+  logActivity(
+    action: string,
+    module: string,
+    description: string,
+    referenceId?: string
+  ): void {
+    const user = this.getCurrentUser();
+    this.logAudit({
+      user_id: user?.id || 'SYSTEM',
+      user_role: user?.role || 'PUBLIC',
+      action,
+      module,
+      reference_id: referenceId || '',
+      description,
+      result: 'SUCCESS',
+    });
+  }
+
   login(identifier: string, password: string): { success: boolean; message: string; user?: AuthUser } {
     const trimmedId = identifier.trim().toLowerCase();
     const trimmedPass = password.trim();

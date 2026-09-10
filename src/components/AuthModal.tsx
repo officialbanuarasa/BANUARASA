@@ -1,24 +1,38 @@
-import React, { useState } from 'react';
-import { AuthSession, Role } from '../types';
+import React, { useEffect, useState } from 'react';
+import { AuthUser, UserRole } from '../types';
+import { storage } from '../services/storage';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLoginSuccess: (session: AuthSession) => void;
+  onLoginSuccess: (user: AuthUser) => void;
   onOpenRegister?: () => void;
+  initialMode?: 'MEMBER_LOGIN' | 'ADMIN_LOGIN' | 'REGISTER';
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onLoginSuccess,
-  onOpenRegister
+  onOpenRegister,
+  initialMode = 'MEMBER_LOGIN'
 }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [roleSelection, setRoleSelection] = useState<Role>('SUPER_ADMIN');
+  const [roleSelection, setRoleSelection] = useState<UserRole>('SUPER_ADMIN');
+
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialMode === 'REGISTER') {
+      onOpenRegister?.();
+      return;
+    }
+    if (initialMode === 'ADMIN_LOGIN') setRoleSelection('SUPER_ADMIN');
+    else setRoleSelection('MEMBER');
+  }, [isOpen, initialMode, onOpenRegister]);
 
   if (!isOpen) return null;
 
@@ -26,7 +40,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (e) e.preventDefault();
     setErrorMessage('');
 
-    const cleanUser = username.trim().toLowerCase();
+    const cleanUser = username.trim();
     const cleanPass = password.trim();
 
     if (!cleanUser || !cleanPass) {
@@ -35,96 +49,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsLoading(true);
-
-    // Kredensial Resmi Banuarasa v2
     setTimeout(() => {
-      let matchedSession: AuthSession | null = null;
-
-      // 1. Super Admin
-      if (
-        (cleanUser === 'superadmin' || cleanUser === 'admin') &&
-        (cleanPass === 'Banu@rasa2026!' || cleanPass === 'admin123' || cleanPass === 'admin')
-      ) {
-        matchedSession = {
-          token: `TOKEN-${Date.now()}-SUPERADMIN`,
-          user: {
-            user_id: 'USR-SUPERADMIN',
-            username: 'superadmin',
-            role: 'SUPER_ADMIN',
-            nama_lengkap: 'Super Administrator Banuarasa'
-          }
-        };
-      }
-      // 2. Admin Koperasi
-      else if (
-        (cleanUser === 'adminkoperasi' || cleanUser === 'koperasi') &&
-        (cleanPass === 'KoperasiBwm#2026' || cleanPass === 'koperasi123')
-      ) {
-        matchedSession = {
-          token: `TOKEN-${Date.now()}-KOPERASI`,
-          user: {
-            user_id: 'USR-ADM-KOP',
-            username: 'adminkoperasi',
-            role: 'ADMIN_KOPERASI',
-            nama_lengkap: 'Pengurus Koperasi Banuarasa'
-          }
-        };
-      }
-      // 3. Admin Event
-      else if (
-        (cleanUser === 'adminevent' || cleanUser === 'event') &&
-        (cleanPass === 'EventBwm#2026' || cleanPass === 'event123')
-      ) {
-        matchedSession = {
-          token: `TOKEN-${Date.now()}-EVENT`,
-          user: {
-            user_id: 'USR-ADM-EVT',
-            username: 'adminevent',
-            role: 'ADMIN_EVENT',
-            nama_lengkap: 'Panitia Pelaksana Event'
-          }
-        };
-      }
-      // 4. Akun Member UMKM
-      else if (cleanUser.startsWith('mbr-') || roleSelection === 'MEMBER') {
-        matchedSession = {
-          token: `TOKEN-${Date.now()}-MEMBER`,
-          user: {
-            user_id: `USR-${cleanUser}`,
-            member_id: cleanUser.toUpperCase(),
-            username: cleanUser,
-            role: 'MEMBER',
-            nama_lengkap: `Anggota ${cleanUser.toUpperCase()}`
-          }
-        };
-      }
-
+      const result = storage.login(cleanUser, cleanPass);
       setIsLoading(false);
 
-      if (matchedSession) {
-        onLoginSuccess(matchedSession);
+      if (result.success && result.user) {
+        onLoginSuccess(result.user);
       } else {
-        setErrorMessage('Username atau kata sandi tidak cocok. Silakan periksa kembali.');
+        setErrorMessage(result.message || 'Username atau kata sandi tidak cocok.');
       }
-    }, 200);
+    }, 100);
   };
 
   // Shortcut untuk mengisi akun demo otomatis
-  const fillQuickCredential = (role: Role) => {
+  const fillQuickCredential = (role: UserRole) => {
     setRoleSelection(role);
     setErrorMessage('');
     if (role === 'SUPER_ADMIN') {
       setUsername('superadmin');
-      setPassword('Banu@rasa2026!');
+      setPassword('admin123');
     } else if (role === 'ADMIN_KOPERASI') {
       setUsername('adminkoperasi');
-      setPassword('KoperasiBwm#2026');
+      setPassword('admin123');
     } else if (role === 'ADMIN_EVENT') {
       setUsername('adminevent');
-      setPassword('EventBwm#2026');
+      setPassword('admin123');
     } else {
       setUsername('MBR-0001');
-      setPassword('member123');
+      setPassword('123456');
     }
   };
 
@@ -157,7 +109,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               key={item.role}
               type="button"
-              onClick={() => fillQuickCredential(item.role as Role)}
+              onClick={() => fillQuickCredential(item.role as UserRole)}
               className={`py-1.5 rounded-lg transition ${
                 roleSelection === item.role
                   ? 'bg-white text-emerald-700 shadow-xs font-bold'

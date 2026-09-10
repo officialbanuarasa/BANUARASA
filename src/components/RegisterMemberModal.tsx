@@ -50,17 +50,29 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
 
       const newMember: Member = {
         member_id: newId,
-        nik: '', // NIK dikosongkan/ditiadakan
+        nomor_anggota: `KBMB-2026-${String(allMembers.length + 1).padStart(3, '0')}`,
+        nik: '',
+        tempat_lahir: '',
+        tanggal_lahir: '',
+        jenis_kelamin: 'L',
+
         nama_lengkap: formData.nama_lengkap.trim(),
         nama_usaha: formData.nama_usaha.trim(),
-        kategori_usaha: formData.kategori_usaha,
+        kategori_usaha: ({ KULINER: 'Kuliner', KERAJINAN: 'Kriya', FASHION: 'Fashion', JASA: 'Jasa', UMUM: 'Lainnya' } as const)[formData.kategori_usaha],
         alamat: formData.alamat.trim() || 'Berau, Kalimantan Timur',
+        alamat_usaha: formData.alamat.trim() || 'Berau, Kalimantan Timur',
+        deskripsi_usaha: '',
+        foto_profil_url: '',
         nomor_hp: formData.nomor_hp.trim(),
         whatsapp: formData.nomor_hp.trim(),
         email: formData.email.trim() || `${newId.toLowerCase()}@banuarasa.id`,
         password: formData.password,
+        password_hash: '',
+        tanggal_bergabung: new Date().toISOString().split('T')[0],
+        role: 'MEMBER',
         status_keanggotaan: 'ACTIVE',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       storage.saveMember(newMember);

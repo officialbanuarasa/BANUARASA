@@ -216,6 +216,17 @@ function doPost(e) {
     var result = null;
 
     switch (action) {
+      // Generic row operations used by the web application bridge.
+      case "upsertRow":
+        result = upsertRow(payload.sheetName, payload.keyColumn, payload.keyValue, payload.dataObj || payload);
+        break;
+      case "updateRow":
+        result = updateRow(payload.sheetName, payload.keyColumn, payload.keyValue, payload.dataObj || payload);
+        break;
+      case "deleteRow":
+        result = deleteRow(payload.sheetName, payload.keyColumn, payload.keyValue);
+        break;
+
       // 1. MANAJEMEN ANGGOTA
       case "createMember":
       case "addMember":

@@ -4,16 +4,12 @@
 // ========================================================
 
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Konfigurasi parser dengan limit wajar (tanpa payload 50MB Base64 raksasa)
-app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
@@ -186,13 +182,29 @@ app.get('/api/public/stands', (_req: Request, res: Response) => {
   // Hanya mengekspos kode stand, zona, dan ketersediaan, tanpa detail NIK yang memesan
   return res.json({
     success: true,
-    data: Array.from({ length: 64 }, (_, i) => ({
-      stand_id: `STD-${String(i + 1).padStart(2, '0')}`,
-      stand_code: `A-${String(i + 1).padStart(2, '0')}`,
-      zone: i < 20 ? 'ZONA_A' : i < 40 ? 'ZONA_B' : 'ZONA_C',
-      base_price: 150000,
-      is_available: i % 3 !== 0
-    }))
+    data: [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        stand_id: `STD-${String.fromCharCode(65 + i)}`,
+        stand_code: String.fromCharCode(65 + i),
+        zone: 'KATEGORI_1',
+        base_price: 50000,
+        is_available: true
+      })),
+      ...Array.from({ length: 43 }, (_, i) => ({
+        stand_id: `STD-${String(i + 1).padStart(2, '0')}`,
+        stand_code: String(i + 1),
+        zone: 'KATEGORI_2',
+        base_price: 50000,
+        is_available: true
+      })),
+      ...Array.from({ length: 11 }, (_, i) => ({
+        stand_id: `STD-${String(i + 44).padStart(2, '0')}`,
+        stand_code: String(i + 44),
+        zone: 'KATEGORI_3',
+        base_price: 35000,
+        is_available: true
+      }))
+    ]
   });
 });
 

@@ -453,9 +453,9 @@ export const App: React.FC = () => {
             setIsAuthModalOpen(false);
             handleLoginSuccess(user);
           }}
-          onRegisterSuccess={(member, user) => {
+          onOpenRegister={() => {
             setIsAuthModalOpen(false);
-            handleRegisterSuccess(member, user);
+            setIsRegisterMemberOpen(true);
           }}
         />
       )}

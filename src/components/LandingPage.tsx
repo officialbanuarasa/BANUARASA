@@ -98,6 +98,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [version, setVersion] = useState(0);
   const [isCarouselsModalOpen, setIsCarouselsModalOpen] = useState(false);
   const [carouselsInitialTab, setCarouselsInitialTab] = useState<'PRODUCT_ADS' | 'PARTNER_LOGOS'>('PRODUCT_ADS');
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
 
   const openEditorial = (topicId: string) => {
     const topic = EDITORIAL_TOPICS[topicId];
@@ -206,6 +207,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   };
 
+  const scrollToFeatureMenu = () => {
+    const el = document.getElementById('menu-fitur-utama-aplikasi');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handleStandClick = (standCode: string) => {
     handleBookingClick(standCode);
   };
@@ -268,6 +274,134 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           setIsCarouselsModalOpen(true);
         }}
       />
+
+      {/* 0A. QUICK START — JALUR UTAMA UNTUK PENGGUNA BARU */}
+      <section
+        aria-label="Mulai di Banuarasa"
+        className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="shrink-0 lg:w-52">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Compass className="w-5 h-5" />
+              </span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Mulai di sini</p>
+                <h3 className="text-base font-black text-slate-900">Apa yang ingin kamu lakukan?</h3>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 flex-1">
+            <button
+              type="button"
+              onClick={scrollToStandDisplay}
+              className="group flex items-center gap-2.5 p-3 rounded-2xl bg-emerald-50 border border-emerald-100 hover:border-emerald-400 hover:bg-emerald-100 transition-all text-left cursor-pointer"
+            >
+              <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Store className="w-5 h-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black text-slate-900">Pesan Stand</span>
+                <span className="block text-[10px] text-slate-500 truncate">Lihat 64 stand</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openEditorial('katalog-umkm')}
+              className="group flex items-center gap-2.5 p-3 rounded-2xl bg-orange-50 border border-orange-100 hover:border-orange-400 hover:bg-orange-100 transition-all text-left cursor-pointer"
+            >
+              <span className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <ShoppingBag className="w-5 h-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black text-slate-900">Cari Produk</span>
+                <span className="block text-[10px] text-slate-500 truncate">Katalog UMKM</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenAuthModal('REGISTER')}
+              className="group flex items-center gap-2.5 p-3 rounded-2xl bg-blue-50 border border-blue-100 hover:border-blue-400 hover:bg-blue-100 transition-all text-left cursor-pointer"
+            >
+              <span className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <UserPlus className="w-5 h-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black text-slate-900">Jadi Anggota</span>
+                <span className="block text-[10px] text-slate-500 truncate">Daftar UMKM</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openEditorial('jadwal-lokasi')}
+              className="group flex items-center gap-2.5 p-3 rounded-2xl bg-purple-50 border border-purple-100 hover:border-purple-400 hover:bg-purple-100 transition-all text-left cursor-pointer"
+            >
+              <span className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Calendar className="w-5 h-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black text-slate-900">Jadwal & Lokasi</span>
+                <span className="block text-[10px] text-slate-500 truncate">Waktu & rute</span>
+              </span>
+            </button>
+          </div>
+
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              aria-expanded={isQuickMenuOpen}
+              onClick={() => setIsQuickMenuOpen((open) => !open)}
+              className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-black transition-colors cursor-pointer"
+            >
+              <Layers className="w-4 h-4 text-slate-500" />
+              Menu lainnya
+              <ChevronDown className={`w-4 h-4 transition-transform ${isQuickMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isQuickMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-40">
+                {[
+                  ['wisata-gastronomi', '🍜', 'Wisata Gastronomi', 'Kenali konsep Banuarasa'],
+                  ['maskot-bara', '🐚', 'Kenali Bara', 'Cerita maskot Banuarasa'],
+                  ['koperasi-berau', '🤝', 'Tentang Koperasi', 'Peran koperasi & anggota'],
+                  ['panduan-pemula', '💡', 'Panduan Pemula', 'Langkah pertama menggunakan aplikasi'],
+                ].map(([id, icon, title, desc]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setIsQuickMenuOpen(false);
+                      openEditorial(id);
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 text-left transition-colors cursor-pointer"
+                  >
+                    <span className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-base shrink-0">{icon}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-slate-800">{title}</span>
+                      <span className="block text-[10px] text-slate-500 truncate">{desc}</span>
+                    </span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickMenuOpen(false);
+                    scrollToFeatureMenu();
+                  }}
+                  className="w-full mt-1 pt-2 border-t border-slate-100 flex items-center justify-between p-2.5 rounded-xl hover:bg-emerald-50 text-emerald-700 text-xs font-black cursor-pointer"
+                >
+                  <span>Lihat semua fitur aplikasi</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* 1. BENTO GRID HERO SECTION — EMPHASIZING BANUARASA WEEKEND MARKET */}
       <section className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
