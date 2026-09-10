@@ -54,8 +54,6 @@ export const App: React.FC = () => {
 
   const [isStandMapOpen, setIsStandMapOpen] = useState(false);
   const [selectedEventForMap, setSelectedEventForMap] = useState<EventItem | null>(null);
-  const [standBookingMember, setStandBookingMember] = useState<Member | null>(null);
-  const [paymentMember, setPaymentMember] = useState<Member | null>(null);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentModalParams, setPaymentModalParams] = useState<{
@@ -78,15 +76,17 @@ export const App: React.FC = () => {
     setIsBarcodeModalOpen(true);
   };
 
-  // Manual or background sync with Google Apps Script / Spreadsheet
-  const handleRefreshData = useCallback(async (isSilent = false) => {
+  // Sinkronisasi Google Spreadsheet HANYA dilakukan secara manual.
+  // Ini sengaja tidak berjalan di background agar data/form yang sedang
+  // diedit pengguna tidak tertimpa oleh snapshot lama dari Spreadsheet.
+  const handleRefreshData = useCallback(async () => {
     try {
-      if (!isSilent) setIsRefreshing(true);
+      setIsRefreshing(true);
       await storage.syncFromGoogleSheets();
     } catch (err) {
-      console.warn('Auto-refresh data error:', err);
+      console.warn('Manual refresh data error:', err);
     } finally {
-      if (!isSilent) setIsRefreshing(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -111,23 +111,13 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // Google Sheets is the single source of truth.
-  // Pull it periodically so direct Sheet deletions/edits are reflected
-  // in the application without being recreated from an old browser cache.
+  // IMPORTANT: Tidak ada auto-sync / auto-refresh dari Google Spreadsheet.
+  // Pengambilan data terbaru hanya terjadi ketika pengguna menekan tombol
+  // Refresh & Sync. Dengan demikian form yang sedang diisi tidak pernah
+  // ditimpa oleh data Spreadsheet yang belum memuat perubahan terbaru.
   useEffect(() => {
-    handleRefreshData(true);
-
-    // Jangan menarik ulang data terlalu sering karena dapat mengganti draft/perubahan
-    // yang sedang diedit pengguna dengan snapshot Spreadsheet yang belum terbaru.
-    // Sinkronisasi otomatis dibuat 60 detik; refresh manual tetap tersedia di Navbar.
-    const sheetSyncTimer = setInterval(() => {
-      storage.syncFromGoogleSheets();
-    }, 60_000);
-
-    return () => {
-      clearInterval(sheetSyncTimer);
-    };
-  }, [handleRefreshData]);
+    // Tidak ada pekerjaan sinkronisasi di sini secara sengaja.
+  }, []);
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
@@ -157,15 +147,9 @@ export const App: React.FC = () => {
     setActiveTab('landing');
   };
 
-  const handleOpenStandMap = (event: EventItem, bookingMember?: Member | null) => {
+  const handleOpenStandMap = (event: EventItem) => {
     setSelectedEventForMap(event);
-    setStandBookingMember(bookingMember || null);
     setIsStandMapOpen(true);
-  };
-
-  const handleCloseStandMap = () => {
-    setIsStandMapOpen(false);
-    setStandBookingMember(null);
   };
 
   const handleOpenPaymentModal = (params: {
@@ -178,9 +162,7 @@ export const App: React.FC = () => {
   };
 
   const handleBookingSuccess = (reg: EventRegistration) => {
-    const bookedMember = storage.getMemberById(reg.member_id);
-    setPaymentMember(bookedMember || (currentUser?.role === 'MEMBER' ? currentMember : standBookingMember));
-    if (currentUser?.role === 'MEMBER') setActiveTab('member-dashboard');
+    setActiveTab('member-dashboard');
     handleOpenPaymentModal({
       registration: reg,
       paymentType: 'EVENT_PARTICIPATION',
@@ -305,11 +287,9 @@ export const App: React.FC = () => {
               currentUser.role === 'ADMIN_EVENT') ? (
               <AdminDashboard
                 adminId={currentUser.id || 'ADM-SUPER'}
-                adminRole={currentUser.role}
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
-                onOpenStandMapForMember={(event, member) => handleOpenStandMap(event, member)}
                 onOpenGoogleWorkspaceModal={() => setIsGoogleWorkspaceModalOpen(true)}
                 onOpenChangePassword={(targetMember, isReset) => handleOpenChangePassword(targetMember, isReset)}
                 onOpenBarcodeModal={handleOpenBarcodeModal}
@@ -378,23 +358,18 @@ export const App: React.FC = () => {
       {isStandMapOpen && selectedEventForMap && (
         <StandMapModal
           isOpen={isStandMapOpen}
-          onClose={handleCloseStandMap}
+          onClose={() => setIsStandMapOpen(false)}
           event={selectedEventForMap}
-          currentMember={currentUser?.role === 'MEMBER' ? currentMember : null}
-          bookingMember={standBookingMember}
-          allowAdminBooking={currentUser?.role === 'SUPER_ADMIN'}
+          currentMember={currentMember}
           onBookingSuccess={handleBookingSuccess}
         />
       )}
 
-      {isPaymentModalOpen && (currentMember || paymentMember || standBookingMember) && (
+      {isPaymentModalOpen && currentMember && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => {
-            setIsPaymentModalOpen(false);
-            setPaymentMember(null);
-          }}
-          currentMember={currentMember || paymentMember || standBookingMember}
+          onClose={() => setIsPaymentModalOpen(false)}
+          currentMember={currentMember}
           registration={paymentModalParams.registration}
           paymentType={paymentModalParams.paymentType || 'EVENT_PARTICIPATION'}
           defaultAmount={paymentModalParams.defaultAmount || 50000}
