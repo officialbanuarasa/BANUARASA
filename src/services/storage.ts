@@ -3669,23 +3669,30 @@ class StorageService {
       this.setItem(STORAGE_KEYS.CURRENT_USER, updatedAuth);
     }
 
+    // Sinkronkan PROFIL LENGKAP ke Google Spreadsheet, termasuk foto.
+    // Ini penting karena Google Sheets adalah sumber data utama aplikasi.
+    // Sebelumnya updateMemberProfile hanya mengubah localStorage, sehingga setelah
+    // refresh foto kembali kosong dan UI menampilkan foto default.
+    const spreadsheetResult = googleWorkspaceSync.syncRowToSpreadsheet(
+      'SHEET_ANGGOTA_KOPERASI',
+      updatedMember.member_id,
+      {
+        ...updatedMember,
+        member_id: updatedMember.member_id,
+        foto_profil_url: updatedMember.foto_profil_url || '',
+        kta_file_id: updatedMember.kta_file_id || '',
+        kta_file_url: updatedMember.kta_file_url || '',
+        barcode_value: updatedMember.barcode_value || updatedMember.member_id,
+        qr_value: updatedMember.qr_value || updatedMember.member_id,
+      }
+    );
+
+    if (!(spreadsheetResult as any)?.success) {
+      console.warn('Sinkronisasi profil anggota ke Google Spreadsheet gagal:', (spreadsheetResult as any)?.error);
+    }
+
     this.notify();
     this.persistToServer();
-
-    // Async sync photo to Google Drive
-    if (profileData.foto_profil_url && profileData.foto_profil_url !== current.foto_profil_url) {
-      try {
-        googleWorkspaceSync.syncFileToGoogleDrive({
-          fileUrl: profileData.foto_profil_url,
-          fileName: `Foto_Profil_${updatedMember.member_id}.jpg`,
-          category: 'FOTO_PROFIL',
-          uploadedBy: updatedMember.nama_lengkap,
-          memberId: updatedMember.member_id,
-        });
-      } catch (err) {
-        console.warn('Google Drive photo upload failed', err);
-      }
-    }
 
     this.logAudit({
       user_id: memberId,
