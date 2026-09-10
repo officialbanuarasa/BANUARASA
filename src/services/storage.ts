@@ -183,6 +183,7 @@ const STORAGE_KEYS = {
   PRODUCT_ADS: 'kbm_v3_product_ads',
   AUDIT_LOGS: 'kbm_v3_audit_logs',
   NOTIFICATIONS: 'kbm_v3_notifications',
+  ATTENDANCE: 'kbm_v3_attendance',
   CURRENT_USER: 'kbm_v3_current_user_session',
   BRANDING: 'kbm_v3_branding_assets',
   CARD_DESIGN: 'kbm_v3_member_card_design',
@@ -192,7 +193,7 @@ const STORAGE_KEYS = {
   IS_DUMMY_PURGED: 'kbm_v3_is_dummy_purged',
 };
 
-export const CURRENT_DATA_VERSION = '3.2.0';
+export const CURRENT_DATA_VERSION = '3.3.0';
 
 /**
  * Pembersih Cookies dan Session Perangkat
@@ -336,42 +337,15 @@ class StorageService {
   async persistToServer(): Promise<boolean> {
     try {
       const payload = {
-        events: this.getEvents(),
-        branding: this.getBrandingConfig(),
-        cardDesign: this.getMemberCardDesign(),
         members: this.getMembers().filter((m) => !OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha)),
-        registrations: this.getRegistrations(),
-        payments: this.getPayments(),
-        savings: this.getSavings(),
-        salesReports: this.getSalesReports(),
-        products: this.getProducts(),
-        documents: this.getDocuments(),
-        announcements: this.getAnnouncements(),
-        notifications: this.getNotifications(),
-        auditLogs: this.getAuditLogs(),
-        news: this.getItem(STORAGE_KEYS.NEWS, INITIAL_NEWS),
-        gallery: this.getItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY),
-        sponsors: this.getItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS),
-        gasUrl: localStorage.getItem('kbm_gas_web_app_url_v3') || '',
-        updatedAt: new Date().toISOString(),
+        registrations: this.getRegistrations(), payments: this.getPayments(), savings: this.getSavings(),
+        salesReports: this.getSalesReports(), products: this.getProducts(), documents: this.getDocuments(),
+        events: this.getEvents(), auditLogs: this.getAuditLogs(), attendance: this.getItem<any[]>(STORAGE_KEYS.ATTENDANCE, []),
       };
-
-      const res = await fetch('/api/app-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json.updatedAt) {
-          this.lastServerUpdatedAt = json.updatedAt;
-        }
-        return true;
-      }
-      return false;
+      const res = await googleWorkspaceSync.pushStateToGAS(payload);
+      return !!res.success;
     } catch (err) {
-      console.warn('[StorageService] Persist to server network error:', err);
+      console.warn('[StorageService] Google Sheets persist failed:', err);
       return false;
     }
   }
@@ -480,6 +454,10 @@ class StorageService {
         localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(serverData.auditLogs));
         hasChanges = true;
       }
+      if (Array.isArray(serverData.attendance)) {
+        localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(serverData.attendance));
+        hasChanges = true;
+      }
       if (Array.isArray(serverData.news) && serverData.news.length > 0) {
         localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(serverData.news));
         hasChanges = true;
@@ -569,6 +547,7 @@ class StorageService {
       if (!localStorage.getItem(STORAGE_KEYS.GALLERY)) this.setItem(STORAGE_KEYS.GALLERY, INITIAL_GALLERY, true);
       if (!localStorage.getItem(STORAGE_KEYS.SPONSORS)) this.setItem(STORAGE_KEYS.SPONSORS, INITIAL_SPONSORS, true);
       if (!localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS)) this.setItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS, true);
+      this.setItem(STORAGE_KEYS.ATTENDANCE, [], true);
 
       this.syncCurrentUserWithMemberProfile();
     } else if (!storedVersion) {
@@ -625,48 +604,6 @@ class StorageService {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       this.notify();
     }
-  }
-
-  /**
-   * Compatibility helpers used by legacy UI components.
-   * Keep all member persistence and audit logging in this service.
-   */
-  saveMember(member: Member): Member {
-    const members = this.getMembers();
-    const index = members.findIndex((m) => m.member_id === member.member_id);
-    const now = new Date().toISOString();
-    const normalized = {
-      ...member,
-      created_at: member.created_at || now,
-      updated_at: now,
-    } as Member;
-
-    if (index >= 0) {
-      members[index] = normalized;
-    } else {
-      members.push(normalized);
-    }
-
-    this.setItem(STORAGE_KEYS.MEMBERS, members);
-    return normalized;
-  }
-
-  logActivity(
-    action: string,
-    module: string,
-    description: string,
-    referenceId?: string
-  ): void {
-    const user = this.getCurrentUser();
-    this.logAudit({
-      user_id: user?.id || 'SYSTEM',
-      user_role: user?.role || 'PUBLIC',
-      action,
-      module,
-      reference_id: referenceId || '',
-      description,
-      result: 'SUCCESS',
-    });
   }
 
   login(identifier: string, password: string): { success: boolean; message: string; user?: AuthUser } {
@@ -1082,6 +1019,19 @@ class StorageService {
     }
   }
 
+  saveMember(member: Member): Member {
+    const members=this.getMembers(); const idx=members.findIndex(m=>m.member_id===member.member_id);
+    const now=new Date().toISOString(); const normalized={...member,updated_at:member.updated_at||now,created_at:member.created_at||now};
+    if(idx>=0) members[idx]=normalized; else members.push(normalized);
+    this.setItem(STORAGE_KEYS.MEMBERS,members);
+    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_ANGGOTA_KOPERASI',normalized.member_id,normalized);
+    return normalized;
+  }
+
+  logActivity(action:string,module:string,description:string,referenceId=''): void {
+    this.logAudit({user_id:this.getCurrentUser()?.id||'SYSTEM',user_role:this.getCurrentUser()?.role||'MEMBER',action,module,reference_id:referenceId,description,result:'SUCCESS'});
+  }
+
   // --- Members ---
   getMembers(): Member[] {
     const raw = this.getItem<Member[]>(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
@@ -1130,8 +1080,10 @@ class StorageService {
       kategori_usaha: members[idx].kategori_usaha,
       whatsapp: members[idx].whatsapp,
       email: members[idx].email,
-      status: members[idx].status_keanggotaan,
+      status_keanggotaan: members[idx].status_keanggotaan,
       tanggal_bergabung: members[idx].tanggal_bergabung,
+      kta_file_id: members[idx].kta_file_id || '', kta_file_url: members[idx].kta_file_url || '',
+      barcode_value: members[idx].barcode_value || members[idx].member_id, qr_value: members[idx].qr_value || members[idx].member_id,
     });
 
     this.logAudit({
@@ -2648,9 +2600,12 @@ class StorageService {
           this.setItem(STORAGE_KEYS.REGISTRATIONS, allRegs);
 
           // Update spreadsheet
-          googleWorkspaceSync.syncRowToSpreadsheet('SHEET_STAND_REGISTRASI', reg.registration_id, {
-            check_in_status: 'CHECKED_IN',
-            check_in_time: now,
+          googleWorkspaceSync.syncRowToSpreadsheet('SHEET_REGISTRASI_STAND', reg.registration_id, {
+            registration_id: reg.registration_id, check_in_status: 'CHECKED_IN', check_in_time: now, updated_at: now
+          });
+          googleWorkspaceSync.recordAttendance({
+            event_id: eventId, member_id: member?.member_id || reg.member_id, registration_id: reg.registration_id,
+            scan_code: cleanCode, scanned_by: adminId, source: raw.includes('http') ? 'QR' : 'BARCODE'
           });
         }
 
@@ -3665,6 +3620,18 @@ class StorageService {
       message: 'Biodata & Foto Profil berhasil disimpan dan disinkronkan!',
       member: updatedMember,
     };
+  }
+
+  async saveMemberMedia(memberId:string, photoFile?:File, ktaFile?:File): Promise<{success:boolean;member?:Member;message:string}> {
+    const member=this.getMemberById(memberId); if(!member) return {success:false,message:'Data anggota tidak ditemukan.'};
+    let updates:Partial<Member>={};
+    try {
+      if(photoFile){ const r=await googleWorkspaceSync.uploadMemberPhoto(photoFile,memberId,member.nama_lengkap); if(!r.success) throw new Error(r.error||'Upload foto gagal'); const d:any=r.result||r.data; updates.foto_profil_url=d?.directImageUrl||d?.driveUrl; (updates as any).foto_profil_drive_file_id=d?.fileId; }
+      if(ktaFile){ const r=await googleWorkspaceSync.uploadMemberKta(ktaFile,memberId,member.nama_lengkap); if(!r.success) throw new Error(r.error||'Upload KTA gagal'); const d:any=r.result||r.data; updates.kta_file_url=d?.driveUrl; updates.kta_file_id=d?.fileId; }
+      const result=this.updateMemberProfile(memberId,updates);
+      if(!result.success) return result;
+      return {success:true,member:result.member,message:'Foto/KTA tersimpan di Google Drive dan metadata tersimpan di Google Sheets.'};
+    } catch(e:any){ return {success:false,message:e?.message||'Upload media gagal.'}; }
   }
 
   // --- Koperasi Configuration & Membership Obligations ---
