@@ -53,6 +53,17 @@ export async function createMember(member:any):Promise<GasResponse> {
   return callGoogleAppsScript('createMember', member);
 }
 
+// Dedicated write path for Super Admin member identifiers.
+// The caller must await this response before updating the local cache.
+export async function updateMemberIdentifiers(oldMemberId:string, newMemberId:string, newNomorAnggota:string, adminId?:string):Promise<GasResponse> {
+  return callGoogleAppsScript('updateMemberIdentifiers', {
+    old_member_id: oldMemberId,
+    member_id: newMemberId,
+    nomor_anggota: newNomorAnggota,
+    admin_id: adminId || 'SUPER_ADMIN',
+  });
+}
+
 export async function deleteSpreadsheetRow(sheetName:string,id:string):Promise<GasResponse>{ return callGoogleAppsScript('deleteRow',{sheetName,id}); }
 
 export interface DriveUploadInput { fileName:string; fileUrl?:string; base64Data?:string; mimeType?:string; category:string; uploadedBy?:string; memberId?:string; eventId?:string; referenceId?:string; }
@@ -104,7 +115,7 @@ export const pullStateFromGAS = fetchAllDataFromGas;
 export const getSyncStatus = () => ({connected:!!getUrl()});
 
 export const googleWorkspaceSync = {
-  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, deleteSpreadsheetRow, updateKoperasiConfig,
+  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, updateMemberIdentifiers, deleteSpreadsheetRow, updateKoperasiConfig,
   syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance,
   verifyMemberCode, testGasConnection, syncWithGoogleWorkspace:testGasConnection,
   pushStateToGAS, pullStateFromGAS, getSyncStatus,
