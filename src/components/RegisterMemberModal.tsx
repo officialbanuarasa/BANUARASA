@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { StandCategory, Member } from '../types';
 import { storage } from '../services/storage';
+import { googleWorkspaceSync } from '../services/googleWorkspaceSync';
+import { sha256 } from 'js-sha256';
 
 interface RegisterMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRegisterSuccess: (newMember: Member) => void;
+  onSuccess: (newMember: Member) => void;
 }
 
 export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
   isOpen,
   onClose,
-  onRegisterSuccess
+  onSuccess
 }) => {
   const [formData, setFormData] = useState({
     nama_lengkap: '',
@@ -27,6 +29,7 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
 
   if (!isOpen) return null;
 
@@ -42,6 +45,7 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
       return;
     }
     setPhotoFile(file);
+    setPhotoUrl('');
     setErrorMsg('');
     const reader = new FileReader();
     reader.onload = () => setPhotoPreview(String(reader.result || ''));
@@ -65,12 +69,20 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
     setIsLoading(true);
 
     try {
-      const allMembers = storage.getMembers();
-      const newId = `MBR-${String(allMembers.length + 1).padStart(4, '0')}`;
+      // ID dibuat dari timestamp agar tidak bergantung pada panjang cache lokal
+      // dan tidak mudah bentrok ketika dua pengguna mendaftar bersamaan.
+      const unique = Date.now().toString().slice(-8);
+      const newId = `MBR-${unique}`;
+      const nomorAnggota = `KBMB-2026-${unique.slice(-6)}`;
+
+      let profilePhotoUrl = photoUrl.trim();
+      if (profilePhotoUrl && !/^https?:\/\//i.test(profilePhotoUrl)) {
+        throw new Error('URL foto harus diawali http:// atau https://.');
+      }
 
       const newMember: Member = {
         member_id: newId,
-        nomor_anggota: `KBMB-2026-${String(allMembers.length + 1).padStart(3, '0')}`,
+        nomor_anggota: nomorAnggota,
         nik: '',
         tempat_lahir: '',
         tanggal_lahir: '',
@@ -82,12 +94,14 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
         alamat: formData.alamat.trim() || 'Berau, Kalimantan Timur',
         alamat_usaha: formData.alamat.trim() || 'Berau, Kalimantan Timur',
         deskripsi_usaha: '',
-        foto_profil_url: '',
+        foto_profil_url: profilePhotoUrl,
         nomor_hp: formData.nomor_hp.trim(),
         whatsapp: formData.nomor_hp.trim(),
         email: formData.email.trim() || `${newId.toLowerCase()}@banuarasa.id`,
+        // Jangan simpan password plaintext ke Spreadsheet. Login setelah
+        // sinkronisasi menggunakan password_hash.
         password: formData.password,
-        password_hash: '',
+        password_hash: sha256(formData.password),
         tanggal_bergabung: new Date().toISOString().split('T')[0],
         role: 'MEMBER',
         status_keanggotaan: 'ACTIVE',
@@ -95,22 +109,36 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
         updated_at: new Date().toISOString()
       };
 
-      storage.saveMember(newMember);
+      // 1) Tulis anggota ke Google Spreadsheet dan TUNGGU hasilnya.
+      // Pendaftaran tidak boleh dianggap berhasil jika backend gagal menulis.
+      const createResult = await googleWorkspaceSync.createMember({
+        ...newMember,
+        password: undefined,
+      });
+      if (!createResult.success) {
+        throw new Error(createResult.error || createResult.message || 'Data anggota gagal disimpan ke Google Spreadsheet.');
+      }
+
       let finalMember = newMember;
 
+      // 2) Simpan cache lokal setelah backend mengonfirmasi pembuatan baris.
+      storage.saveMember(newMember);
+
+      // 3) Jika foto berasal dari file, upload ke Drive dan update URL hasilnya
+      // ke baris anggota yang sama di Spreadsheet.
       if (photoFile) {
         const mediaResult = await storage.saveMemberMedia(newMember.member_id, photoFile);
         if (mediaResult.success && mediaResult.member) {
           finalMember = mediaResult.member;
         } else {
-          throw new Error(mediaResult.message || 'Foto anggota gagal diunggah ke Google Drive.');
+          console.warn('[RegisterMember] Anggota berhasil disimpan, tetapi foto gagal diunggah:', mediaResult.message);
         }
       }
 
-      storage.logActivity('REGISTER_MEMBER', 'MEMBER', `Pendaftaran anggota baru UMKM: ${newMember.nama_lengkap} (${newMember.nama_usaha})`, newMember.member_id);
+      storage.logActivity('REGISTER_MEMBER', 'MEMBER', `Pendaftaran anggota baru UMKM: ${finalMember.nama_lengkap} (${finalMember.nama_usaha})`, finalMember.member_id);
 
       setIsLoading(false);
-      onRegisterSuccess(finalMember);
+      onSuccess(finalMember);
       onClose();
     } catch (err: any) {
       setIsLoading(false);
@@ -232,11 +260,26 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
               <div className="min-w-0 flex-1 w-full text-center sm:text-left">
                 <label className="block font-bold text-slate-800 mb-1">Foto Profil Anggota</label>
                 <p className="text-[11px] text-slate-500 mb-2">Opsional. Foto akan tersimpan ke Google Drive dan digunakan pada KTA digital.</p>
-                <label htmlFor="register-member-photo" className="inline-flex max-w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition">
-                  📷 Pilih Foto dari Perangkat / Kamera
-                </label>
-                <input id="register-member-photo" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+                <div className="flex flex-wrap justify-center sm:justify-start gap-2">
+                  <label htmlFor="register-member-gallery" className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition">
+                    🖼️ Galeri
+                  </label>
+                  <input id="register-member-gallery" type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                  <label htmlFor="register-member-camera" className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer transition">
+                    📷 Kamera
+                  </label>
+                  <input id="register-member-camera" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+                </div>
                 {photoFile && <p className="mt-1 text-[10px] text-emerald-700 truncate">{photoFile.name}</p>}
+                <div className="mt-2">
+                  <input
+                    type="url"
+                    value={photoUrl}
+                    onChange={(e) => { setPhotoUrl(e.target.value); if (e.target.value) { setPhotoFile(null); setPhotoPreview(e.target.value); } }}
+                    placeholder="Atau masukkan URL foto https://..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500 bg-white text-xs"
+                  />
+                </div>
               </div>
             </div>
           </div>
