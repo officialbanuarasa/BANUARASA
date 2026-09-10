@@ -25,10 +25,30 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('File foto harus berupa gambar.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMsg('Ukuran foto maksimal 5 MB.');
+      return;
+    }
+    setPhotoFile(file);
+    setErrorMsg('');
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -76,10 +96,21 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
       };
 
       storage.saveMember(newMember);
+      let finalMember = newMember;
+
+      if (photoFile) {
+        const mediaResult = await storage.saveMemberMedia(newMember.member_id, photoFile);
+        if (mediaResult.success && mediaResult.member) {
+          finalMember = mediaResult.member;
+        } else {
+          console.warn('[RegisterMember] Foto gagal diunggah:', mediaResult.message);
+        }
+      }
+
       storage.logActivity('REGISTER_MEMBER', 'MEMBER', `Pendaftaran anggota baru UMKM: ${newMember.nama_lengkap} (${newMember.nama_usaha})`, newMember.member_id);
 
       setIsLoading(false);
-      onRegisterSuccess(newMember);
+      onRegisterSuccess(finalMember);
       onClose();
     } catch (err: any) {
       setIsLoading(false);
@@ -185,6 +216,29 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
               onChange={e => setFormData({ ...formData, alamat: e.target.value })}
               className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:outline-emerald-500"
             />
+          </div>
+
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="relative shrink-0">
+                <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-emerald-500 bg-white flex items-center justify-center shadow-sm">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Preview foto anggota" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl font-black text-emerald-200">Foto</span>
+                  )}
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 w-full text-center sm:text-left">
+                <label className="block font-bold text-slate-800 mb-1">Foto Profil Anggota</label>
+                <p className="text-[11px] text-slate-500 mb-2">Opsional. Foto akan tersimpan ke Google Drive dan digunakan pada KTA digital.</p>
+                <label htmlFor="register-member-photo" className="inline-flex max-w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition">
+                  📷 Pilih Foto dari Perangkat / Kamera
+                </label>
+                <input id="register-member-photo" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+                {photoFile && <p className="mt-1 text-[10px] text-emerald-700 truncate">{photoFile.name}</p>}
+              </div>
+            </div>
           </div>
 
           <div>
