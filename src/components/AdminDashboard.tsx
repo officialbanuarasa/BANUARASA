@@ -67,6 +67,7 @@ import {
 
 interface AdminDashboardProps {
   adminId: string;
+  adminRole?: 'SUPER_ADMIN' | 'ADMIN_KOPERASI' | 'ADMIN_EVENT';
   onOpenPaymentInspector: (payment: Payment) => void;
   onOpenQRScanner: () => void;
   onOpenStandMap: (event: EventItem) => void;
@@ -78,6 +79,7 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   adminId,
+  adminRole = 'SUPER_ADMIN',
   onOpenPaymentInspector,
   onOpenQRScanner,
   onOpenStandMap,
@@ -516,131 +518,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* Icon-first Admin Hub: detail modules stay hidden until an icon is selected */}
-        {activeAdminTab === 'MENU' && (
-          <div className="pt-2">
-            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-3">
-              {[
-                { id: 'OVERVIEW', label: 'Ringkasan', icon: ShieldCheck },
-                { id: 'ANNOUNCEMENTS', label: 'Berita', icon: Megaphone },
-                { id: 'PAYMENTS', label: 'Bayar', icon: CreditCard, badge: pendingPaymentsCount },
-                { id: 'STANDS', label: 'Stand', icon: Calendar },
-                { id: 'MEMBERS', label: 'Anggota', icon: Users, badge: members.length },
-                { id: 'SAVINGS', label: 'Simpanan', icon: DollarSign },
-                { id: 'SALES', label: 'Omzet', icon: TrendingUp },
-                { id: 'CARD_STUDIO', label: 'KTA', icon: Sparkles },
-                { id: 'BRANDING', label: 'Media', icon: ImageIcon },
-                { id: 'AUDIT', label: 'Audit', icon: FileText },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setActiveAdminTab(item.id as any)}
-                    className="relative flex flex-col items-center justify-center gap-2 min-h-24 rounded-2xl border border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-                    title={`Buka ${item.label}`}
-                  >
-                    <span className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center group-hover:bg-emerald-700 transition-colors">
-                      <Icon className="w-6 h-6" />
-                    </span>
-                    <span className="text-[11px] font-black text-slate-700 group-hover:text-emerald-900">{item.label}</span>
-                    {item.badge !== undefined && (
-                      <span className="absolute top-2 right-2 min-w-5 h-5 px-1 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Role-based Admin Hub */}
+        {activeAdminTab === 'MENU' && (() => {
+          const common = [
+            { id: 'OVERVIEW', label: 'Ringkasan', icon: ShieldCheck },
+            { id: 'ANNOUNCEMENTS', label: 'Berita', icon: Megaphone },
+          ];
+          const groups = adminRole === 'ADMIN_EVENT'
+            ? [
+                { title: 'Fitur Cepat', items: [
+                  { id: 'STANDS', label: 'Stand', icon: Calendar },
+                  { id: 'PAYMENTS', label: 'Bayar', icon: CreditCard, badge: pendingPaymentsCount },
+                  { id: 'QR_CHECKIN', label: 'Check-in', icon: QrCode },
+                  { id: 'SALES', label: 'Omzet', icon: TrendingUp },
+                ]},
+                { title: 'Operasional', items: [
+                  { id: 'MEMBERS', label: 'Anggota', icon: Users, badge: members.length },
+                  ...common,
+                ]},
+              ]
+            : adminRole === 'ADMIN_KOPERASI'
+              ? [
+                  { title: 'Fitur Cepat', items: [
+                    { id: 'MEMBERS', label: 'Anggota', icon: Users, badge: members.length },
+                    { id: 'SAVINGS', label: 'Simpanan', icon: DollarSign },
+                    { id: 'PAYMENTS', label: 'Pembayaran', icon: CreditCard, badge: pendingPaymentsCount },
+                    { id: 'OVERVIEW', label: 'Laporan', icon: ShieldCheck },
+                  ]},
+                  { title: 'Operasional', items: [
+                    { id: 'SALES', label: 'Omzet', icon: TrendingUp },
+                    { id: 'ANNOUNCEMENTS', label: 'Berita', icon: Megaphone },
+                    { id: 'BRANDING', label: 'Media', icon: ImageIcon },
+                  ]},
+                ]
+              : [
+                  { title: 'Fitur Cepat', items: [
+                    { id: 'OVERVIEW', label: 'Ringkasan', icon: ShieldCheck },
+                    { id: 'MEMBERS', label: 'Anggota', icon: Users, badge: members.length },
+                    { id: 'PAYMENTS', label: 'Pembayaran', icon: CreditCard, badge: pendingPaymentsCount },
+                    { id: 'STANDS', label: 'Event / Stand', icon: Calendar },
+                  ]},
+                  { title: 'Manajemen Sistem', items: [
+                    { id: 'SAVINGS', label: 'Simpanan', icon: DollarSign },
+                    { id: 'SALES', label: 'Omzet', icon: TrendingUp },
+                    { id: 'ANNOUNCEMENTS', label: 'Berita', icon: Megaphone },
+                    { id: 'BRANDING', label: 'Media', icon: ImageIcon },
+                    { id: 'CARD_STUDIO', label: 'KTA', icon: Sparkles },
+                    { id: 'AUDIT', label: 'Audit', icon: FileText },
+                  ]},
+                ];
+          return <div className="pt-2 space-y-5">
+            {groups.map((group) => <section key={group.title}>
+              <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">{group.title}</h3>
+              <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2.5">
+                {group.items.map((item) => { const Icon = item.icon; return <button key={item.id + group.title} type="button" onClick={() => item.id === 'QR_CHECKIN' ? onOpenQRScanner() : setActiveAdminTab(item.id as any)} className="relative min-h-24 rounded-2xl border border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 cursor-pointer">
+                  <span className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center"><Icon className="w-5 h-5" /></span>
+                  <span className="text-[10px] font-black text-slate-700 text-center">{item.label}</span>
+                  {item.badge !== undefined && <span className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">{item.badge}</span>}
+                </button> })}
+              </div>
+            </section>)}
+          </div>;
+        })()}
 
-        {activeAdminTab !== 'MENU' && (
-          <button
-            type="button"
-            onClick={() => setActiveAdminTab('MENU')}
-            className="mb-2 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition-colors"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            Menu
+        {activeAdminTab !== 'MENU' && <div className="flex items-center pt-2">
+          <button type="button" onClick={() => setActiveAdminTab('MENU')} className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-black text-slate-700 flex items-center gap-1.5 cursor-pointer">
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Menu
           </button>
-        )}
-
-        {/* Mobile & Tablet Priority: Dropdown Menu Selector (Hemat Scrolling) */}
-        <div className={`lg:hidden space-y-1.5 pt-1 ${activeAdminTab === 'MENU' ? 'hidden' : ''}`}>
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-            <span className="flex items-center gap-1 text-slate-900">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
-              <span>Pilih Bagian / Tab:</span>
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md">
-              10 Menu Tersedia
-            </span>
-          </div>
-          <div className="relative">
-            <select
-              value={activeAdminTab}
-              onChange={(e) => setActiveAdminTab(e.target.value as any)}
-              className="w-full appearance-none px-4 py-3 bg-slate-900 text-amber-300 border-2 border-amber-400 font-black text-xs rounded-2xl shadow-sm focus:outline-hidden pr-10 cursor-pointer"
-            >
-              {[
-                { id: 'OVERVIEW', label: '🧭 Ringkasan Eksekutif' },
-                { id: 'ANNOUNCEMENTS', label: '📢 Papan Pengumuman Bara' },
-                { id: 'PAYMENTS', label: `💳 Verifikasi Pembayaran (${pendingPaymentsCount})` },
-                { id: 'STANDS', label: '🎪 Manajemen 64 Stand' },
-                { id: 'MEMBERS', label: `👥 Anggota & Legalitas (${members.length})` },
-                { id: 'SAVINGS', label: '💰 Buku Kas Simpanan' },
-                { id: 'SALES', label: '📈 Laporan Omzet UMKM' },
-                { id: 'CARD_STUDIO', label: '✨ Desain KTA (Kartu Anggota)' },
-                { id: 'BRANDING', label: '🖼️ Logo, Banner & Media' },
-                { id: 'AUDIT', label: '📋 Audit Logs & Ekspor' },
-              ].map((item) => (
-                <option key={item.id} value={item.id} className="bg-slate-900 text-white font-bold py-1">
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-amber-300 absolute right-3.5 top-3.5 pointer-events-none" />
-          </div>
-        </div>
-
-        {/* Sub-Nav Bento Tabs (Desktop / Large Tablet Scrollable) */}
-        <div className={`hidden lg:flex items-center gap-2 pt-1 overflow-x-auto ${activeAdminTab === 'MENU' ? 'hidden' : ''}`}>
-          {[
-            { id: 'OVERVIEW', label: 'Ringkasan Eksekutif', icon: ShieldCheck },
-            { id: 'ANNOUNCEMENTS', label: 'Papan Pengumuman Bara', icon: Megaphone },
-            { id: 'CARD_STUDIO', label: 'Desain KTA (Kartu Anggota)', icon: Sparkles },
-            { id: 'PAYMENTS', label: `Verifikasi Bayar (${pendingPaymentsCount})`, icon: CreditCard },
-            { id: 'STANDS', label: 'Manajemen 64 Stand', icon: Calendar },
-            { id: 'MEMBERS', label: `Anggota & Legalitas (${members.length})`, icon: Users },
-            { id: 'SAVINGS', label: 'Buku Kas Simpanan', icon: DollarSign },
-            { id: 'SALES', label: 'Laporan Omzet UMKM', icon: TrendingUp },
-            { id: 'BRANDING', label: 'Logo, Banner & Media', icon: ImageIcon },
-            { id: 'AUDIT', label: 'Audit Logs & Ekspor', icon: FileText },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeAdminTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveAdminTab(tab.id as any)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        </div>}
       </div>
 
-      {/* OVERVIEW TAB */}
       {activeAdminTab === 'OVERVIEW' && (
         <div className="space-y-6">
           {/* 4 Primary Bento Metrics: Koperasi vs UMKM strictly separated */}
