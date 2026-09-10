@@ -63,7 +63,33 @@ export async function uploadMemberPhoto(file:File,memberId:string,memberName:str
 export async function uploadMemberKta(file:File,memberId:string,memberName:string){ return uploadFile(file,'KTA_ANGGOTA',memberId,memberName); }
 export async function uploadFile(file:File,category:string,memberId:string,name?:string){
   const base64=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});
-  return syncFileToGoogleDrive({fileName:file.name,fileUrl:base64,base64Data:base64,mimeType:file.type||'application/octet-stream',category,uploadedBy:name||memberId,memberId});
+  // Upload media yang dipakai profil anggota harus menunggu respons Apps Script.
+  // Jangan menggunakan syncFileToGoogleDrive() di sini karena fungsi tersebut
+  // sengaja fire-and-forget untuk upload legacy lainnya.
+  const response:any = await callGoogleAppsScript('uploadFileToDrive', {
+    fileName:file.name,
+    fileUrl:base64,
+    base64Data:base64,
+    mimeType:file.type||'application/octet-stream',
+    category,
+    uploadedBy:name||memberId,
+    memberId,
+  });
+  if (!response?.success) {
+    return { success:false, status:'ERROR', error:response?.error || 'Upload file ke Google Drive gagal.' };
+  }
+  const result:any=response.result||response.data||{};
+  return {
+    success:true,
+    status:'UPLOADED',
+    fileId:result.fileId||'',
+    driveUrl:result.driveUrl||'',
+    directImageUrl:result.directImageUrl||'',
+    folderPath:result.folderPath||'',
+    uploadedAt:result.uploadedAt||new Date().toISOString(),
+    result,
+    data:result,
+  };
 }
 
 
