@@ -26,7 +26,8 @@ export async function callGoogleAppsScript<T = any>(action: string, data: any = 
 export async function fetchAllDataFromGas(): Promise<GasResponse> {
   const endpoint=getUrl();
   if(!endpoint) return {success:false,error:'URL Google Apps Script belum dikonfigurasi.'};
-  try { const r=await fetch(endpoint+'?action=getAllData'); const j=await r.json(); return j; }
+  try { const separator = endpoint.includes('?') ? '&' : '?';
+    const r=await fetch(endpoint+separator+'action=getAllData&_ts='+Date.now(), { cache: 'no-store' }); const j=await r.json(); return j; }
   catch(e:any){ return {success:false,error:e?.message||'Gagal mengambil data Google Sheets'}; }
 }
 
@@ -65,6 +66,11 @@ export async function uploadFile(file:File,category:string,memberId:string,name?
   return syncFileToGoogleDrive({fileName:file.name,fileUrl:base64,base64Data:base64,mimeType:file.type||'application/octet-stream',category,uploadedBy:name||memberId,memberId});
 }
 
+
+export async function updateKoperasiConfig(config:any):Promise<GasResponse> {
+  return callGoogleAppsScript('updateKoperasiConfig', { config });
+}
+
 export async function recordAttendance(data:any){ return callGoogleAppsScript('recordAttendance',data); }
 export async function verifyMemberCode(code:string,eventId?:string){ return callGoogleAppsScript('verifyMemberCode',{code,eventId}); }
 export async function testGasConnection(){ return callGoogleAppsScript('ping',{}); }
@@ -74,7 +80,7 @@ export const pullStateFromGAS = fetchAllDataFromGas;
 export const getSyncStatus = () => ({connected:!!getUrl()});
 
 export const googleWorkspaceSync = {
-  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, deleteSpreadsheetRow,
+  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, deleteSpreadsheetRow, updateKoperasiConfig,
   syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance,
   verifyMemberCode, testGasConnection, syncWithGoogleWorkspace:testGasConnection,
   pushStateToGAS, pullStateFromGAS, getSyncStatus,
