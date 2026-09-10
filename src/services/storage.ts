@@ -1176,15 +1176,21 @@ class StorageService {
       return { success: false, message: `nomor_anggota ${nextNumber} sudah digunakan anggota lain.` };
     }
 
-    const response = await callGoogleAppsScript('updateMemberIdentifiers', {
-      old_member_id: oldId,
-      member_id: nextId,
-      nomor_anggota: nextNumber,
-      admin_id: adminId || 'SUPER_ADMIN',
-    });
+    // WAJIB menunggu Apps Script. Cache lokal belum boleh berubah sebelum
+    // Google Spreadsheet mengembalikan hasil UPDATED.
+    const response = await googleWorkspaceSync.updateMemberIdentifiers(
+      oldId,
+      nextId,
+      nextNumber,
+      adminId || 'SUPER_ADMIN'
+    );
 
-    if (!response.success) {
-      return { success: false, message: response.error || response.message || 'Google Spreadsheet menolak perubahan identitas anggota.' };
+    const remoteResult:any = response?.result ?? response?.data ?? response;
+    if (!response.success || remoteResult?.status !== 'UPDATED') {
+      return {
+        success: false,
+        message: remoteResult?.message || response.error || response.message || 'Google Spreadsheet menolak perubahan identitas anggota.',
+      };
     }
 
     const updatedMember: Member = {
