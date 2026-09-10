@@ -2060,8 +2060,9 @@ class StorageService {
     const now = new Date();
     const paymentId = `PAY-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
 
-    // File bukti sudah diunggah oleh PaymentModal. Fungsi ini hanya mencatat
-    // metadata pembayaran agar tidak terjadi upload ganda/fire-and-forget.
+    // PaymentModal sudah mengirim file fisik ke Google Drive. Di sini hanya
+    // menyimpan metadata pembayaran dan memastikan metadata tersebut benar-benar
+    // diterima Google Spreadsheet sebelum transaksi dianggap berhasil.
     if (!params.proof_file_id && !params.proof_file_url) {
       throw new Error('Bukti pembayaran belum memiliki fileId atau URL Drive.');
     }
@@ -2081,9 +2082,8 @@ class StorageService {
       updated_at: now.toISOString(),
     };
 
-    payments.unshift(newPayment);
-    this.setItem(STORAGE_KEYS.PAYMENTS, payments);
-
+    // STEP 1 — Spreadsheet adalah sumber kebenaran. Jangan menaruh transaksi
+    // ke cache sebagai sukses sebelum Google Apps Script mengonfirmasi penulisan.
     const sheetResult = await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_BUKTI_PEMBAYARAN', paymentId, {
       payment_id: paymentId,
       member_id: params.member_id,
@@ -2100,29 +2100,56 @@ class StorageService {
     });
 
     if (!sheetResult?.success) {
-      // Jangan menghapus file Drive; simpan lokal agar pengguna tidak kehilangan
-      // transaksi dan tampilkan kegagalan sinkronisasi untuk dapat dicoba ulang.
-      console.warn('[Payment] Gagal sinkron ke Spreadsheet:', sheetResult?.error || sheetResult?.message);
+      throw new Error(
+        sheetResult?.error ||
+        sheetResult?.message ||
+        'Bukti sudah dikirim ke Google Drive, tetapi data pembayaran gagal dicatat ke Google Spreadsheet.'
+      );
     }
 
-    // If for an event registration, update registration status
+    const sheetRemote:any = sheetResult.result ?? sheetResult.data ?? sheetResult;
+    const remoteStatus = String(sheetRemote?.status || '').trim().toUpperCase();
+    if (remoteStatus && !['INSERTED', 'UPDATED', 'APPENDED', 'SUCCESS'].includes(remoteStatus)) {
+      throw new Error(
+        sheetRemote?.message ||
+        `Google Spreadsheet menolak data pembayaran (status: ${remoteStatus}).`
+      );
+    }
+
+    // STEP 2 — Setelah Spreadsheet sukses, baru update cache lokal.
+    payments.unshift(newPayment);
+    this.setItem(STORAGE_KEYS.PAYMENTS, payments);
+
+    // Jika pembayaran terkait registrasi stand, ubah status registrasi dan
+    // tunggu konfirmasi Spreadsheet sebelum memperbarui cache registrasi.
     if (params.registration_id) {
       const registrations = this.getRegistrations();
       const regIdx = registrations.findIndex((r) => r.registration_id === params.registration_id);
       if (regIdx !== -1) {
-        registrations[regIdx] = {
+        const updatedRegistration: EventRegistration = {
           ...registrations[regIdx],
           registration_status: 'PAYMENT_VERIFICATION',
           payment_status: 'PENDING_VERIFICATION',
           updated_at: now.toISOString(),
         };
-        this.setItem(STORAGE_KEYS.REGISTRATIONS, registrations);
-        await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_REGISTRASI_STAND', params.registration_id, {
+
+        const registrationResult = await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_REGISTRASI_STAND', params.registration_id, {
           registration_id: params.registration_id,
-          registration_status: 'PAYMENT_VERIFICATION',
-          payment_status: 'PENDING_VERIFICATION',
-          updated_at: now.toISOString(),
+          registration_status: updatedRegistration.registration_status,
+          payment_status: updatedRegistration.payment_status,
+          updated_at: updatedRegistration.updated_at,
         });
+
+        if (!registrationResult?.success) {
+          throw new Error(
+            registrationResult?.error ||
+            registrationResult?.message ||
+            'Pembayaran tersimpan, tetapi status registrasi belum berhasil diperbarui di Google Spreadsheet.'
+          );
+        }
+
+        registrations[regIdx] = updatedRegistration;
+        this.setItem(STORAGE_KEYS.REGISTRATIONS, registrations);
       }
     }
 
@@ -2139,8 +2166,8 @@ class StorageService {
     const payerMember = this.getMemberById(params.member_id);
     const payerName = payerMember ? payerMember.nama_lengkap : params.member_id;
     this.addNotification({
-      title: 'Bukti Pembayaran Baru Masuk',
-      message: `${payerName} mengunggah bukti transfer ${params.payment_type.replace('_', ' ')} sebesar Rp${params.amount.toLocaleString('id-ID')}. Menunggu verifikasi admin.`,
+      title: 'Bukti Pembayaran Berhasil Dikirim',
+      message: `${payerName}, bukti pembayaran ${params.payment_type.replace('_', ' ')} sebesar Rp${params.amount.toLocaleString('id-ID')} telah diterima. Pembayaran akan diverifikasi manual oleh Pengurus Koperasi maksimal 1x24 jam.`,
       type: 'INFO',
     });
     this.persistToServer();
