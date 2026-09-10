@@ -349,99 +349,60 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         </div>
       </div>
 
-      {/* 2. PUSAT MENU FITUR UTAMA (GRID IKON LINGKARAN EMAS & HIJAU BANUARASA) */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-              Menu Utama • Key Visual Banuarasa
-            </span>
-            <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-              Ketuk Ikon untuk Membuka Detail Fitur
-            </h3>
-          </div>
-          {activeFeature && (
-            <button
-              type="button"
-              onClick={() => setActiveFeature(null)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Tutup Detail</span>
-            </button>
-          )}
+      {/* 2. NAVIGASI LAYANAN ANGGOTA — prioritas berdasarkan kebutuhan anggota */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-7 space-y-5">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+            Layanan Anggota
+          </span>
+          <h3 className="text-base sm:text-lg font-black text-slate-900 mt-2">Fitur Cepat</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">Layanan utama Anda ditempatkan paling depan.</p>
         </div>
 
-        {/* Mobile / Tablet Priority: Dropdown Menu Selector (Hemat Scrolling) */}
-        <div className="sm:hidden pt-1 pb-1">
-          <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-emerald-900">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Pilih Fitur Langsung:</span>
-            </span>
-            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              {menuFeatures.find((f) => f.id === activeFeature)?.title || 'Pilih Fitur'}
-            </span>
-          </label>
-          <div className="relative">
-            <select
-              value={activeFeature || ''}
-              onChange={(e) => setActiveFeature(e.target.value ? (e.target.value as FeatureType) : null)}
-              className="w-full appearance-none px-4 py-2.5 bg-slate-900 text-amber-300 border-2 border-amber-400 font-bold text-xs rounded-2xl shadow-sm focus:outline-hidden pr-10 cursor-pointer"
-            >
-              <option value="" className="bg-slate-900 text-slate-400">-- Pilih Menu (Buka / Tutup) --</option>
-              {menuFeatures.map((f) => (
-                <option key={f.id} value={f.id} className="bg-slate-900 text-white font-bold">
-                  {f.title} ({f.badge})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-amber-300 absolute right-3.5 top-3 pointer-events-none" />
-          </div>
-        </div>
-
-        {/* The 8 Circular Icons Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 sm:gap-5 pt-2">
-          {menuFeatures.map((item) => {
+        {/* Empat layanan paling penting */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {menuFeatures.filter((f) => ['STAND','PEMBAYARAN','PROFIL','OMZET'].includes(f.id)).map((item) => {
             const IconComponent = item.icon;
             const isSelected = activeFeature === item.id;
-
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveFeature(item.id)}
-                className={`flex flex-col items-center gap-2 group cursor-pointer focus:outline-hidden transition-all duration-200 p-2 rounded-2xl ${
-                  isSelected ? 'bg-emerald-50/80' : 'hover:bg-slate-50'
-                }`}
-                title={`Buka detail fitur ${item.title}`}
-              >
-                {/* BANUARASA KEY VISUAL CIRCLE:
-                    - Warna dasar hijau: bg-gradient-to-b from-emerald-600 to-emerald-800
-                    - Icon putih: text-white
-                    - Lingkaran kuning emas: border-[3px] border-amber-400
-                */}
-                <div
-                  className={`w-16 h-16 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all duration-200 shadow-md ${
-                    isSelected
-                      ? 'bg-emerald-600 border-[3px] border-white ring-4 ring-amber-400 scale-105 shadow-xl shadow-amber-400/40'
-                      : 'bg-gradient-to-b from-emerald-700 to-emerald-900 border-[2.5px] border-amber-400 group-hover:border-amber-300 group-hover:scale-105 group-hover:shadow-amber-400/20'
-                  }`}
-                >
-                  <IconComponent className="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" />
-                </div>
-
-                <span
-                  className={`text-[11px] sm:text-xs font-black leading-tight text-center ${
-                    isSelected ? 'text-emerald-900' : 'text-slate-700 group-hover:text-emerald-800'
-                  }`}
-                >
-                  {item.title}
+              <button key={item.id} type="button" onClick={() => setActiveFeature(item.id)}
+                className={`relative min-h-28 flex flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-all cursor-pointer ${isSelected ? 'bg-emerald-50 border-emerald-400 shadow-md' : 'bg-slate-50 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300'}`}>
+                <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isSelected ? 'bg-emerald-700 text-white' : 'bg-slate-900 text-white'}`}>
+                  <IconComponent className="w-6 h-6" />
                 </span>
+                <span className="text-xs font-black text-slate-800 text-center">{item.id === 'PROFIL' ? 'Profil / KTA' : item.id === 'PEMBAYARAN' ? 'Pembayaran' : item.title.replace('Lapor ', '')}</span>
+                {item.badge && <span className="text-[9px] font-bold text-slate-500 text-center">{item.badge}</span>}
               </button>
             );
           })}
         </div>
+
+        {/* Layanan lainnya dikelompokkan berdasarkan fungsi */}
+        <div className="border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-black text-slate-700">Layanan lainnya</span>
+            <span className="text-[10px] text-slate-400">Ketuk ikon untuk membuka</span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            {menuFeatures.filter((f) => ['SIMPANAN','EVENT','PRODUK','LEGALITAS'].includes(f.id)).map((item) => {
+              const IconComponent = item.icon;
+              const isSelected = activeFeature === item.id;
+              return (
+                <button key={item.id} type="button" onClick={() => setActiveFeature(item.id)}
+                  className={`flex flex-col items-center justify-center gap-1.5 min-h-20 rounded-xl border p-2 transition-all cursor-pointer ${isSelected ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                  <IconComponent className={`w-5 h-5 ${isSelected ? 'text-emerald-700' : 'text-slate-600'}`} />
+                  <span className="text-[10px] font-bold text-slate-700 text-center leading-tight">{item.id === 'EVENT' ? 'Event' : item.id === 'PRODUK' ? 'Produk' : item.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {activeFeature && (
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setActiveFeature(null)} className="text-[11px] font-bold text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg bg-slate-100 cursor-pointer">Tutup layanan</button>
+          </div>
+        )}
       </div>
 
       {/* 3. HALAMAN DETAIL FITUR (TERBUKA SAAT IKON DIKETUK) */}
