@@ -13,18 +13,32 @@ export const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1
 export interface GasResponse<T = any> { success: boolean; message?: string; data?: T; result?: T; error?: string; }
 
 const getUrl = () => (localStorage.getItem(APPS_SCRIPT_URL_KEY) || localStorage.getItem(LEGACY_GAS_URL_KEY) || DEFAULT_GAS_URL).trim();
+const getCandidateUrls = (): string[] => {
+  const saved = getUrl();
+  return Array.from(new Set([saved, DEFAULT_GAS_URL].filter(Boolean)));
+};
 export const getSavedGasUrl = (): string => getUrl();
 export const saveGasUrl = (url: string): void => { localStorage.setItem(APPS_SCRIPT_URL_KEY, url.trim()); localStorage.setItem(LEGACY_GAS_URL_KEY, url.trim()); };
 
 export async function callGoogleAppsScript<T = any>(action: string, data: any = {}): Promise<GasResponse<T>> {
-  const endpoint = getUrl();
-  if (!endpoint) return { success: false, error: 'URL Google Apps Script belum dikonfigurasi.' };
-  try {
-    const response = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action, data}) });
-    const json = await response.json();
-    if (!response.ok) return { success:false, error:`HTTP ${response.status}` };
-    return json;
-  } catch (error:any) { return { success:false, error:error?.message || 'Network error' }; }
+  const endpoints = getCandidateUrls();
+  if (!endpoints.length) return { success: false, error: 'URL Google Apps Script belum dikonfigurasi.' };
+  let lastError = 'Network error';
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action, data}) });
+      const json = await response.json();
+      if (!response.ok) { lastError = `HTTP ${response.status}`; continue; }
+      if (json && json.success !== false) {
+        if (endpoint !== getUrl()) saveGasUrl(endpoint);
+        return json;
+      }
+      lastError = json?.error || json?.message || 'Apps Script menolak permintaan.';
+    } catch (error:any) {
+      lastError = error?.message || 'Network error';
+    }
+  }
+  return { success:false, error:lastError };
 }
 
 export async function fetchAllDataFromGas(): Promise<GasResponse> {
@@ -36,7 +50,7 @@ export async function fetchAllDataFromGas(): Promise<GasResponse> {
 }
 
 export async function syncRowToSpreadsheet(sheetName:string, id:string, data:any):Promise<GasResponse> {
-  const actionMap:any={SHEET_ANGGOTA_KOPERASI:'updateMember',SHEET_REGISTRASI_STAND:'updateRegistration',SHEET_PEMBAYARAN:'updatePayment',SHEET_BUKTI_PEMBAYARAN:'createPayment',SHEET_SIMPANAN:'updateSaving',SHEET_OMZET_PENJUALAN:'updateSalesReport',SHEET_DOKUMEN_LEGALITAS:'upsertDocument',SHEET_PRODUK_UMKM:'upsertProduct',SHEET_EVENT_MARKET:'updateEvent',SHEET_AUDIT_LOGS:'logAudit',SHEET_KEHADIRAN_EVENT:'upsertAttendance'};
+  const actionMap:any={SHEET_ANGGOTA_KOPERASI:'updateMember',SHEET_REGISTRASI_STAND:'updateRegistration',SHEET_PEMBAYARAN:'updatePayment',SHEET_SIMPANAN:'updateSaving',SHEET_OMZET_PENJUALAN:'updateSalesReport',SHEET_DOKUMEN_LEGALITAS:'upsertDocument',SHEET_PRODUK_UMKM:'upsertProduct',SHEET_EVENT_MARKET:'updateEvent',SHEET_AUDIT_LOGS:'logAudit',SHEET_KEHADIRAN_EVENT:'upsertAttendance'};
   const action=actionMap[sheetName] || 'upsertRow';
   const payload={...data};
   if(id && !payload.member_id && sheetName==='SHEET_ANGGOTA_KOPERASI') payload.member_id=id;
@@ -51,17 +65,6 @@ export async function syncRowToSpreadsheet(sheetName:string, id:string, data:any
 
 export async function createMember(member:any):Promise<GasResponse> {
   return callGoogleAppsScript('createMember', member);
-}
-
-// Dedicated write path for Super Admin member identifiers.
-// The caller must await this response before updating the local cache.
-export async function updateMemberIdentifiers(oldMemberId:string, newMemberId:string, newNomorAnggota:string, adminId?:string):Promise<GasResponse> {
-  return callGoogleAppsScript('updateMemberIdentifiers', {
-    old_member_id: oldMemberId,
-    member_id: newMemberId,
-    nomor_anggota: newNomorAnggota,
-    admin_id: adminId || 'SUPER_ADMIN',
-  });
 }
 
 export async function deleteSpreadsheetRow(sheetName:string,id:string):Promise<GasResponse>{ return callGoogleAppsScript('deleteRow',{sheetName,id}); }
@@ -88,9 +91,9 @@ export async function uploadFile(file:File,category:string,memberId:string,name?
     r.readAsDataURL(file);
   });
 
-  // Upload harus menunggu respons Apps Script. Jangan fire-and-forget,
-  // karena bukti pembayaran membutuhkan fileId/URL Drive sebelum data pembayaran
-  // ditulis ke Spreadsheet.
+  // IMPORTANT: jangan gunakan syncFileToGoogleDrive() di sini karena fungsi
+  // tersebut bersifat fire-and-forget. Pendaftaran anggota membutuhkan hasil
+  // upload yang sebenarnya agar URL foto dapat disimpan ke Spreadsheet.
   return callGoogleAppsScript('uploadFileToDrive',{
     fileName:file.name,
     fileUrl:base64,
@@ -100,6 +103,15 @@ export async function uploadFile(file:File,category:string,memberId:string,name?
     uploadedBy:name||memberId,
     memberId
   });
+}
+
+
+export async function saveMemberCardDesign(design:any, adminUsername='SUPER_ADMIN'):Promise<GasResponse> {
+  return callGoogleAppsScript('saveMemberCardDesign', { design, admin_id: adminUsername });
+}
+
+export async function getMemberCardDesign():Promise<GasResponse> {
+  return callGoogleAppsScript('getMemberCardDesign', {});
 }
 
 export async function updateKoperasiConfig(config:any):Promise<GasResponse> {
@@ -115,8 +127,8 @@ export const pullStateFromGAS = fetchAllDataFromGas;
 export const getSyncStatus = () => ({connected:!!getUrl()});
 
 export const googleWorkspaceSync = {
-  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, updateMemberIdentifiers, deleteSpreadsheetRow, updateKoperasiConfig,
-  syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance,
+  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, deleteSpreadsheetRow, updateKoperasiConfig,
+  syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance, saveMemberCardDesign, getMemberCardDesign,
   verifyMemberCode, testGasConnection, syncWithGoogleWorkspace:testGasConnection,
   pushStateToGAS, pullStateFromGAS, getSyncStatus,
 };
