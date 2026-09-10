@@ -44,7 +44,7 @@ import {
   MEMBER_DEFAULT_PASSWORD,
 } from '../data/initialData';
 import { getStandPrice } from './standEngine';
-import { googleWorkspaceSync } from './googleWorkspaceSync';
+import { googleWorkspaceSync, callGoogleAppsScript } from './googleWorkspaceSync';
 import { convertGoogleDriveUrl } from '../utils/mediaUtils';
 import { sha256 } from 'js-sha256';
 
@@ -657,12 +657,11 @@ class StorageService {
     this.cleanExpiredReservations();
     this.syncCurrentUserWithMemberProfile();
 
-    // IMPORTANT: Jangan melakukan pull otomatis saat aplikasi dimulai.
-    // Sinkronisasi dari Google Spreadsheet hanya boleh dilakukan secara manual
-    // agar data/form yang sedang dikerjakan pengguna tidak tertimpa oleh data
-    // Spreadsheet yang masih belum memuat perubahan terbaru.
-    // CRUD individual tetap melakukan push perubahan secara langsung.
-    this.syncCurrentUserWithMemberProfile();
+    // Google Sheets is the authoritative database. Pull it immediately so
+    // deleted spreadsheet rows cannot be restored from an old browser cache.
+    this.syncFromGoogleSheets().then(() => {
+      this.syncCurrentUserWithMemberProfile();
+    });
   }
 
   // Fungsi utilitas untuk membersihkan cookies & cache perangkat secara manual/otomatis
@@ -1145,6 +1144,84 @@ class StorageService {
 
   getMemberById(id: string): Member | undefined {
     return this.getMembers().find((m) => m.member_id === id);
+  }
+
+  async updateMemberIdentifiers(
+    oldMemberId: string,
+    newMemberId: string,
+    newNomorAnggota: string,
+    adminId?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const oldId = String(oldMemberId || '').trim();
+    const nextId = String(newMemberId || '').trim();
+    const nextNumber = String(newNomorAnggota || '').trim();
+
+    if (!oldId || !nextId || !nextNumber) {
+      return { success: false, message: 'member_id lama, member_id baru, dan nomor_anggota wajib diisi.' };
+    }
+
+    const members = this.getMembers();
+    const targetIndex = members.findIndex((m) => m.member_id === oldId);
+    if (targetIndex === -1) {
+      return { success: false, message: 'Data anggota yang akan diubah tidak ditemukan di cache aplikasi.' };
+    }
+
+    const duplicateId = members.some((m, index) => index !== targetIndex && m.member_id.trim().toUpperCase() === nextId.toUpperCase());
+    if (duplicateId) {
+      return { success: false, message: `member_id ${nextId} sudah digunakan anggota lain.` };
+    }
+
+    const duplicateNumber = members.some((m, index) => index !== targetIndex && m.nomor_anggota.trim().toUpperCase() === nextNumber.toUpperCase());
+    if (duplicateNumber) {
+      return { success: false, message: `nomor_anggota ${nextNumber} sudah digunakan anggota lain.` };
+    }
+
+    const response = await callGoogleAppsScript('updateMemberIdentifiers', {
+      old_member_id: oldId,
+      member_id: nextId,
+      nomor_anggota: nextNumber,
+      admin_id: adminId || 'SUPER_ADMIN',
+    });
+
+    if (!response.success) {
+      return { success: false, message: response.error || response.message || 'Google Spreadsheet menolak perubahan identitas anggota.' };
+    }
+
+    const updatedMember: Member = {
+      ...members[targetIndex],
+      member_id: nextId,
+      nomor_anggota: nextNumber,
+      barcode_value: nextId,
+      qr_value: nextId,
+      updated_at: new Date().toISOString(),
+    };
+    members[targetIndex] = updatedMember;
+    this.setItem(STORAGE_KEYS.MEMBERS, members);
+
+    const currentUser = this.getCurrentUser();
+    if (currentUser?.role === 'MEMBER' && currentUser.member_id === oldId) {
+      this.setCurrentUser({
+        ...currentUser,
+        member_id: nextId,
+        nomor_anggota: nextNumber,
+        name: updatedMember.nama_lengkap,
+      });
+    }
+
+    this.logAudit({
+      user_id: adminId || 'SUPER_ADMIN',
+      user_role: 'SUPER_ADMIN',
+      action: 'UPDATE_MEMBER_IDENTIFIER',
+      module: 'MEMBER',
+      reference_id: nextId,
+      description: `Super Admin mengubah identitas anggota ${updatedMember.nama_lengkap}: ${oldId} → ${nextId}, nomor anggota → ${nextNumber}`,
+      result: 'SUCCESS',
+    });
+
+    return {
+      success: true,
+      message: `Identitas ${updatedMember.nama_lengkap} berhasil diperbarui: ${nextId} / ${nextNumber}.`,
+    };
   }
 
   updateMember(memberId: string, updates: Partial<Member>, adminId?: string): boolean {
@@ -1941,28 +2018,25 @@ class StorageService {
     return memberId ? pays.filter((p) => p.member_id === memberId) : pays;
   }
 
-  uploadPaymentProof(params: {
+  async uploadPaymentProof(params: {
     registration_id?: string;
     member_id: string;
     payment_type: Payment['payment_type'];
     amount: number;
     payment_method: Payment['payment_method'];
     proof_file_url: string;
+    proof_file_id?: string;
     proof_file_name?: string;
-  }): Payment {
+  }): Promise<Payment> {
     const payments = this.getPayments();
     const now = new Date();
     const paymentId = `PAY-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
 
-    // Sync payment proof photo to Google Drive
-    const driveFile = googleWorkspaceSync.syncFileToGoogleDrive({
-      fileName: params.proof_file_name || `Bukti_Bayar_${paymentId}_${params.member_id}.jpg`,
-      fileUrl: params.proof_file_url,
-      category: 'BUKTI_PEMBAYARAN',
-      uploadedBy: params.member_id,
-      memberId: params.member_id,
-      referenceId: paymentId,
-    });
+    // File bukti sudah diunggah oleh PaymentModal. Fungsi ini hanya mencatat
+    // metadata pembayaran agar tidak terjadi upload ganda/fire-and-forget.
+    if (!params.proof_file_id && !params.proof_file_url) {
+      throw new Error('Bukti pembayaran belum memiliki fileId atau URL Drive.');
+    }
 
     const newPayment: Payment = {
       payment_id: paymentId,
@@ -1972,7 +2046,7 @@ class StorageService {
       amount: params.amount,
       payment_method: params.payment_method,
       payment_date: now.toISOString().split('T')[0],
-      proof_file_id: driveFile.fileId,
+      proof_file_id: params.proof_file_id || '',
       proof_file_url: params.proof_file_url,
       verification_status: 'PENDING',
       created_at: now.toISOString(),
@@ -1982,8 +2056,7 @@ class StorageService {
     payments.unshift(newPayment);
     this.setItem(STORAGE_KEYS.PAYMENTS, payments);
 
-    // Sync to Google Spreadsheet
-    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_BUKTI_PEMBAYARAN', paymentId, {
+    const sheetResult = await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_BUKTI_PEMBAYARAN', paymentId, {
       payment_id: paymentId,
       member_id: params.member_id,
       registration_id: params.registration_id || '-',
@@ -1991,9 +2064,18 @@ class StorageService {
       amount: params.amount,
       payment_method: params.payment_method,
       payment_date: newPayment.payment_date,
-      proof_drive_url: driveFile.driveUrl,
+      proof_drive_url: params.proof_file_url,
+      proof_file_id: params.proof_file_id || '',
       verification_status: 'PENDING',
+      created_at: newPayment.created_at,
+      updated_at: newPayment.updated_at,
     });
+
+    if (!sheetResult?.success) {
+      // Jangan menghapus file Drive; simpan lokal agar pengguna tidak kehilangan
+      // transaksi dan tampilkan kegagalan sinkronisasi untuk dapat dicoba ulang.
+      console.warn('[Payment] Gagal sinkron ke Spreadsheet:', sheetResult?.error || sheetResult?.message);
+    }
 
     // If for an event registration, update registration status
     if (params.registration_id) {
@@ -2007,6 +2089,12 @@ class StorageService {
           updated_at: now.toISOString(),
         };
         this.setItem(STORAGE_KEYS.REGISTRATIONS, registrations);
+        await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_REGISTRASI_STAND', params.registration_id, {
+          registration_id: params.registration_id,
+          registration_status: 'PAYMENT_VERIFICATION',
+          payment_status: 'PENDING_VERIFICATION',
+          updated_at: now.toISOString(),
+        });
       }
     }
 
@@ -2016,7 +2104,7 @@ class StorageService {
       action: 'UPLOAD_PAYMENT',
       module: 'PAYMENT',
       reference_id: paymentId,
-      description: `Upload bukti bayar ${params.payment_type} sebesar Rp${params.amount.toLocaleString('id-ID')} (${params.payment_method}) ke Google Drive ${driveFile.folderPath} dan Google Sheets`,
+      description: `Upload bukti bayar ${params.payment_type} sebesar Rp${params.amount.toLocaleString('id-ID')} (${params.payment_method}) ke Google Drive dan Google Sheets`,
       result: 'SUCCESS',
     });
 
