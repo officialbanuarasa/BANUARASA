@@ -27,25 +27,57 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoSource, setPhotoSource] = useState<'device' | 'camera' | 'url'>('device');
 
   if (!isOpen) return null;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     if (!file.type.startsWith('image/')) {
       setErrorMsg('File foto harus berupa gambar.');
       return;
     }
+
     if (file.size > 5 * 1024 * 1024) {
       setErrorMsg('Ukuran foto maksimal 5 MB.');
       return;
     }
+
     setPhotoFile(file);
+    setPhotoUrl('');
+    setPhotoSource('device');
     setErrorMsg('');
+
     const reader = new FileReader();
     reader.onload = () => setPhotoPreview(String(reader.result || ''));
     reader.readAsDataURL(file);
+  };
+
+  const handlePhotoUrlChange = (value: string) => {
+    setPhotoUrl(value);
+    setPhotoFile(null);
+    setPhotoSource('url');
+    setErrorMsg('');
+
+    const normalized = value.trim();
+    if (!normalized) {
+      setPhotoPreview('');
+      return;
+    }
+
+    try {
+      const url = new URL(normalized);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        setPhotoPreview('');
+        return;
+      }
+      setPhotoPreview(normalized);
+    } catch {
+      setPhotoPreview('');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +92,18 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
     if (formData.password.length < 6) {
       setErrorMsg('Kata sandi akun minimal 6 karakter.');
       return;
+    }
+
+    if (photoUrl.trim()) {
+      try {
+        const parsedUrl = new URL(photoUrl.trim());
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+          throw new Error('URL foto harus menggunakan http:// atau https://.');
+        }
+      } catch (urlError: any) {
+        setErrorMsg(urlError?.message || 'URL foto tidak valid.');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -82,7 +126,7 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
         alamat: formData.alamat.trim() || 'Berau, Kalimantan Timur',
         alamat_usaha: formData.alamat.trim() || 'Berau, Kalimantan Timur',
         deskripsi_usaha: '',
-        foto_profil_url: '',
+        foto_profil_url: photoUrl.trim() || '',
         nomor_hp: formData.nomor_hp.trim(),
         whatsapp: formData.nomor_hp.trim(),
         email: formData.email.trim() || `${newId.toLowerCase()}@banuarasa.id`,
@@ -98,7 +142,12 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
       storage.saveMember(newMember);
       let finalMember = newMember;
 
-      if (photoFile) {
+      if (photoUrl.trim()) {
+        // URL foto disimpan langsung pada profil dan akan ikut tersinkron ke Google Sheets.
+        finalMember = storage.updateMemberProfile(newMember.member_id, {
+          foto_profil_url: photoUrl.trim(),
+        }).member || newMember;
+      } else if (photoFile) {
         const mediaResult = await storage.saveMemberMedia(newMember.member_id, photoFile);
         if (mediaResult.success && mediaResult.member) {
           finalMember = mediaResult.member;
@@ -120,7 +169,7 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden my-6 border border-slate-100">
+      <div className="w-full max-w-md max-h-[calc(100dvh-1.5rem)] bg-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-y-auto overscroll-contain touch-pan-y my-3 sm:my-6 border border-slate-100">
         
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
@@ -223,20 +272,92 @@ export const RegisterMemberModal: React.FC<RegisterMemberModalProps> = ({
               <div className="relative shrink-0">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-emerald-500 bg-white flex items-center justify-center shadow-sm">
                   {photoPreview ? (
-                    <img src={photoPreview} alt="Preview foto anggota" className="w-full h-full object-cover" />
+                    <img
+                      src={photoPreview}
+                      alt="Preview foto anggota"
+                      className="w-full h-full object-cover"
+                      onError={() => {
+                        if (photoSource === 'url') {
+                          setPhotoPreview('');
+                          setErrorMsg('URL foto tidak dapat ditampilkan. Pastikan URL mengarah langsung ke file gambar yang dapat diakses publik.');
+                        }
+                      }}
+                    />
                   ) : (
                     <span className="text-3xl font-black text-emerald-200">Foto</span>
                   )}
                 </div>
               </div>
+
               <div className="min-w-0 flex-1 w-full text-center sm:text-left">
                 <label className="block font-bold text-slate-800 mb-1">Foto Profil Anggota</label>
-                <p className="text-[11px] text-slate-500 mb-2">Opsional. Foto akan tersimpan ke Google Drive dan digunakan pada KTA digital.</p>
-                <label htmlFor="register-member-photo" className="inline-flex max-w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition">
-                  📷 Pilih Foto dari Perangkat / Kamera
-                </label>
-                <input id="register-member-photo" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
-                {photoFile && <p className="mt-1 text-[10px] text-emerald-700 truncate">{photoFile.name}</p>}
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Opsional. Pilih foto dari galeri, ambil langsung dengan kamera, atau gunakan URL foto publik.
+                </p>
+
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                  <label
+                    htmlFor="register-member-photo-gallery"
+                    className="inline-flex min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer transition"
+                  >
+                    🖼️ Galeri
+                  </label>
+                  <input
+                    id="register-member-photo-gallery"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+
+                  <label
+                    htmlFor="register-member-photo-camera"
+                    className="inline-flex min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold cursor-pointer transition"
+                  >
+                    📷 Kamera
+                  </label>
+                  <input
+                    id="register-member-photo-camera"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotoSource('url');
+                      setPhotoFile(null);
+                      setErrorMsg('');
+                    }}
+                    className="col-span-2 sm:col-span-1 inline-flex min-w-0 items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[11px] font-bold transition"
+                  >
+                    🔗 Gunakan URL
+                  </button>
+                </div>
+
+                {photoSource === 'url' && (
+                  <div className="mt-2">
+                    <input
+                      type="url"
+                      inputMode="url"
+                      autoComplete="url"
+                      placeholder="https://contoh.com/foto.jpg"
+                      value={photoUrl}
+                      onChange={(e) => handlePhotoUrlChange(e.target.value)}
+                      className="w-full min-w-0 px-3 py-2 border border-emerald-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 text-xs"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500 text-left">
+                      Gunakan URL langsung ke gambar yang bisa diakses publik (JPG, PNG, WEBP, dan sejenisnya).
+                    </p>
+                  </div>
+                )}
+
+                {photoFile && (
+                  <p className="mt-1 text-[10px] text-emerald-700 truncate text-left">{photoFile.name}</p>
+                )}
               </div>
             </div>
           </div>
