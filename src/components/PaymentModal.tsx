@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EventRegistration, Member, PaymentType, PaymentMethod } from '../types';
+import { googleWorkspaceSync } from '../services/googleWorkspaceSync';
 import { storage } from '../services/storage';
 import {
   X,
@@ -36,9 +37,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [amount, setAmount] = useState<number>(
     registration && registration.stand_price ? registration.stand_price : defaultAmount
   );
-  const [proofUrl, setProofUrl] = useState<string>(
-    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'
-  );
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,32 +67,75 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setTimeout(() => setCopiedBank(null), 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleProofFileChange = (file: File | null) => {
+    setError(null);
+    setUploadStatus(null);
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Format bukti pembayaran harus JPG, PNG, atau PDF.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Ukuran bukti pembayaran maksimal 2 MB.');
+      return;
+    }
+
+    setProofFile(file);
+    if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl);
+    setProofPreviewUrl(file.type.startsWith('image/') ? URL.createObjectURL(file) : '');
+  };
+
+  useEffect(() => () => {
+    if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl);
+  }, [proofPreviewUrl]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!proofUrl) {
-      setError('Harap sertakan bukti transfer / screenshot transaksi.');
+    if (!proofFile) {
+      setError('Silakan pilih file bukti transfer terlebih dahulu.');
+      fileInputRef.current?.click();
       return;
     }
 
     setIsSubmitting(true);
     setError(null);
+    setUploadStatus('Mengunggah bukti ke Google Drive...');
 
     try {
-      storage.uploadPaymentProof({
+      const driveResult = await googleWorkspaceSync.uploadFile(
+        proofFile,
+        'BUKTI_PEMBAYARAN',
+        memberId,
+        currentMember?.nama_lengkap || memberId
+      );
+
+      if (!driveResult?.success) {
+        throw new Error(driveResult?.error || driveResult?.message || 'Upload bukti pembayaran gagal.');
+      }
+
+      const uploaded = (driveResult.result || driveResult.data || driveResult) as any;
+      const payment = await storage.uploadPaymentProof({
         registration_id: registration?.registration_id,
         member_id: memberId,
         payment_type: (paymentType || 'EVENT_PARTICIPATION') as PaymentType,
         amount: Number(amount) || 50000,
         payment_method: selectedMethod,
-        proof_file_url: proofUrl,
+        proof_file_url: uploaded.directImageUrl || uploaded.driveUrl || '',
+        proof_file_id: uploaded.fileId || '',
+        proof_file_name: proofFile.name,
       });
 
+      if (!payment) throw new Error('Data pembayaran gagal disimpan.');
+      setUploadStatus('Bukti berhasil diunggah dan pembayaran tercatat.');
       setIsSubmitting(false);
       onSuccess();
       onClose();
     } catch (err: any) {
       setIsSubmitting(false);
-      setError(err.message || 'Terjadi kesalahan saat mengunggah bukti transfer.');
+      setUploadStatus(null);
+      setError(err?.message || 'Terjadi kesalahan saat mengunggah bukti transfer.');
     }
   };
 
@@ -264,47 +309,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </p>
               </div>
 
-              {/* Sample Quick Selector */}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-slate-200/80">
-                <span className="text-[10px] text-slate-500">Contoh Resi Siap Pakai:</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setProofUrl(
-                      'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'
-                    )
-                  }
-                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  Resi Transfer Bank
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setProofUrl(
-                      'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&auto=format&fit=crop&q=80'
-                    )
-                  }
-                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  Struk QRIS
-                </button>
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,application/pdf"
+                className="hidden"
+                onChange={(e) => handleProofFileChange(e.target.files?.[0] || null)}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="mx-auto px-4 py-2.5 bg-white border border-emerald-300 text-emerald-800 rounded-xl text-xs font-black hover:bg-emerald-50"
+              >
+                Pilih File Bukti Pembayaran
+              </button>
 
-              {proofUrl && (
+              {proofFile && (
                 <div className="mt-3 p-2 bg-white rounded-xl border border-slate-200 flex items-center gap-3 text-left">
-                  <img src={proofUrl} alt="Preview Bukti" className="w-12 h-12 object-cover rounded-lg" />
+                  {proofPreviewUrl ? (
+                    <img src={proofPreviewUrl} alt="Preview Bukti" className="w-12 h-12 object-cover rounded-lg" />
+                  ) : (
+                    <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center text-[10px] font-black">PDF</div>
+                  )}
                   <div className="flex-grow min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">bukti-pembayaran-terlampir.jpg</p>
-                    <p className="text-[10px] text-emerald-600 font-mono truncate">
-                      Tujuan: {getDrivePathPreview()}
-                    </p>
+                    <p className="text-xs font-bold text-slate-800 truncate">{proofFile.name}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{(proofFile.size / 1024).toFixed(0)} KB • {getDrivePathPreview()}</p>
                   </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded">
-                    Siap Kirim
-                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded">Siap Kirim</span>
                 </div>
               )}
+
+              {uploadStatus && <p className="text-[10px] text-emerald-700 font-bold">{uploadStatus}</p>}
             </div>
           </div>
 
