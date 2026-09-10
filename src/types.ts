@@ -399,8 +399,37 @@ export interface AppBrandingConfig {
 
 export type MemberCardTheme = 'LUXURY_SLATE' | 'EMERALD_GOLD' | 'ROYAL_PURPLE' | 'OCEAN_BLUE' | 'MINIMAL_LIGHT';
 
+export type MemberCardElementType = 'TEXT' | 'FIELD' | 'PHOTO' | 'LOGO' | 'QR' | 'BARCODE' | 'SHAPE';
+export type MemberCardSide = 'FRONT' | 'BACK';
+
+export interface MemberCardElement {
+  id: string;
+  side: MemberCardSide;
+  type: MemberCardElementType;
+  label: string;
+  content?: string;
+  field?: keyof Member | string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: number | string;
+  color?: string;
+  align?: 'left' | 'center' | 'right';
+  lineHeight?: number;
+  opacity?: number;
+  radius?: number;
+  rotation?: number;
+  visible: boolean;
+  url?: string;
+}
+
 export interface MemberCardDesignConfig {
   theme: MemberCardTheme;
+  widthMm?: number;
+  heightMm?: number;
   cardTitle: string;
   organizationName: string;
   marketName: string;
@@ -411,6 +440,7 @@ export interface MemberCardDesignConfig {
   authorizedOfficerNip?: string;
   showPhoto: boolean;
   showQrCode: boolean;
+  showBarcode?: boolean;
   showBusinessName: boolean;
   showCategory: boolean;
   showAddress: boolean;
@@ -419,8 +449,11 @@ export interface MemberCardDesignConfig {
   validityDurationYears: number;
   customLogoUrl?: string;
   customWatermarkUrl?: string;
+  frontBackgroundUrl?: string;
+  backBackgroundUrl?: string;
   disclaimerNotes: string;
   cardAccentColor?: string;
+  elements?: MemberCardElement[];
   updated_at: string;
   updated_by?: string;
 }
