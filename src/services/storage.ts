@@ -657,11 +657,12 @@ class StorageService {
     this.cleanExpiredReservations();
     this.syncCurrentUserWithMemberProfile();
 
-    // Google Sheets is the authoritative database. Pull it immediately so
-    // deleted spreadsheet rows cannot be restored from an old browser cache.
-    this.syncFromGoogleSheets().then(() => {
-      this.syncCurrentUserWithMemberProfile();
-    });
+    // IMPORTANT: Jangan melakukan pull otomatis saat aplikasi dimulai.
+    // Sinkronisasi dari Google Spreadsheet hanya boleh dilakukan secara manual
+    // agar data/form yang sedang dikerjakan pengguna tidak tertimpa oleh data
+    // Spreadsheet yang masih belum memuat perubahan terbaru.
+    // CRUD individual tetap melakukan push perubahan secara langsung.
+    this.syncCurrentUserWithMemberProfile();
   }
 
   // Fungsi utilitas untuk membersihkan cookies & cache perangkat secara manual/otomatis
@@ -1940,25 +1941,28 @@ class StorageService {
     return memberId ? pays.filter((p) => p.member_id === memberId) : pays;
   }
 
-  async uploadPaymentProof(params: {
+  uploadPaymentProof(params: {
     registration_id?: string;
     member_id: string;
     payment_type: Payment['payment_type'];
     amount: number;
     payment_method: Payment['payment_method'];
     proof_file_url: string;
-    proof_file_id?: string;
     proof_file_name?: string;
-  }): Promise<Payment> {
+  }): Payment {
     const payments = this.getPayments();
     const now = new Date();
     const paymentId = `PAY-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
 
-    // File bukti sudah diunggah oleh PaymentModal. Fungsi ini hanya mencatat
-    // metadata pembayaran agar tidak terjadi upload ganda/fire-and-forget.
-    if (!params.proof_file_id && !params.proof_file_url) {
-      throw new Error('Bukti pembayaran belum memiliki fileId atau URL Drive.');
-    }
+    // Sync payment proof photo to Google Drive
+    const driveFile = googleWorkspaceSync.syncFileToGoogleDrive({
+      fileName: params.proof_file_name || `Bukti_Bayar_${paymentId}_${params.member_id}.jpg`,
+      fileUrl: params.proof_file_url,
+      category: 'BUKTI_PEMBAYARAN',
+      uploadedBy: params.member_id,
+      memberId: params.member_id,
+      referenceId: paymentId,
+    });
 
     const newPayment: Payment = {
       payment_id: paymentId,
@@ -1968,7 +1972,7 @@ class StorageService {
       amount: params.amount,
       payment_method: params.payment_method,
       payment_date: now.toISOString().split('T')[0],
-      proof_file_id: params.proof_file_id || '',
+      proof_file_id: driveFile.fileId,
       proof_file_url: params.proof_file_url,
       verification_status: 'PENDING',
       created_at: now.toISOString(),
@@ -1978,7 +1982,8 @@ class StorageService {
     payments.unshift(newPayment);
     this.setItem(STORAGE_KEYS.PAYMENTS, payments);
 
-    const sheetResult = await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_BUKTI_PEMBAYARAN', paymentId, {
+    // Sync to Google Spreadsheet
+    googleWorkspaceSync.syncRowToSpreadsheet('SHEET_BUKTI_PEMBAYARAN', paymentId, {
       payment_id: paymentId,
       member_id: params.member_id,
       registration_id: params.registration_id || '-',
@@ -1986,18 +1991,9 @@ class StorageService {
       amount: params.amount,
       payment_method: params.payment_method,
       payment_date: newPayment.payment_date,
-      proof_drive_url: params.proof_file_url,
-      proof_file_id: params.proof_file_id || '',
+      proof_drive_url: driveFile.driveUrl,
       verification_status: 'PENDING',
-      created_at: newPayment.created_at,
-      updated_at: newPayment.updated_at,
     });
-
-    if (!sheetResult?.success) {
-      // Jangan menghapus file Drive; simpan lokal agar pengguna tidak kehilangan
-      // transaksi dan tampilkan kegagalan sinkronisasi untuk dapat dicoba ulang.
-      console.warn('[Payment] Gagal sinkron ke Spreadsheet:', sheetResult?.error || sheetResult?.message);
-    }
 
     // If for an event registration, update registration status
     if (params.registration_id) {
@@ -2011,12 +2007,6 @@ class StorageService {
           updated_at: now.toISOString(),
         };
         this.setItem(STORAGE_KEYS.REGISTRATIONS, registrations);
-        await googleWorkspaceSync.syncRowToSpreadsheet('SHEET_REGISTRASI_STAND', params.registration_id, {
-          registration_id: params.registration_id,
-          registration_status: 'PAYMENT_VERIFICATION',
-          payment_status: 'PENDING_VERIFICATION',
-          updated_at: now.toISOString(),
-        });
       }
     }
 
@@ -2026,7 +2016,7 @@ class StorageService {
       action: 'UPLOAD_PAYMENT',
       module: 'PAYMENT',
       reference_id: paymentId,
-      description: `Upload bukti bayar ${params.payment_type} sebesar Rp${params.amount.toLocaleString('id-ID')} (${params.payment_method}) ke Google Drive dan Google Sheets`,
+      description: `Upload bukti bayar ${params.payment_type} sebesar Rp${params.amount.toLocaleString('id-ID')} (${params.payment_method}) ke Google Drive ${driveFile.folderPath} dan Google Sheets`,
       result: 'SUCCESS',
     });
 
