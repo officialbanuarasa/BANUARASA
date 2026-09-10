@@ -80,8 +80,7 @@ export const App: React.FC = () => {
   const handleRefreshData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsRefreshing(true);
-      await storage.syncWithServer();
-      await googleWorkspaceSync.fetchAllDataFromGas();
+      await storage.syncFromGoogleSheets();
     } catch (err) {
       console.warn('Auto-refresh data error:', err);
     } finally {
@@ -110,32 +109,25 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // Real-time synchronization: fast polling (3s) for local/server shared state + background GAS refresh (15s)
+  // Google Sheets is the single source of truth.
+  // Pull it periodically so direct Sheet deletions/edits are reflected
+  // in the application without being recreated from an old browser cache.
   useEffect(() => {
-    // Initial sync
     handleRefreshData(true);
 
-    // Fast 3s server sync for immediate updates across all phones & computers
-    const fastSyncTimer = setInterval(() => {
-      storage.syncWithServer();
-    }, 3000);
+    const sheetSyncTimer = setInterval(() => {
+      storage.syncFromGoogleSheets();
+    }, 5000);
 
-    // Background 15s Google Apps Script sync
-    const gasSyncTimer = setInterval(() => {
-      googleWorkspaceSync.fetchAllDataFromGas();
-    }, 15000);
-
-    // Re-sync immediately when user switches tabs or wakes phone
     const handleFocus = () => {
-      storage.syncWithServer();
+      storage.syncFromGoogleSheets();
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleFocus);
 
     return () => {
-      clearInterval(fastSyncTimer);
-      clearInterval(gasSyncTimer);
+      clearInterval(sheetSyncTimer);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
     };
