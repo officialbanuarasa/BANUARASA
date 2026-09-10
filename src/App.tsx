@@ -301,6 +301,7 @@ export const App: React.FC = () => {
               currentUser.role === 'ADMIN_EVENT') ? (
               <AdminDashboard
                 adminId={currentUser.id || 'ADM-SUPER'}
+                adminRole={currentUser.role}
                 onOpenPaymentInspector={(p) => setInspectingPayment(p)}
                 onOpenQRScanner={() => setIsQRScannerOpen(true)}
                 onOpenStandMap={handleOpenStandMap}
