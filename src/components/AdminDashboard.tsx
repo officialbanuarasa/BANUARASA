@@ -63,6 +63,8 @@ import {
   ChevronDown,
   Edit3,
   SlidersHorizontal,
+  Hash,
+  UserCog,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -91,7 +93,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenNoticeBoard,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
-    'OVERVIEW' | 'ANNOUNCEMENTS' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
+    'OVERVIEW' | 'ANNOUNCEMENTS' | 'PAYMENTS' | 'STANDS' | 'MEMBERS' | 'MEMBER_IDS' | 'SAVINGS' | 'SALES' | 'AUDIT' | 'BRANDING' | 'CARD_STUDIO'
   >('OVERVIEW');
 
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('PENDING');
@@ -102,6 +104,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [memberIdTarget, setMemberIdTarget] = useState<Member | null>(null);
+  const [manualMemberId, setManualMemberId] = useState('');
+  const [manualNomorAnggota, setManualNomorAnggota] = useState('');
+  const [isSavingMemberId, setIsSavingMemberId] = useState(false);
 
   const [isAssignStandOpen, setIsAssignStandOpen] = useState(false);
   const [standToEdit, setStandToEdit] = useState<EventRegistration | null>(null);
@@ -378,6 +384,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setDocRejectReason('');
   };
 
+  const openMemberIdEditor = (member: Member) => {
+    setMemberIdTarget(member);
+    setManualMemberId(member.member_id || '');
+    setManualNomorAnggota(member.nomor_anggota || '');
+  };
+
+  const generateMemberIdentifiers = () => {
+    const usedMemberIds = new Set(members.map((m) => String(m.member_id || '').trim().toUpperCase()).filter(Boolean));
+    const usedNumbers = new Set(members.map((m) => String(m.nomor_anggota || '').trim().toUpperCase()).filter(Boolean));
+    let sequence = 1;
+    while (usedMemberIds.has(`KBMB-2026-${String(sequence).padStart(4, '0')}`) || usedNumbers.has(`KOP-2026-${String(sequence).padStart(4, '0')}`)) {
+      sequence += 1;
+    }
+    setManualMemberId(`KBMB-2026-${String(sequence).padStart(4, '0')}`);
+    setManualNomorAnggota(`KOP-2026-${String(sequence).padStart(4, '0')}`);
+  };
+
+  const handleSaveMemberIdentifiers = async () => {
+    if (adminRole !== 'SUPER_ADMIN' || !memberIdTarget) return;
+    const nextMemberId = manualMemberId.trim().toUpperCase();
+    const nextNomorAnggota = manualNomorAnggota.trim().toUpperCase();
+    if (!nextMemberId || !nextNomorAnggota) {
+      showToast('member_id dan nomor_anggota wajib diisi.');
+      return;
+    }
+
+    const duplicateMember = members.find(
+      (m) => m.member_id.trim().toUpperCase() === nextMemberId && m.member_id !== memberIdTarget.member_id
+    );
+    const duplicateNumber = members.find(
+      (m) => m.nomor_anggota.trim().toUpperCase() === nextNomorAnggota && m.member_id !== memberIdTarget.member_id
+    );
+    if (duplicateMember) {
+      showToast(`member_id ${nextMemberId} sudah digunakan oleh ${duplicateMember.nama_lengkap}.`);
+      return;
+    }
+    if (duplicateNumber) {
+      showToast(`nomor_anggota ${nextNomorAnggota} sudah digunakan oleh ${duplicateNumber.nama_lengkap}.`);
+      return;
+    }
+
+    setIsSavingMemberId(true);
+    try {
+      const result = await storage.updateMemberIdentifiers(
+        memberIdTarget.member_id,
+        nextMemberId,
+        nextNomorAnggota,
+        adminId
+      );
+      if (!result.success) {
+        showToast(result.message);
+        return;
+      }
+      showToast(result.message);
+      setMemberIdTarget(null);
+      setManualMemberId('');
+      setManualNomorAnggota('');
+    } catch (error: any) {
+      showToast(error?.message || 'Gagal menyimpan identitas anggota.');
+    } finally {
+      setIsSavingMemberId(false);
+    }
+  };
+
   const handleExportCSV = () => {
     const csvContent =
       'data:text/csv;charset=utf-8,' +
@@ -522,75 +592,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* Mobile & Tablet Priority: Dropdown Menu Selector (Hemat Scrolling) */}
-        <div className="lg:hidden space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-            <span className="flex items-center gap-1 text-slate-900">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" />
-              <span>Pilih Bagian / Tab:</span>
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md">
-              10 Menu Tersedia
-            </span>
+        {/* Super Admin Icon Menu — responsif, membungkus ke baris baru, tanpa horizontal scrolling */}
+        <div className="pt-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-11 gap-3 sm:gap-4">
+            {[
+              { id: 'OVERVIEW', label: 'Ringkasan', icon: ShieldCheck },
+              { id: 'ANNOUNCEMENTS', label: 'Pengumuman', icon: Megaphone },
+              { id: 'CARD_STUDIO', label: 'Desain KTA', icon: Sparkles },
+              { id: 'PAYMENTS', label: 'Pembayaran', icon: CreditCard, badge: pendingPaymentsCount },
+              { id: 'STANDS', label: 'Stand', icon: Calendar },
+              { id: 'MEMBERS', label: 'Anggota', icon: Users, badge: members.length },
+              { id: 'MEMBER_IDS', label: 'ID Anggota', icon: Hash },
+              { id: 'SAVINGS', label: 'Simpanan', icon: DollarSign },
+              { id: 'SALES', label: 'Omzet', icon: TrendingUp },
+              { id: 'BRANDING', label: 'Media', icon: ImageIcon },
+              { id: 'AUDIT', label: 'Audit', icon: FileText },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeAdminTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveAdminTab(tab.id as any)}
+                  title={tab.label}
+                  className="group min-w-0 flex flex-col items-center gap-1.5 cursor-pointer focus:outline-none"
+                >
+                  <span
+                    className={`relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full border-2 shadow-sm transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-md ${
+                      isActive
+                        ? 'bg-slate-900 text-white border-amber-400 ring-4 ring-amber-100'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 group-hover:bg-white group-hover:border-emerald-400'
+                    }`}
+                  >
+                    <Icon className={`w-6 h-6 sm:w-7 sm:h-7 ${isActive ? 'text-amber-300' : 'text-emerald-700'}`} />
+                    {typeof tab.badge === 'number' && tab.badge > 0 && (
+                      <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center border-2 border-white">
+                        {tab.badge > 99 ? '99+' : tab.badge}
+                      </span>
+                    )}
+                  </span>
+                  <span className={`text-[9px] sm:text-[10px] font-black text-center leading-tight max-w-[78px] ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <div className="relative">
-            <select
-              value={activeAdminTab}
-              onChange={(e) => setActiveAdminTab(e.target.value as any)}
-              className="w-full appearance-none px-4 py-3 bg-slate-900 text-amber-300 border-2 border-amber-400 font-black text-xs rounded-2xl shadow-sm focus:outline-hidden pr-10 cursor-pointer"
-            >
-              {[
-                { id: 'OVERVIEW', label: '🧭 Ringkasan Eksekutif' },
-                { id: 'ANNOUNCEMENTS', label: '📢 Papan Pengumuman Bara' },
-                { id: 'PAYMENTS', label: `💳 Verifikasi Pembayaran (${pendingPaymentsCount})` },
-                { id: 'STANDS', label: '🎪 Manajemen 64 Stand' },
-                { id: 'MEMBERS', label: `👥 Anggota & Legalitas (${members.length})` },
-                { id: 'SAVINGS', label: '💰 Buku Kas Simpanan' },
-                { id: 'SALES', label: '📈 Laporan Omzet UMKM' },
-                { id: 'CARD_STUDIO', label: '✨ Desain KTA (Kartu Anggota)' },
-                { id: 'BRANDING', label: '🖼️ Logo, Banner & Media' },
-                { id: 'AUDIT', label: '📋 Audit Logs & Ekspor' },
-              ].map((item) => (
-                <option key={item.id} value={item.id} className="bg-slate-900 text-white font-bold py-1">
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-amber-300 absolute right-3.5 top-3.5 pointer-events-none" />
-          </div>
-        </div>
-
-        {/* Sub-Nav Bento Tabs (Desktop / Large Tablet Scrollable) */}
-        <div className="hidden lg:flex items-center gap-2 pt-1 overflow-x-auto">
-          {[
-            { id: 'OVERVIEW', label: 'Ringkasan Eksekutif', icon: ShieldCheck },
-            { id: 'ANNOUNCEMENTS', label: 'Papan Pengumuman Bara', icon: Megaphone },
-            { id: 'CARD_STUDIO', label: 'Desain KTA (Kartu Anggota)', icon: Sparkles },
-            { id: 'PAYMENTS', label: `Verifikasi Bayar (${pendingPaymentsCount})`, icon: CreditCard },
-            { id: 'STANDS', label: 'Manajemen 64 Stand', icon: Calendar },
-            { id: 'MEMBERS', label: `Anggota & Legalitas (${members.length})`, icon: Users },
-            { id: 'SAVINGS', label: 'Buku Kas Simpanan', icon: DollarSign },
-            { id: 'SALES', label: 'Laporan Omzet UMKM', icon: TrendingUp },
-            { id: 'BRANDING', label: 'Logo, Banner & Media', icon: ImageIcon },
-            { id: 'AUDIT', label: 'Audit Logs & Ekspor', icon: FileText },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeAdminTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveAdminTab(tab.id as any)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -1357,7 +1405,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* SAVINGS TAB */}
+      {/* MEMBER IDENTIFIER MANAGEMENT TAB */}
+      {activeAdminTab === 'MEMBER_IDS' && adminRole === 'SUPER_ADMIN' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-7">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-black uppercase">
+                  <UserCog className="w-3.5 h-3.5" />
+                  Administrasi Identitas Anggota
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mt-3">Generate & Edit ID Anggota</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                  Atur ulang <b>member_id</b> dan <b>nomor_anggota</b> untuk anggota yang sudah terdaftar tanpa membuat akun anggota baru. Sistem memeriksa duplikasi sebelum menyimpan.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={generateMemberIdentifiers}
+                disabled={!memberIdTarget}
+                className="px-4 py-2.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <Hash className="w-4 h-4" />
+                Generate ID Baru
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari nama, member_id, atau nomor anggota..."
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {members
+                .filter((m) => {
+                  const q = searchQuery.trim().toLowerCase();
+                  if (!q) return true;
+                  return [m.nama_lengkap, m.member_id, m.nomor_anggota, m.nama_usaha]
+                    .some((value) => String(value || '').toLowerCase().includes(q));
+                })
+                .map((member) => (
+                  <div key={member.member_id} className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4 hover:bg-slate-50/70">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-slate-900 truncate">{member.nama_lengkap}</p>
+                      <p className="text-[10px] text-slate-500 truncate">{member.nama_usaha || 'Tanpa nama usaha'}</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto md:min-w-[420px]">
+                      <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <p className="text-[9px] uppercase font-black text-slate-400">member_id</p>
+                        <p className="font-mono font-black text-emerald-700 text-xs break-all">{member.member_id || '—'}</p>
+                      </div>
+                      <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <p className="text-[9px] uppercase font-black text-slate-400">nomor_anggota</p>
+                        <p className="font-mono font-black text-purple-700 text-xs break-all">{member.nomor_anggota || '—'}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openMemberIdEditor(member)}
+                      className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Edit ID
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {memberIdTarget && (
+            <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-black text-purple-700">Edit Identitas Anggota</p>
+                    <h4 className="text-lg font-black text-slate-900 mt-1">{memberIdTarget.nama_lengkap}</h4>
+                    <p className="text-xs text-slate-500">Perubahan akan memperbarui baris anggota dan seluruh referensi member_id di Spreadsheet.</p>
+                  </div>
+                  <button type="button" onClick={() => setMemberIdTarget(null)} className="p-2 rounded-xl hover:bg-slate-100 cursor-pointer"><X className="w-5 h-5" /></button>
+                </div>
+
+                <div className="grid gap-4">
+                  <label className="block">
+                    <span className="text-[10px] uppercase font-black text-slate-500">member_id</span>
+                    <input value={manualMemberId} onChange={(e) => setManualMemberId(e.target.value)} className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-300 font-mono font-black text-sm uppercase focus:outline-hidden focus:ring-2 focus:ring-emerald-500" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] uppercase font-black text-slate-500">nomor_anggota</span>
+                    <input value={manualNomorAnggota} onChange={(e) => setManualNomorAnggota(e.target.value)} className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-300 font-mono font-black text-sm uppercase focus:outline-hidden focus:ring-2 focus:ring-emerald-500" />
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button type="button" onClick={generateMemberIdentifiers} className="flex-1 px-4 py-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-black text-xs flex items-center justify-center gap-2 cursor-pointer">
+                    <Hash className="w-4 h-4" /> Generate Otomatis
+                  </button>
+                  <button type="button" onClick={handleSaveMemberIdentifiers} disabled={isSavingMemberId} className="flex-1 px-4 py-3 rounded-xl bg-purple-900 hover:bg-purple-950 disabled:bg-slate-300 text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed">
+                    <Check className="w-4 h-4" /> {isSavingMemberId ? 'Menyimpan...' : 'Simpan Identitas'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+    {/* SAVINGS TAB */}
       {activeAdminTab === 'SAVINGS' && (
         <div className="space-y-6">
           {/* Form Pengaturan Besaran Simpanan Pokok & Wajib oleh Admin */}
