@@ -28,6 +28,8 @@ import {
   Clock,
   MapPin,
   Sparkles,
+  Camera,
+  Upload,
 } from 'lucide-react';
 
 interface MemberModalProps {
@@ -45,6 +47,9 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
   adminId,
   onSaved,
 }) => {
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+
   const [formData, setFormData] = useState({
     nama_lengkap: '',
     nik: '',
@@ -58,6 +63,8 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
   });
 
   useEffect(() => {
+    setPhotoFile(null);
+    setPhotoPreview(memberToEdit?.foto_profil_url || '');
     if (memberToEdit) {
       setFormData({
         nama_lengkap: memberToEdit.nama_lengkap,
@@ -87,7 +94,24 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('File foto harus berupa gambar.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran foto maksimal 5 MB.');
+      return;
+    }
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
       ...formData,
@@ -97,6 +121,12 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
     if (memberToEdit) {
       const ok = storage.updateMember(memberToEdit.member_id, payload, adminId);
       if (ok) {
+        if (photoFile) {
+          const mediaResult = await storage.saveMemberMedia(memberToEdit.member_id, photoFile);
+          if (!mediaResult.success) {
+            alert(`Data anggota tersimpan, tetapi foto gagal diunggah: ${mediaResult.message}`);
+          }
+        }
         onSaved(`Data anggota ${formData.nama_lengkap} berhasil diperbarui.`);
         onClose();
       }
@@ -115,6 +145,12 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
         } as any,
         adminId
       );
+      if (photoFile) {
+        const mediaResult = await storage.saveMemberMedia(newM.member_id, photoFile);
+        if (!mediaResult.success) {
+          alert(`Anggota berhasil dibuat, tetapi foto gagal diunggah: ${mediaResult.message}`);
+        }
+      }
       onSaved(`Anggota baru ${newM.nama_lengkap} (${newM.member_id}) berhasil ditambahkan.`);
       onClose();
     }
@@ -141,6 +177,27 @@ export const MemberCrudModal: React.FC<MemberModalProps> = ({
           <button type="button" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg">
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Foto anggota: tersedia saat tambah maupun edit */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
+          <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-purple-400 bg-white shrink-0 flex items-center justify-center">
+            {photoPreview ? (
+              <img src={photoPreview} alt="Foto anggota" className="w-full h-full object-cover" />
+            ) : (
+              <Camera className="w-8 h-8 text-slate-300" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1 w-full text-center sm:text-left">
+            <label className="block font-black text-slate-800 mb-1">Foto Profil Anggota</label>
+            <p className="text-[11px] text-slate-500 mb-2">Upload foto dari komputer, tablet, atau kamera HP. Foto akan disimpan ke Google Drive.</p>
+            <label htmlFor="admin-member-photo-input" className="inline-flex max-w-full items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold cursor-pointer transition">
+              <Upload className="w-3.5 h-3.5" />
+              {photoFile ? 'Ganti Foto' : 'Upload Foto'}
+            </label>
+            <input id="admin-member-photo-input" type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+            {photoFile && <p className="mt-1 text-[10px] text-purple-700 truncate">{photoFile.name}</p>}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
