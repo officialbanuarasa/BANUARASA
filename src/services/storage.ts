@@ -1186,10 +1186,32 @@ class StorageService {
     );
 
     const remoteResult:any = response?.result ?? response?.data ?? response;
-    if (!response.success || remoteResult?.status !== 'UPDATED') {
+    const remoteStatus = String(remoteResult?.status || '').trim().toUpperCase();
+    if (!response.success || remoteStatus !== 'UPDATED') {
       return {
         success: false,
-        message: remoteResult?.message || response.error || response.message || 'Google Spreadsheet menolak perubahan identitas anggota.',
+        message:
+          remoteResult?.message ||
+          response.error ||
+          response.message ||
+          `Google Spreadsheet tidak mengonfirmasi penyimpanan (status: ${remoteStatus || 'UNKNOWN'}).`,
+      };
+    }
+
+    // Verifikasi kedua: baca kembali identifier dari Spreadsheet melalui Apps Script.
+    // Cache lokal TIDAK boleh diperbarui sebelum verifikasi ini berhasil.
+    const verifyResponse = await callGoogleAppsScript('verifyMemberIdentifiers', {
+      member_id: nextId,
+      nomor_anggota: nextNumber,
+    });
+    const verifyResult:any = verifyResponse?.result ?? verifyResponse?.data ?? verifyResponse;
+    if (!verifyResponse.success || String(verifyResult?.status || '').toUpperCase() !== 'VERIFIED') {
+      return {
+        success: false,
+        message:
+          verifyResult?.message ||
+          verifyResponse.error ||
+          'Spreadsheet belum dapat memverifikasi data identifier yang baru.',
       };
     }
 
