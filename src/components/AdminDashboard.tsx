@@ -137,7 +137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const initialCoopConfig = storage.getKoperasiConfig();
   const [coopPokok, setCoopPokok] = useState<number>(initialCoopConfig.simpanan_pokok_nominal);
   const [coopPokokCicilan, setCoopPokokCicilan] = useState<number>(
-    initialCoopConfig.simpanan_pokok_cicilan_nominal || 20000
+    initialCoopConfig.simpanan_pokok_cicilan_nominal ?? 0
   );
   const [coopWajib, setCoopWajib] = useState<number>(initialCoopConfig.simpanan_wajib_nominal);
   const [coopBank, setCoopBank] = useState<string>(initialCoopConfig.nama_bank);
@@ -158,7 +158,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     const fresh = storage.getKoperasiConfig();
     setCoopPokok(fresh.simpanan_pokok_nominal);
-    setCoopPokokCicilan(fresh.simpanan_pokok_cicilan_nominal || 20000);
+    setCoopPokokCicilan(fresh.simpanan_pokok_cicilan_nominal ?? 0);
     setCoopWajib(fresh.simpanan_wajib_nominal);
     setCoopBank(fresh.nama_bank);
     setCoopRek(fresh.nomor_rekening);
@@ -167,23 +167,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setCoopCatatan(fresh.catatan_iuran || '');
   }, [version]);
 
-  const handleSaveCoopConfig = (e: React.FormEvent) => {
+  const handleSaveCoopConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    storage.updateKoperasiConfig(
-      {
-        simpanan_pokok_nominal: Number(coopPokok),
-        simpanan_pokok_cicilan_nominal: Number(coopPokokCicilan),
-        simpanan_wajib_nominal: Number(coopWajib),
-        nama_bank: coopBank,
-        nomor_rekening: coopRek,
-        atas_nama_rekening: coopAtasNama,
-        nomor_wa_konfirmasi: coopWa,
-        catatan_iuran: coopCatatan,
-      },
-      adminId
-    );
-    setCoopNotice('Pengaturan besaran simpanan pokok dan wajib berhasil disimpan!');
-    setTimeout(() => setCoopNotice(null), 4000);
+    setCoopNotice('Menyimpan pengaturan ke Google Spreadsheet...');
+    try {
+      await storage.updateKoperasiConfig(
+        {
+          simpanan_pokok_nominal: Number(coopPokok),
+          simpanan_pokok_cicilan_nominal: Number(coopPokokCicilan),
+          simpanan_wajib_nominal: Number(coopWajib),
+          // Rekening transfer dikunci sesuai rekening resmi koperasi.
+          nama_bank: 'Bank Mandiri',
+          nomor_rekening: '1490030302105',
+          atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
+          nomor_wa_konfirmasi: coopWa,
+          catatan_iuran: coopCatatan,
+        },
+        adminId
+      );
+      setCoopBank('Bank Mandiri');
+      setCoopRek('1490030302105');
+      setCoopAtasNama('Koperasi Berau Melangkah Bersama');
+      setCoopNotice('Pengaturan berhasil disimpan ke Google Spreadsheet dan otomatis berlaku untuk anggota.');
+    } catch (err: any) {
+      setCoopNotice(`Gagal menyimpan: ${err?.message || 'Tidak dapat terhubung ke Google Spreadsheet.'}`);
+    }
+    setTimeout(() => setCoopNotice(null), 5000);
   };
 
   const handleToggleMemberKoperasi = (memberId: string, currentIsCoop: boolean) => {
@@ -1361,7 +1370,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <input
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
+                    inputMode="numeric"
                     required
                     value={coopPokok}
                     onChange={(e) => setCoopPokok(Number(e.target.value))}
@@ -1380,7 +1390,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <input
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
+                    inputMode="numeric"
                     required
                     value={coopPokokCicilan}
                     onChange={(e) => setCoopPokokCicilan(Number(e.target.value))}
@@ -1401,7 +1412,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <input
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
+                    inputMode="numeric"
                     required
                     value={coopWajib}
                     onChange={(e) => setCoopWajib(Number(e.target.value))}
@@ -1416,16 +1428,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   required
-                  value={coopBank}
-                  onChange={(e) => setCoopBank(e.target.value)}
-                  placeholder="Bank Kaltimtara / BSI"
+                  value="Bank Mandiri"
+                  readOnly
+                  placeholder="Bank Mandiri"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
                 />
                 <input
                   type="text"
                   required
-                  value={coopRek}
-                  onChange={(e) => setCoopRek(e.target.value)}
+                  value="1490030302105"
+                  readOnly
                   placeholder="Nomor Rekening"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-xs font-bold text-slate-900"
                 />
@@ -1436,8 +1448,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   required
-                  value={coopAtasNama}
-                  onChange={(e) => setCoopAtasNama(e.target.value)}
+                  value="Koperasi Berau Melangkah Bersama"
+                  readOnly
                   placeholder="Koperasi Berau Melangkah Bersama"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 mb-1"
                 />
@@ -1457,7 +1469,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="text"
                     value={coopCatatan}
                     onChange={(e) => setCoopCatatan(e.target.value)}
-                    placeholder="Contoh: Simpanan Pokok dapat dicicil maksimal 5 kali..."
+                    placeholder="Contoh: Simpanan Pokok dapat dicicil sesuai nominal yang ditetapkan admin..."
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
                   />
                 </div>
