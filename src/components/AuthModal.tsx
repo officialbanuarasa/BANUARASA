@@ -61,23 +61,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 100);
   };
 
-  // Shortcut untuk mengisi akun demo otomatis
-  const fillQuickCredential = (role: UserRole) => {
+  // Pemilihan peran hanya mengatur konteks login.
+  // Jangan pernah mengisi atau menampilkan username/password admin di UI publik.
+  const selectRole = (role: UserRole) => {
     setRoleSelection(role);
+    setUsername('');
+    setPassword('');
     setErrorMessage('');
-    if (role === 'SUPER_ADMIN') {
-      setUsername('superadmin');
-      setPassword('admin123');
-    } else if (role === 'ADMIN_KOPERASI') {
-      setUsername('adminkoperasi');
-      setPassword('admin123');
-    } else if (role === 'ADMIN_EVENT') {
-      setUsername('adminevent');
-      setPassword('admin123');
-    } else {
-      setUsername('MBR-0001');
-      setPassword('123456');
-    }
   };
 
   return (
@@ -109,7 +99,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               key={item.role}
               type="button"
-              onClick={() => fillQuickCredential(item.role as UserRole)}
+              onClick={() => selectRole(item.role as UserRole)}
               className={`py-1.5 rounded-lg transition ${
                 roleSelection === item.role
                   ? 'bg-white text-emerald-700 shadow-xs font-bold'
@@ -137,7 +127,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <input
               type="text"
               required
-              placeholder="Contoh: superadmin atau MBR-0001"
+              placeholder={roleSelection === 'MEMBER' ? 'Email / ID Anggota / No. WhatsApp' : 'Masukkan username atau email'}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-emerald-500 bg-slate-50/50 focus:bg-white transition"
@@ -167,14 +157,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {isLoading ? 'Memverifikasi...' : 'Masuk Sekarang'}
           </button>
         </form>
-
-        {/* Informasi Bantuan Kredensial Default */}
-        <div className="mt-5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 space-y-1">
-          <p className="font-bold text-slate-700">Kredensial Default Terkonfigurasi:</p>
-          <p>• <strong>Super Admin:</strong> <code>superadmin</code> / <code>Banu@rasa2026!</code> (atau <code>admin123</code>)</p>
-          <p>• <strong>Admin Koperasi:</strong> <code>adminkoperasi</code> / <code>KoperasiBwm#2026</code></p>
-          <p>• <strong>Admin Event:</strong> <code>adminevent</code> / <code>EventBwm#2026</code></p>
-        </div>
 
         {onOpenRegister && (
           <div className="mt-4 text-center text-xs text-slate-500">
