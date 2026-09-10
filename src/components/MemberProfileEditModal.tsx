@@ -31,8 +31,6 @@ export const MemberProfileEditModal: React.FC<MemberProfileEditModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const [namaLengkap, setNamaLengkap] = useState(member.nama_lengkap || '');
   const [nik, setNik] = useState(member.nik || '');
   const [nomorHp, setNomorHp] = useState(member.nomor_hp || member.whatsapp || '');
@@ -45,30 +43,39 @@ export const MemberProfileEditModal: React.FC<MemberProfileEditModalProps> = ({
     member.foto_profil_url ||
       'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80'
   );
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // File Upload to Base64 Photo
+  // Upload foto dipisahkan dari penyimpanan biodata agar Base64 tidak memenuhi localStorage.
   const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('File foto harus berupa gambar.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran foto maksimal 5 MB.');
+      return;
+    }
 
+    setPhotoFile(file);
     setIsUploading(true);
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
-      if (base64) {
-        setFotoProfilUrl(base64);
-      }
+      if (base64) setFotoProfilUrl(base64);
       setIsUploading(false);
     };
     reader.onerror = () => {
       setIsUploading(false);
+      alert('Foto tidak dapat dibaca oleh perangkat.');
     };
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!namaLengkap.trim()) return;
 
@@ -83,18 +90,31 @@ export const MemberProfileEditModal: React.FC<MemberProfileEditModalProps> = ({
       deskripsi_usaha: deskripsiUsaha.trim(),
       alamat_usaha: alamatUsaha.trim(),
       alamat: alamatUsaha.trim(),
-      foto_profil_url: fotoProfilUrl,
     });
 
-    if (res.success && res.member) {
-      setSuccessMessage('Biodata dan Foto Profil berhasil disimpan dan diperbarui!');
-      if (onSuccess) onSuccess(res.member);
-      setTimeout(() => {
-        setSuccessMessage(null);
-        onClose();
-      }, 1500);
+    if (!res.success || !res.member) return;
+
+    let updatedMember = res.member;
+    if (photoFile) {
+      setIsUploading(true);
+      const mediaResult = await storage.saveMemberMedia(member.member_id, photoFile);
+      setIsUploading(false);
+      if (!mediaResult.success || !mediaResult.member) {
+        alert(`Biodata tersimpan, tetapi foto gagal diunggah: ${mediaResult.message}`);
+        return;
+      }
+      updatedMember = mediaResult.member;
     }
+
+    setSuccessMessage('Biodata dan Foto Profil berhasil disimpan dan diperbarui!');
+    if (onSuccess) onSuccess(updatedMember);
+    setTimeout(() => {
+      setSuccessMessage(null);
+      onClose();
+    }, 1000);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-fade-in">
