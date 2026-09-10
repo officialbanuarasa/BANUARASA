@@ -707,7 +707,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                               paymentType: 'SIMPANAN_POKOK',
                               defaultAmount: Math.min(
                                 savingsSummary.sisaCicilanPokok,
-                                koperasiConfig.simpanan_pokok_cicilan_nominal || 20000
+                                koperasiConfig.simpanan_pokok_cicilan_nominal ?? 0
                               ),
                             })
                           }
