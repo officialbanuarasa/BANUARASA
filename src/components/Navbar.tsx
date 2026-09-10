@@ -143,7 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Store className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">Beranda &</span> 64 Stand
+            <span className="hidden xl:inline">Stand</span>
           </button>
 
           {/* Member Area Link (Only when logged in as Member) */}
@@ -157,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Dashboard Saya</span>
+              <span className="hidden xl:inline">Dashboard</span>
             </button>
           )}
 
@@ -172,12 +172,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span>
+              <span className="hidden xl:inline">
                 {currentUser.role === 'SUPER_ADMIN'
-                  ? 'Super Admin'
+                  ? 'Admin'
                   : currentUser.role === 'ADMIN_EVENT'
-                  ? 'Admin Event'
-                  : 'Admin Koperasi'}
+                  ? 'Event'
+                  : 'Koperasi'}
               </span>
             </button>
           )}
