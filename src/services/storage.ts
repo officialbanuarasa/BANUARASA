@@ -3656,6 +3656,37 @@ class StorageService {
     members[index] = updatedMember;
     this.setItem(STORAGE_KEYS.MEMBERS, members);
 
+    // Google Spreadsheet adalah sumber data anggota. Setiap perubahan profil
+    // (termasuk foto) wajib ditulis kembali ke Spreadsheet, bukan hanya cache.
+    // Jangan kirim password plaintext. Password login disimpan sebagai hash.
+    void googleWorkspaceSync.syncRowToSpreadsheet('SHEET_ANGGOTA_KOPERASI', memberId, {
+      member_id: updatedMember.member_id,
+      nomor_anggota: updatedMember.nomor_anggota,
+      nik: updatedMember.nik,
+      nama_lengkap: updatedMember.nama_lengkap,
+      tempat_lahir: updatedMember.tempat_lahir,
+      tanggal_lahir: updatedMember.tanggal_lahir,
+      jenis_kelamin: updatedMember.jenis_kelamin,
+      alamat: updatedMember.alamat,
+      nomor_hp: updatedMember.nomor_hp,
+      whatsapp: updatedMember.whatsapp,
+      email: updatedMember.email,
+      nama_usaha: updatedMember.nama_usaha,
+      kategori_usaha: updatedMember.kategori_usaha,
+      alamat_usaha: updatedMember.alamat_usaha,
+      deskripsi_usaha: updatedMember.deskripsi_usaha,
+      foto_profil_url: updatedMember.foto_profil_url || '',
+      status_keanggotaan: updatedMember.status_keanggotaan,
+      tanggal_bergabung: updatedMember.tanggal_bergabung,
+      password_hash: updatedMember.password_hash || '',
+      created_at: updatedMember.created_at,
+      updated_at: updatedMember.updated_at,
+      kta_file_id: updatedMember.kta_file_id || '',
+      kta_file_url: updatedMember.kta_file_url || '',
+      barcode_value: updatedMember.barcode_value || updatedMember.member_id,
+      qr_value: updatedMember.qr_value || updatedMember.member_id,
+    });
+
     // Sync active session if logged in as this member
     const currentUser = this.getCurrentUser();
     if (currentUser && currentUser.member_id === memberId) {
@@ -3669,30 +3700,23 @@ class StorageService {
       this.setItem(STORAGE_KEYS.CURRENT_USER, updatedAuth);
     }
 
-    // Sinkronkan PROFIL LENGKAP ke Google Spreadsheet, termasuk foto.
-    // Ini penting karena Google Sheets adalah sumber data utama aplikasi.
-    // Sebelumnya updateMemberProfile hanya mengubah localStorage, sehingga setelah
-    // refresh foto kembali kosong dan UI menampilkan foto default.
-    const spreadsheetResult = googleWorkspaceSync.syncRowToSpreadsheet(
-      'SHEET_ANGGOTA_KOPERASI',
-      updatedMember.member_id,
-      {
-        ...updatedMember,
-        member_id: updatedMember.member_id,
-        foto_profil_url: updatedMember.foto_profil_url || '',
-        kta_file_id: updatedMember.kta_file_id || '',
-        kta_file_url: updatedMember.kta_file_url || '',
-        barcode_value: updatedMember.barcode_value || updatedMember.member_id,
-        qr_value: updatedMember.qr_value || updatedMember.member_id,
-      }
-    );
-
-    if (!(spreadsheetResult as any)?.success) {
-      console.warn('Sinkronisasi profil anggota ke Google Spreadsheet gagal:', (spreadsheetResult as any)?.error);
-    }
-
     this.notify();
     this.persistToServer();
+
+    // Async sync photo to Google Drive
+    if (profileData.foto_profil_url && profileData.foto_profil_url !== current.foto_profil_url) {
+      try {
+        googleWorkspaceSync.syncFileToGoogleDrive({
+          fileUrl: profileData.foto_profil_url,
+          fileName: `Foto_Profil_${updatedMember.member_id}.jpg`,
+          category: 'FOTO_PROFIL',
+          uploadedBy: updatedMember.nama_lengkap,
+          memberId: updatedMember.member_id,
+        });
+      } catch (err) {
+        console.warn('Google Drive photo upload failed', err);
+      }
+    }
 
     this.logAudit({
       user_id: memberId,
