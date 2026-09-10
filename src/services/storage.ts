@@ -316,9 +316,10 @@ class StorageService {
     try {
       localStorage.setItem(key, JSON.stringify(value));
       this.notify();
-      if (!skipServerPersist && !this.isHydratingFromServer) {
-        this.debouncedPersistToServer();
-      }
+      // Google Sheets is the source of truth. Do NOT push the entire local
+      // snapshot automatically: a stale local cache can recreate rows that
+      // were intentionally deleted directly in Google Sheets.
+      // Individual CRUD operations sync their own changed row instead.
     } catch (e) {
       console.error('Storage error', e);
     }
@@ -334,19 +335,84 @@ class StorageService {
     }, 400);
   }
 
+  /**
+   * @deprecated Full-state snapshot sync is intentionally disabled.
+   *
+   * The old implementation sent the complete localStorage snapshot to
+   * batchSync. If a row was deleted directly in Google Sheets, an older
+   * browser cache still contained that row and batchSync recreated it.
+   *
+   * Writes must happen through the individual CRUD sync methods, while
+   * reads are refreshed from Google Sheets by syncFromGoogleSheets().
+   */
   async persistToServer(): Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * Pull the current database state from Google Sheets and replace the
+   * corresponding local cache, including EMPTY arrays.
+   *
+   * Replacing empty arrays is important: an empty sheet means the user
+   * really deleted all rows; it must not be ignored as "no update".
+   */
+  async syncFromGoogleSheets(): Promise<{ updated: boolean; count?: number }> {
     try {
-      const payload = {
-        members: this.getMembers().filter((m) => !OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha)),
-        registrations: this.getRegistrations(), payments: this.getPayments(), savings: this.getSavings(),
-        salesReports: this.getSalesReports(), products: this.getProducts(), documents: this.getDocuments(),
-        events: this.getEvents(), auditLogs: this.getAuditLogs(), attendance: this.getItem<any[]>(STORAGE_KEYS.ATTENDANCE, []),
-      };
-      const res = await googleWorkspaceSync.pushStateToGAS(payload);
-      return !!res.success;
+      const response = await googleWorkspaceSync.fetchAllDataFromGas();
+      if (!response.success || !response.data || typeof response.data !== 'object') {
+        return { updated: false };
+      }
+
+      const data: any = response.data;
+      const collections: Array<[string, any]> = [
+        [STORAGE_KEYS.MEMBERS, data.members],
+        [STORAGE_KEYS.REGISTRATIONS, data.registrations],
+        [STORAGE_KEYS.PAYMENTS, data.payments],
+        [STORAGE_KEYS.SAVINGS, data.savings],
+        [STORAGE_KEYS.SALES_REPORTS, data.salesReports],
+        [STORAGE_KEYS.DOCUMENTS, data.documents],
+        [STORAGE_KEYS.PRODUCTS, data.products],
+        [STORAGE_KEYS.EVENTS, data.events],
+        [STORAGE_KEYS.AUDIT_LOGS, data.auditLogs],
+        [STORAGE_KEYS.ATTENDANCE, data.attendance],
+      ];
+
+      let count = 0;
+      this.isHydratingFromServer = true;
+      try {
+        collections.forEach(([key, value]) => {
+          if (!Array.isArray(value)) return;
+          let normalized = value;
+
+          if (key === STORAGE_KEYS.MEMBERS) {
+            normalized = value.filter((m: any) => !OBSOLETE_DUMMY_BRANDS.has(m?.nama_usaha));
+          }
+          if (key === STORAGE_KEYS.REGISTRATIONS) {
+            normalized = value.map((r: any) => ({
+              ...r,
+              stand_code: String(r?.stand_code ?? '').trim(),
+            }));
+          }
+
+          localStorage.setItem(key, JSON.stringify(normalized));
+          count += normalized.length;
+        });
+
+        if (data.gasUrl && typeof data.gasUrl === 'string' && data.gasUrl.trim()) {
+          localStorage.setItem('kbm_gas_web_app_url_v3', data.gasUrl.trim());
+        }
+      } finally {
+        this.isHydratingFromServer = false;
+      }
+
+      this.syncCurrentUserWithMemberProfile();
+      this.notify();
+
+      return { updated: true, count };
     } catch (err) {
-      console.warn('[StorageService] Google Sheets persist failed:', err);
-      return false;
+      this.isHydratingFromServer = false;
+      console.warn('[StorageService] Google Sheets pull failed:', err);
+      return { updated: false };
     }
   }
 
@@ -570,8 +636,9 @@ class StorageService {
     this.cleanExpiredReservations();
     this.syncCurrentUserWithMemberProfile();
 
-    // Segera lakukan sinkronisasi dengan server agar seluruh gawai memperoleh data terkini
-    this.syncWithServer(true).then(() => {
+    // Google Sheets is the authoritative database. Pull it immediately so
+    // deleted spreadsheet rows cannot be restored from an old browser cache.
+    this.syncFromGoogleSheets().then(() => {
       this.syncCurrentUserWithMemberProfile();
     });
   }
@@ -582,7 +649,7 @@ class StorageService {
     this.setItem(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS, true);
     this.setItem(STORAGE_KEYS.VERSION, CURRENT_DATA_VERSION, true);
     this.syncCurrentUserWithMemberProfile();
-    this.syncWithServer(true).then(() => {
+    this.syncFromGoogleSheets().then(() => {
       this.syncCurrentUserWithMemberProfile();
       this.notify();
     });
