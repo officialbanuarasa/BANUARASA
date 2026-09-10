@@ -66,7 +66,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onOpenNoticeBoard,
 }) => {
   const [, setVersion] = useState(0);
-  const [activeFeature, setActiveFeature] = useState<FeatureType | null>('STAND');
+  const [activeFeature, setActiveFeature] = useState<FeatureType | null>(null);
 
   // Subscribe to storage updates
   useEffect(() => {
@@ -431,21 +431,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   <IconComponent className="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" />
                 </div>
 
-                {/* Short Title & Status Badge Underneath */}
-                <div className="text-center">
-                  <span
-                    className={`block text-xs sm:text-sm font-black leading-tight tracking-tight ${
-                      isSelected ? 'text-emerald-900' : 'text-slate-800 group-hover:text-emerald-800'
-                    }`}
-                  >
-                    {item.title}
-                  </span>
-                  <span
-                    className={`inline-block text-[9px] font-bold px-1.5 py-0.2 rounded mt-1 ${item.badgeColor}`}
-                  >
-                    {item.badge}
-                  </span>
-                </div>
+                <span
+                  className={`text-[11px] sm:text-xs font-black leading-tight text-center ${
+                    isSelected ? 'text-emerald-900' : 'text-slate-700 group-hover:text-emerald-800'
+                  }`}
+                >
+                  {item.title}
+                </span>
               </button>
             );
           })}
