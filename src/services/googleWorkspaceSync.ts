@@ -45,6 +45,10 @@ export async function syncRowToSpreadsheet(sheetName:string, id:string, data:any
   return callGoogleAppsScript(action,payload);
 }
 
+export async function createMember(member:any):Promise<GasResponse> {
+  return callGoogleAppsScript('createMember', member);
+}
+
 export async function deleteSpreadsheetRow(sheetName:string,id:string):Promise<GasResponse>{ return callGoogleAppsScript('deleteRow',{sheetName,id}); }
 
 export interface DriveUploadInput { fileName:string; fileUrl?:string; base64Data?:string; mimeType?:string; category:string; uploadedBy?:string; memberId?:string; eventId?:string; referenceId?:string; }
@@ -61,35 +65,26 @@ export function syncFileToGoogleDrive(input:DriveUploadInput): any {
 
 export async function uploadMemberPhoto(file:File,memberId:string,memberName:string){ return uploadFile(file,'FOTO_PROFIL',memberId,memberName); }
 export async function uploadMemberKta(file:File,memberId:string,memberName:string){ return uploadFile(file,'KTA_ANGGOTA',memberId,memberName); }
-export async function uploadFile(file:File,category:string,memberId:string,name?:string){
-  const base64=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});
-  // Upload media yang dipakai profil anggota harus menunggu respons Apps Script.
-  // Jangan menggunakan syncFileToGoogleDrive() di sini karena fungsi tersebut
-  // sengaja fire-and-forget untuk upload legacy lainnya.
-  const response:any = await callGoogleAppsScript('uploadFileToDrive', {
+export async function uploadFile(file:File,category:string,memberId:string,name?:string):Promise<GasResponse> {
+  const base64=await new Promise<string>((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result));
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+
+  // IMPORTANT: jangan gunakan syncFileToGoogleDrive() di sini karena fungsi
+  // tersebut bersifat fire-and-forget. Pendaftaran anggota membutuhkan hasil
+  // upload yang sebenarnya agar URL foto dapat disimpan ke Spreadsheet.
+  return callGoogleAppsScript('uploadFileToDrive',{
     fileName:file.name,
     fileUrl:base64,
     base64Data:base64,
     mimeType:file.type||'application/octet-stream',
     category,
     uploadedBy:name||memberId,
-    memberId,
+    memberId
   });
-  if (!response?.success) {
-    return { success:false, status:'ERROR', error:response?.error || 'Upload file ke Google Drive gagal.' };
-  }
-  const result:any=response.result||response.data||{};
-  return {
-    success:true,
-    status:'UPLOADED',
-    fileId:result.fileId||'',
-    driveUrl:result.driveUrl||'',
-    directImageUrl:result.directImageUrl||'',
-    folderPath:result.folderPath||'',
-    uploadedAt:result.uploadedAt||new Date().toISOString(),
-    result,
-    data:result,
-  };
 }
 
 
@@ -106,7 +101,7 @@ export const pullStateFromGAS = fetchAllDataFromGas;
 export const getSyncStatus = () => ({connected:!!getUrl()});
 
 export const googleWorkspaceSync = {
-  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, deleteSpreadsheetRow, updateKoperasiConfig,
+  callGoogleAppsScript, fetchAllDataFromGas, syncRowToSpreadsheet, createMember, deleteSpreadsheetRow, updateKoperasiConfig,
   syncFileToGoogleDrive, uploadMemberPhoto, uploadMemberKta, uploadFile, recordAttendance,
   verifyMemberCode, testGasConnection, syncWithGoogleWorkspace:testGasConnection,
   pushStateToGAS, pullStateFromGAS, getSyncStatus,
