@@ -54,6 +54,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   if (!isOpen) return null;
 
   const memberId = currentMember?.member_id || registration?.member_id || 'MEMBER';
+  const koperasiConfig = storage.getKoperasiConfig();
+  const officialBank = 'Bank Mandiri';
+  const officialAccount = '1490030302105';
+  const officialAccountName = 'Koperasi Berau Melangkah Bersama';
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -164,14 +168,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     <span className="text-[10px] font-black bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
                       MANDIRI
                     </span>
-                    <span className="text-xs font-bold text-slate-800">Bank Mandiri</span>
+                    <span className="text-xs font-bold text-slate-800">{officialBank}</span>
                   </div>
-                  <p className="text-sm font-mono font-bold text-slate-900">1490030302105</p>
-                  <p className="text-[10px] text-slate-500">A/n. Pemasaran berau melangkah Bersama</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">{officialAccount}</p>
+                  <p className="text-[10px] text-slate-500">A/n. {officialAccountName}</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('1490030302105', 'mandiri')}
+                  onClick={() => handleCopy(officialAccount, 'mandiri')}
                   className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors cursor-pointer"
                   title="Salin Nomor Rekening"
                 >
@@ -192,12 +196,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     </span>
                     <span className="text-xs font-bold text-slate-800">WhatsApp Admin</span>
                   </div>
-                  <p className="text-sm font-mono font-bold text-slate-900">+62812-5240-8734</p>
-                  <p className="text-[10px] text-slate-500">A/n. Pemasaran berau melangkah Bersama</p>
+                  <p className="text-sm font-mono font-bold text-slate-900">{koperasiConfig.nomor_wa_konfirmasi || '—'}</p>
+                  <p className="text-[10px] text-slate-500">Kontak konfirmasi pembayaran</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCopy('+62812-5240-8734', 'whatsapp')}
+                  onClick={() => handleCopy(koperasiConfig.nomor_wa_konfirmasi || '', 'whatsapp')}
                   className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors cursor-pointer"
                   title="Salin Nomor WhatsApp"
                 >
