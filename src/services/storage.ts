@@ -3638,7 +3638,8 @@ class StorageService {
   // --- Member Profile & Biodata Update by Member / Admin ---
   updateMemberProfile(
     memberId: string,
-    profileData: Partial<Member>
+    profileData: Partial<Member>,
+    skipRemoteSync: boolean = false
   ): { success: boolean; message: string; member?: Member } {
     const members = this.getMembers();
     const index = members.findIndex((m) => m.member_id === memberId);
@@ -3658,34 +3659,37 @@ class StorageService {
 
     // Google Spreadsheet adalah sumber data anggota. Setiap perubahan profil
     // (termasuk foto) wajib ditulis kembali ke Spreadsheet, bukan hanya cache.
-    // Jangan kirim password plaintext. Password login disimpan sebagai hash.
-    void googleWorkspaceSync.syncRowToSpreadsheet('SHEET_ANGGOTA_KOPERASI', memberId, {
-      member_id: updatedMember.member_id,
-      nomor_anggota: updatedMember.nomor_anggota,
-      nik: updatedMember.nik,
-      nama_lengkap: updatedMember.nama_lengkap,
-      tempat_lahir: updatedMember.tempat_lahir,
-      tanggal_lahir: updatedMember.tanggal_lahir,
-      jenis_kelamin: updatedMember.jenis_kelamin,
-      alamat: updatedMember.alamat,
-      nomor_hp: updatedMember.nomor_hp,
-      whatsapp: updatedMember.whatsapp,
-      email: updatedMember.email,
-      nama_usaha: updatedMember.nama_usaha,
-      kategori_usaha: updatedMember.kategori_usaha,
-      alamat_usaha: updatedMember.alamat_usaha,
-      deskripsi_usaha: updatedMember.deskripsi_usaha,
-      foto_profil_url: updatedMember.foto_profil_url || '',
-      status_keanggotaan: updatedMember.status_keanggotaan,
-      tanggal_bergabung: updatedMember.tanggal_bergabung,
-      password_hash: updatedMember.password_hash || '',
-      created_at: updatedMember.created_at,
-      updated_at: updatedMember.updated_at,
-      kta_file_id: updatedMember.kta_file_id || '',
-      kta_file_url: updatedMember.kta_file_url || '',
-      barcode_value: updatedMember.barcode_value || updatedMember.member_id,
-      qr_value: updatedMember.qr_value || updatedMember.member_id,
-    });
+    // Untuk saveMemberMedia(), sinkronisasi ditunda sampai upload Drive selesai
+    // lalu di-await agar browser mobile tidak menghentikan request kedua.
+    if (!skipRemoteSync) {
+      void googleWorkspaceSync.syncRowToSpreadsheet('SHEET_ANGGOTA_KOPERASI', memberId, {
+        member_id: updatedMember.member_id,
+        nomor_anggota: updatedMember.nomor_anggota,
+        nik: updatedMember.nik,
+        nama_lengkap: updatedMember.nama_lengkap,
+        tempat_lahir: updatedMember.tempat_lahir,
+        tanggal_lahir: updatedMember.tanggal_lahir,
+        jenis_kelamin: updatedMember.jenis_kelamin,
+        alamat: updatedMember.alamat,
+        nomor_hp: updatedMember.nomor_hp,
+        whatsapp: updatedMember.whatsapp,
+        email: updatedMember.email,
+        nama_usaha: updatedMember.nama_usaha,
+        kategori_usaha: updatedMember.kategori_usaha,
+        alamat_usaha: updatedMember.alamat_usaha,
+        deskripsi_usaha: updatedMember.deskripsi_usaha,
+        foto_profil_url: updatedMember.foto_profil_url || '',
+        status_keanggotaan: updatedMember.status_keanggotaan,
+        tanggal_bergabung: updatedMember.tanggal_bergabung,
+        password_hash: updatedMember.password_hash || '',
+        created_at: updatedMember.created_at,
+        updated_at: updatedMember.updated_at,
+        kta_file_id: updatedMember.kta_file_id || '',
+        kta_file_url: updatedMember.kta_file_url || '',
+        barcode_value: updatedMember.barcode_value || updatedMember.member_id,
+        qr_value: updatedMember.qr_value || updatedMember.member_id,
+      });
+    }
 
     // Sync active session if logged in as this member
     const currentUser = this.getCurrentUser();
@@ -3747,8 +3751,47 @@ class StorageService {
     try {
       if(photoFile){ const r=await googleWorkspaceSync.uploadMemberPhoto(photoFile,memberId,member.nama_lengkap); if(!r.success) throw new Error(r.error||'Upload foto gagal'); const d:any=r.result||r.data; updates.foto_profil_url=d?.directImageUrl||d?.driveUrl; (updates as any).foto_profil_drive_file_id=d?.fileId; }
       if(ktaFile){ const r=await googleWorkspaceSync.uploadMemberKta(ktaFile,memberId,member.nama_lengkap); if(!r.success) throw new Error(r.error||'Upload KTA gagal'); const d:any=r.result||r.data; updates.kta_file_url=d?.driveUrl; updates.kta_file_id=d?.fileId; }
-      const result=this.updateMemberProfile(memberId,updates);
-      if(!result.success) return result;
+      // Update cache tanpa menembakkan request cloud yang tidak di-await.
+      const result=this.updateMemberProfile(memberId,updates,true);
+      if(!result.success || !result.member) return result;
+
+      // WAJIB await: pada browser mobile, request async yang dibiarkan
+      // fire-and-forget dapat dihentikan ketika modal ditutup/navigasi.
+      const syncResult = await googleWorkspaceSync.syncRowToSpreadsheet(
+        'SHEET_ANGGOTA_KOPERASI',
+        memberId,
+        {
+          member_id: result.member.member_id,
+          nomor_anggota: result.member.nomor_anggota,
+          nik: result.member.nik,
+          nama_lengkap: result.member.nama_lengkap,
+          tempat_lahir: result.member.tempat_lahir,
+          tanggal_lahir: result.member.tanggal_lahir,
+          jenis_kelamin: result.member.jenis_kelamin,
+          alamat: result.member.alamat,
+          nomor_hp: result.member.nomor_hp,
+          whatsapp: result.member.whatsapp,
+          email: result.member.email,
+          nama_usaha: result.member.nama_usaha,
+          kategori_usaha: result.member.kategori_usaha,
+          alamat_usaha: result.member.alamat_usaha,
+          deskripsi_usaha: result.member.deskripsi_usaha,
+          foto_profil_url: result.member.foto_profil_url || '',
+          status_keanggotaan: result.member.status_keanggotaan,
+          tanggal_bergabung: result.member.tanggal_bergabung,
+          password_hash: result.member.password_hash || '',
+          created_at: result.member.created_at,
+          updated_at: result.member.updated_at,
+          kta_file_id: result.member.kta_file_id || '',
+          kta_file_url: result.member.kta_file_url || '',
+          barcode_value: result.member.barcode_value || result.member.member_id,
+          qr_value: result.member.qr_value || result.member.member_id,
+        }
+      );
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || syncResult.message || 'Metadata foto gagal disimpan ke Google Spreadsheet.');
+      }
+
       return {success:true,member:result.member,message:'Foto/KTA tersimpan di Google Drive dan metadata tersimpan di Google Sheets.'};
     } catch(e:any){ return {success:false,message:e?.message||'Upload media gagal.'}; }
   }
