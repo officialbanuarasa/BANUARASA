@@ -56,6 +56,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN_KOPERASI' || currentUser?.role === 'ADMIN_EVENT';
+  const isAdminEvent = currentUser?.role === 'ADMIN_EVENT';
   const isMember = currentUser?.role === 'MEMBER';
 
   return (
@@ -75,7 +77,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   <SlidersHorizontal className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-slate-900">Menu & Tindakan Cepat</h4>
+                  <h4 className="text-sm font-black text-slate-900">Menu & Layanan Cepat</h4>
                   <p className="text-[10px] text-slate-500">Akses ringkas fitur Banuarasa tanpa scrolling</p>
                 </div>
               </div>
@@ -107,8 +109,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 </div>
               </button>
 
-              {/* Barcode & QR Generator */}
-              <button
+              {/* Barcode KTA — hanya anggota */}
+              {isMember && <button
                 onClick={() => {
                   setIsQuickMenuOpen(false);
                   onOpenBarcodeModal(currentMember);
@@ -120,10 +122,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   <p className="font-bold text-xs">Barcode KTA</p>
                   <p className="text-[10px] text-slate-500">Generator & Cek Stand</p>
                 </div>
-              </button>
+              </button>}
 
-              {/* Scan QR for Admin */}
-              {isSuperAdmin && (
+              {/* Scan QR untuk Admin Event / Super Admin */}
+              {(isSuperAdmin || isAdminEvent) && (
                 <button
                   onClick={() => {
                     setIsQuickMenuOpen(false);
@@ -295,7 +297,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
         {/* 3. Dashboard / Akun */}
         {currentUser ? (
-          isSuperAdmin ? (
+          isAdmin ? (
             <button
               onClick={() => onNavigateTab('admin-dashboard')}
               className={`flex flex-col items-center justify-center w-16 py-1 rounded-xl transition-all cursor-pointer ${
