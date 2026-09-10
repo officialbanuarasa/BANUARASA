@@ -157,11 +157,11 @@ export const DEFAULT_KOPERASI_CONFIG: KoperasiConfig = {
   simpanan_pokok_cicilan_nominal: 20000,
   simpanan_wajib_nominal: 25000,
   nama_koperasi: 'Koperasi Berau Melangkah Bersama (KBMB)',
-  nama_bank: 'Bank Kaltimtara / BSI',
-  nomor_rekening: '001-2345-6789',
+  nama_bank: 'Bank Mandiri',
+  nomor_rekening: '1490030302105',
   atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
   nomor_wa_konfirmasi: '6281234567890',
-  catatan_iuran: 'Simpanan Pokok Rp100.000 (bisa dicicil). Simpanan Wajib Rp25.000 disetorkan setiap bulan.',
+  catatan_iuran: 'Simpanan Pokok dan Simpanan Wajib mengikuti nominal yang ditetapkan Super Admin. Transfer hanya melalui Bank Mandiri a/n Koperasi Berau Melangkah Bersama.',
   updated_at: '2026-08-01T00:00:00.000Z',
   updated_by: 'SUPER_ADMIN',
 };
@@ -398,6 +398,17 @@ class StorageService {
           count += normalized.length;
         });
 
+        if (data.koperasiConfig && typeof data.koperasiConfig === 'object') {
+          const normalizedConfig: KoperasiConfig = {
+            ...DEFAULT_KOPERASI_CONFIG,
+            ...data.koperasiConfig,
+            nama_bank: 'Bank Mandiri',
+            nomor_rekening: '1490030302105',
+            atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
+          };
+          localStorage.setItem(STORAGE_KEYS.KOPERASI_CONFIG, JSON.stringify(normalizedConfig));
+        }
+
         if (data.gasUrl && typeof data.gasUrl === 'string' && data.gasUrl.trim()) {
           localStorage.setItem('kbm_gas_web_app_url_v3', data.gasUrl.trim());
         }
@@ -462,6 +473,16 @@ class StorageService {
 
       if (Array.isArray(serverData.events) && serverData.events.length > 0) {
         localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(serverData.events));
+        hasChanges = true;
+      }
+      if (serverData.koperasiConfig && typeof serverData.koperasiConfig === 'object') {
+        localStorage.setItem(STORAGE_KEYS.KOPERASI_CONFIG, JSON.stringify({
+          ...DEFAULT_KOPERASI_CONFIG,
+          ...serverData.koperasiConfig,
+          nama_bank: 'Bank Mandiri',
+          nomor_rekening: '1490030302105',
+          atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
+        }));
         hasChanges = true;
       }
       if (serverData.branding && typeof serverData.branding === 'object') {
@@ -1101,12 +1122,12 @@ class StorageService {
 
   // --- Members ---
   getMembers(): Member[] {
-    const raw = this.getItem<Member[]>(STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS);
-    const existingIds = new Set(raw.map((m) => String(m.member_id || '').toLowerCase()));
-    const missingInitial = INITIAL_MEMBERS.filter((m) => !existingIds.has(m.member_id.toLowerCase()));
-    const combined = [...raw, ...missingInitial];
+    // Google Spreadsheet adalah sumber data anggota. Jangan lagi menggabungkan
+    // INITIAL_MEMBERS ke data aktif karena baris yang dihapus dari Spreadsheet
+    // akan muncul kembali sebagai data lama/demo.
+    const raw = this.getItem<Member[]>(STORAGE_KEYS.MEMBERS, []);
 
-    return combined.map((m) => ({
+    return raw.map((m) => ({
       ...m,
       member_id: String(m.member_id || ''),
       nomor_anggota: String(m.nomor_anggota || ''),
@@ -3703,24 +3724,39 @@ class StorageService {
 
   // --- Koperasi Configuration & Membership Obligations ---
   getKoperasiConfig(): KoperasiConfig {
-    return this.getItem<KoperasiConfig>(STORAGE_KEYS.KOPERASI_CONFIG, DEFAULT_KOPERASI_CONFIG);
+    const stored = this.getItem<Partial<KoperasiConfig>>(STORAGE_KEYS.KOPERASI_CONFIG, {});
+    return {
+      ...DEFAULT_KOPERASI_CONFIG,
+      ...stored,
+      // Rekening transfer resmi tidak boleh kembali ke konfigurasi lama/cache lama.
+      nama_bank: 'Bank Mandiri',
+      nomor_rekening: '1490030302105',
+      atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
+    } as KoperasiConfig;
   }
 
-  updateKoperasiConfig(
+  async updateKoperasiConfig(
     updates: Partial<KoperasiConfig>,
     adminUsername = 'SUPER_ADMIN'
-  ): KoperasiConfig {
+  ): Promise<KoperasiConfig> {
     const current = this.getKoperasiConfig();
     const updated: KoperasiConfig = {
       ...current,
       ...updates,
+      // Rekening transfer resmi dikunci pada satu rekening koperasi.
+      nama_bank: 'Bank Mandiri',
+      nomor_rekening: '1490030302105',
+      atas_nama_rekening: 'Koperasi Berau Melangkah Bersama',
       updated_at: new Date().toISOString(),
       updated_by: adminUsername,
     };
 
     this.setItem(STORAGE_KEYS.KOPERASI_CONFIG, updated);
-    this.notify();
-    this.persistToServer();
+
+    const response = await googleWorkspaceSync.updateKoperasiConfig(updated);
+    if (!response.success) {
+      throw new Error(response.error || response.message || 'Pengaturan koperasi gagal disimpan ke Google Spreadsheet.');
+    }
 
     this.logAudit({
       user_id: adminUsername,
@@ -3730,18 +3766,19 @@ class StorageService {
       reference_id: 'KOPERASI-CONFIG',
       description: `Pengaturan Simpanan Koperasi diubah: Simpanan Pokok Rp${updated.simpanan_pokok_nominal.toLocaleString(
         'id-ID'
-      )}, Simpanan Wajib Rp${updated.simpanan_wajib_nominal.toLocaleString('id-ID')}/bulan.`,
+      )}, Cicilan Pokok Rp${(updated.simpanan_pokok_cicilan_nominal || 0).toLocaleString('id-ID')}, Simpanan Wajib Rp${updated.simpanan_wajib_nominal.toLocaleString(
+        'id-ID'
+      )}/bulan. Transfer: Bank Mandiri ${updated.nomor_rekening} a/n ${updated.atas_nama_rekening}.`,
       result: 'SUCCESS',
     });
 
     this.addNotification({
       title: 'Kebijakan Simpanan Koperasi Diperbarui',
-      message: `Nominal Simpanan Pokok ditetapkan Rp${updated.simpanan_pokok_nominal.toLocaleString(
-        'id-ID'
-      )} dan Simpanan Wajib Rp${updated.simpanan_wajib_nominal.toLocaleString('id-ID')}/bulan.`,
+      message: `Pokok Rp${updated.simpanan_pokok_nominal.toLocaleString('id-ID')}, cicilan pokok Rp${(updated.simpanan_pokok_cicilan_nominal || 0).toLocaleString('id-ID')}, wajib Rp${updated.simpanan_wajib_nominal.toLocaleString('id-ID')}/bulan.`,
       type: 'INFO',
     });
 
+    this.notify();
     return updated;
   }
 
