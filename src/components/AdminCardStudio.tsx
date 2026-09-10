@@ -491,8 +491,6 @@ export const AdminCardStudio: React.FC<AdminCardStudioProps> = ({
               })}
             </div>
           </div>
-        </div>
-
           {/* Manual Layout Editor */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -519,6 +517,9 @@ export const AdminCardStudio: React.FC<AdminCardStudioProps> = ({
               <label className="col-span-2 sm:col-span-4">Data Field<input type="text" value={activeElement.field || ''} onChange={e=>updateElement(activeElement.id,{field:e.target.value})} placeholder="nama_lengkap / member_id / nama_usaha" className="w-full mt-1 border rounded-lg p-2"/></label>
             </div>}
           </div>
+        </div>
+
+
 
         {/* Right Column: Interactive Live Preview (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
